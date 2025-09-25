@@ -401,6 +401,7 @@ export const generateContent = async ({
   campaign_id,
   urls = [],
   query = "",
+  description = "",
   keywords = [],
   type = "keyword",
   depth = 3,
@@ -427,6 +428,7 @@ export const generateContent = async ({
       campaign_id,
       urls,
       query,
+      description,
       keywords,
       type,
       depth,
@@ -513,7 +515,7 @@ export const generateIdeas = async () => {
     const data = JSON.parse(dataRaw)
 
     // Format: "Topic A", "Topic B"
-    const formattedTopics = Array.isArray(data.keywords) ? data.keywords.map((t) => `"${t}"`).join(" ,") : ""
+    const formattedTopics = Array.isArray(data.keywords) ? data.keywords.map((t: string) => `"${t}"`).join(" ,") : ""
 
     // Format: "\"Your post here\""
     const formattedPost = `"${textData}"`
@@ -622,7 +624,7 @@ export const generateContentAPI = async () => {
   }
 }
 
-export const regenerateContentAPI = async ({ id, query, platform }) => {
+export const regenerateContentAPI = async ({ id, query, platform }: { id: string; query: string; platform: string }) => {
   try {
     const endpoint = `regenerate_script_machine_content?id=${id}&query=${encodeURIComponent(
       query,
