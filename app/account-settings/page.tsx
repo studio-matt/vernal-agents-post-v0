@@ -442,7 +442,7 @@ export default function AccountSettings() {
       <Header />
       <main className="container max-w-6xl mx-auto p-6 space-y-6">
         <div className="flex items-center space-x-4">
-          <Link href="/dashboard" className="flex items-center text-white hover:text-gray-200">
+          <Link href="/dashboard/content-planner" className="flex items-center text-white hover:text-gray-200">
             <ChevronLeft className="h-5 w-5 mr-1" />
             Back to Dashboard
           </Link>
@@ -458,7 +458,7 @@ export default function AccountSettings() {
                   Please take a moment to connect the platforms you intend to use when creating content. If you are not
                   ready, simply skip for now.
                 </p>
-                <Link href="/dashboard">
+                <Link href="/dashboard/content-planner">
                   <Button className="bg-blue-600 text-white hover:bg-blue-700">Skip to Dashboard</Button>
                 </Link>
               </div>

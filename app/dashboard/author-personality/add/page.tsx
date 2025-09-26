@@ -9,27 +9,21 @@ import Link from "next/link";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function AddAuthorPersonalityPage() {
   const router = useRouter();
+  const [contentPlannerTab, setContentPlannerTab] = useState<"campaigns" | "workflow" | "author-personalities">("author-personalities");
 
-  // Handle top-level tab changes
-  const handleTopTabChange = (value: string) => {
-    if (value === "author-planning") {
-      router.push("/dashboard?tab=author-planning");
-    } else if (value === "content-planner") {
-      router.push("/dashboard?tab=content-planner");
-    }
-  };
-
-  // Handle second-level tab changes
-  const handleSecondTabChange = (value: string) => {
+  // Handle content planner tab changes
+  const handleContentPlannerTabChange = (value: string) => {
     if (value === "campaigns") {
-      router.push("/dashboard?tab=content-planner&view=campaigns");
+      router.push("/dashboard/content-planner");
     } else if (value === "workflow") {
-      router.push("/dashboard?tab=content-planner&view=workflow");
-    } else if (value === "settings") {
-      router.push("/dashboard?tab=content-planner&view=settings");
+      router.push("/dashboard/content-planner?tab=workflow");
+    } else if (value === "author-personalities") {
+      // Stay on current page
+      setContentPlannerTab("author-personalities");
     }
   };
 
@@ -39,89 +33,86 @@ export default function AddAuthorPersonalityPage() {
         <Header />
         <main className="p-6 max-w-7xl mx-auto space-y-6">
           <h1 className="text-4xl font-extrabold text-white">
-            Admin Dashboard
+            Content Planner
           </h1>
 
-          {/* Top-level tabs */}
-          <Tabs
-            defaultValue="content-planner"
-            className="w-full"
-            onValueChange={handleTopTabChange}
-          >
-            <TabsList className="w-full mb-4 bg-white">
-              <TabsTrigger value="author-planning" className="flex-1">
-                Author Planning
-              </TabsTrigger>
-              <TabsTrigger value="content-planner" className="flex-1">
-                Content Planner
-              </TabsTrigger>
-            </TabsList>
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Add Author Personality</CardTitle>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    router.push("/dashboard/content-planner");
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  Cancel, return to Content Planner
+                </Button>
+              </div>
+            </CardHeader>
 
-            {/* Content Planner tab content */}
-            <TabsContent value="content-planner" className="space-y-6">
-              <Card className="w-full">
-                <CardContent className="p-6">
-                  {/* Second-level tabs */}
-                  <Tabs
-                    defaultValue="settings"
-                    onValueChange={handleSecondTabChange}
-                  >
-                    <TabsList className="w-full mb-6">
-                      <TabsTrigger value="campaigns" className="flex-1">
-                        Campaigns
-                      </TabsTrigger>
-                      <TabsTrigger value="workflow" className="flex-1">
-                        Content Analysis Workflow
-                      </TabsTrigger>
-                      <TabsTrigger value="settings" className="flex-1">
-                        Settings
-                      </TabsTrigger>
-                    </TabsList>
+            <CardContent className="p-6">
+              {/* Content Planner tabs */}
+              <Tabs
+                value={contentPlannerTab}
+                onValueChange={handleContentPlannerTabChange}
+              >
+                <TabsList className="w-full mb-6">
+                  <TabsTrigger value="campaigns" className="flex-1">
+                    Campaigns
+                  </TabsTrigger>
+                  <TabsTrigger value="author-personalities" className="flex-1">
+                    Author Personalities
+                  </TabsTrigger>
+                  <TabsTrigger value="workflow" className="flex-1">
+                    Workflow Explained
+                  </TabsTrigger>
+                </TabsList>
 
-                    {/* Settings tab content */}
-                    <TabsContent value="settings">
-                      <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Link href="/dashboard?tab=content-planner&view=settings">
-                              <Button variant="outline" size="icon">
-                                <ArrowLeft className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                            <h2 className="text-2xl font-bold">
-                              Add Author Personality
-                            </h2>
-                          </div>
-                        </div>
+              <TabsContent value="author-personalities">
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Create New Author Personality</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-500 mb-6">
+                        Upload writing samples and analyze the author's
+                        style to create a new personality profile that can
+                        be used for content generation.
+                      </p>
+                      <AuthorMimicry
+                        showSavedProfiles={false}
+                        defaultOpenSections={{
+                          writingSamples: true,
+                          modelConfig: false,
+                          results: false,
+                          profiles: false,
+                        }}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
 
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Create New Author Personality</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <p className="text-gray-500 mb-6">
-                              Upload writing samples and analyze the author's
-                              style to create a new personality profile that can
-                              be used for content generation.
-                            </p>
-                            <AuthorMimicry
-                              showSavedProfiles={false}
-                              defaultOpenSections={{
-                                writingSamples: true,
-                                modelConfig: false,
-                                results: false,
-                                profiles: false,
-                              }}
-                            />
-                          </CardContent>
-                        </Card>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="workflow">
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Workflow Explained</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-500 mb-6">
+                        This section explains the content analysis workflow process.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
         </main>
       </div>
     </TooltipProvider>

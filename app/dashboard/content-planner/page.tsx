@@ -6,13 +6,14 @@ import { Header } from "@/components/Header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileText, BarChart, ArrowRight, Plus, User, Trash2, BookOpen } from "lucide-react"
+import { Plus, User, Trash2, BookOpen } from "lucide-react"
 import { ContentPlannerCampaign, type Campaign } from "@/components/ContentPlannerCampaign"
 import { ContentAnalysisWorkflow } from "@/components/ContentAnalysisWorkflow"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { getAllCampaigns } from "@/components/Service"
+import { getAllAuthorPersonalities, deleteAuthorPersonality } from "@/components/AuthorPersonalityService"
 import { toast } from "sonner"
 
 const SAMPLE_AUTHOR_PROFILES = [
@@ -47,15 +48,16 @@ export default function ContentPlannerPage() {
   console.log("[v0] ContentPlannerPage component rendering")
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [savedProfiles, setSavedProfiles] = useState(SAMPLE_AUTHOR_PROFILES)
+  const [savedProfiles, setSavedProfiles] = useState<typeof SAMPLE_AUTHOR_PROFILES>([])
   const [checkedProfiles, setCheckedProfiles] = useState<string[]>([])
-  const [showContentPlanner, setShowContentPlanner] = useState(false)
+  const [showContentPlanner, setShowContentPlanner] = useState(true)
+  const [profilesLoading, setProfilesLoading] = useState(false)
 
   const searchParams = useSearchParams()
   const viewParam = searchParams.get("view")
 
-  const [contentPlannerTab, setContentPlannerTab] = useState<"campaigns" | "workflow" | "settings">(
-    viewParam === "workflow" ? "workflow" : viewParam === "settings" ? "settings" : "campaigns",
+  const [contentPlannerTab, setContentPlannerTab] = useState<"campaigns" | "workflow" | "author-personalities">(
+    viewParam === "workflow" ? "workflow" : viewParam === "author-personalities" ? "author-personalities" : "campaigns",
   )
 
   // Fetch campaigns on component mount and sort by createdAt (newest first)
@@ -73,31 +75,60 @@ export default function ContentPlannerPage() {
           setShowContentPlanner(true) // Show content planner by default
         } else {
           console.error("Failed to fetch campaigns:", response.message)
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to load campaigns. Please try again.",
-          })
+          toast.error("Failed to load campaigns. Please try again.")
         }
       } catch (error) {
         console.error("Error fetching campaigns:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "An unexpected error occurred while loading campaigns.",
-        })
+        toast.error("An unexpected error occurred while loading campaigns.")
       }
     }
     fetchCampaigns()
   }, [])
 
+  // Function to fetch author personalities
+  const fetchAuthorPersonalities = async () => {
+    try {
+      setProfilesLoading(true)
+      const response = await getAllAuthorPersonalities()
+      console.log("Author personalities response:", response)
+
+      if (response.status === "success") {
+        setSavedProfiles(response.message.personalities || [])
+      } else {
+        console.error("Failed to fetch author personalities:", response.message)
+        // Fallback to sample data if API fails
+        setSavedProfiles(SAMPLE_AUTHOR_PROFILES)
+      }
+    } catch (error) {
+      console.error("Error fetching author personalities:", error)
+      // Fallback to sample data if API fails
+      setSavedProfiles(SAMPLE_AUTHOR_PROFILES)
+    } finally {
+      setProfilesLoading(false)
+    }
+  }
+
+  // Fetch author personalities on component mount
+  useEffect(() => {
+    fetchAuthorPersonalities()
+  }, [])
+
+  // Refresh author personalities when returning to author-personalities tab
+  useEffect(() => {
+    if (contentPlannerTab === "author-personalities") {
+      fetchAuthorPersonalities()
+    }
+  }, [contentPlannerTab])
+
   const handleAddCampaign = (campaign: Omit<Campaign, "id" | "createdAt" | "updatedAt">) => {
+    console.log("handleAddCampaign called with:", campaign);
     const newCampaign: Campaign = {
       ...campaign,
       id: `campaign-${Date.now()}`,
       createdAt: new Date(),
       updatedAt: new Date(),
     }
+    console.log("Created new campaign:", newCampaign);
 
     setCampaigns((prev) => {
       const updatedCampaigns = [...prev, newCampaign]
@@ -105,6 +136,30 @@ export default function ContentPlannerPage() {
       updatedCampaigns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       return updatedCampaigns
     })
+  }
+
+  const refreshCampaigns = async () => {
+    try {
+      console.log("Refreshing campaigns...");
+      const response = await getAllCampaigns()
+      console.log("Refresh response:", response);
+      if (response.status === "success") {
+        const fetchedCampaigns = response.message.campaigns || []
+        console.log("Fetched campaigns:", fetchedCampaigns.length, "campaigns");
+        // Sort campaigns by createdAt in descending order (newest first)
+        fetchedCampaigns.sort(
+          (a: Campaign, b: Campaign) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        setCampaigns(fetchedCampaigns)
+        console.log("Campaigns updated in state");
+      } else {
+        console.error("Failed to refresh campaigns:", response.message)
+        toast.error("Failed to refresh campaigns. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error refreshing campaigns:", error)
+      toast.error("An unexpected error occurred while refreshing campaigns.")
+    }
   }
 
   const handleEditCampaign = (id: string, updatedCampaign: Partial<Campaign>) => {
@@ -127,9 +182,6 @@ export default function ContentPlannerPage() {
     })
   }
 
-  const handleStartPlanning = () => {
-    setShowContentPlanner(true)
-  }
 
   const handleProfileCheckChange = (profileId: string) => {
     setCheckedProfiles((prev) => {
@@ -148,11 +200,25 @@ export default function ContentPlannerPage() {
     }
   }
 
-  const handleDeleteProfile = (profileId: string, e: React.MouseEvent) => {
+  const handleDeleteProfile = async (profileId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    setSavedProfiles(savedProfiles.filter((profile) => profile.id !== profileId))
-    if (checkedProfiles.includes(profileId)) {
-      setCheckedProfiles((prev) => prev.filter((id) => id !== profileId))
+    console.log("Attempting to delete profile:", profileId)
+    try {
+      const response = await deleteAuthorPersonality(profileId)
+      console.log("Delete response:", response)
+      if (response.status === "success") {
+        setSavedProfiles(savedProfiles.filter((profile) => profile.id !== profileId))
+        if (checkedProfiles.includes(profileId)) {
+          setCheckedProfiles((prev) => prev.filter((id) => id !== profileId))
+        }
+        toast.success("Author personality deleted successfully.")
+      } else {
+        console.error("Delete failed:", response.message)
+        toast.error("Failed to delete author personality. Please try again.")
+      }
+    } catch (error) {
+      console.error("Error deleting author personality:", error)
+      toast.error("An unexpected error occurred while deleting the author personality.")
     }
   }
 
@@ -162,51 +228,21 @@ export default function ContentPlannerPage() {
       <main className="p-6 max-w-7xl mx-auto space-y-6">
         <h1 className="text-4xl font-extrabold text-white">Content Planner</h1>
 
-        {!showContentPlanner ? (
-          <Card>
-            <CardContent className="p-6 flex flex-col items-center justify-center text-center py-16">
-              <div className="flex space-x-8 mb-8">
-                <div className="flex flex-col items-center">
-                  <div className="p-4 rounded-full bg-blue-100 mb-4">
-                    <FileText className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-2">Content Planning</h3>
-                  <p className="text-gray-500 max-w-xs">
-                    Create campaigns based on keywords or URLs to analyze and generate content
-                  </p>
-                </div>
-                <div className="flex flex-col items-center">
-                  <div className="p-4 rounded-full bg-green-100 mb-4">
-                    <BarChart className="w-8 h-8 text-green-600" />
-                  </div>
-                  <h3 className="text-xl font-semibold mb-2">Content Analysis</h3>
-                  <p className="text-gray-500 max-w-xs">
-                    Extract insights from your content sources using advanced NLP techniques
-                  </p>
-                </div>
-              </div>
-              <Button onClick={handleStartPlanning} size="lg" className="bg-[#3d545f] text-white hover:bg-[#3d545f]/90">
-                Let's Start Planning
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
           <Card className="w-full">
             <CardContent className="p-6">
               <Tabs
                 value={contentPlannerTab}
-                onValueChange={(value) => setContentPlannerTab(value as "campaigns" | "workflow" | "settings")}
+                onValueChange={(value) => setContentPlannerTab(value as "campaigns" | "workflow" | "author-personalities")}
               >
                 <TabsList className="w-full mb-6">
                   <TabsTrigger value="campaigns" className="flex-1">
                     Campaigns
                   </TabsTrigger>
-                  <TabsTrigger value="workflow" className="flex-1">
-                    Content Analysis Workflow
+                  <TabsTrigger value="author-personalities" className="flex-1">
+                    Author Personalities
                   </TabsTrigger>
-                  <TabsTrigger value="settings" className="flex-1">
-                    Settings
+                  <TabsTrigger value="workflow" className="flex-1">
+                    Workflow Explained
                   </TabsTrigger>
                 </TabsList>
 
@@ -216,14 +252,11 @@ export default function ContentPlannerPage() {
                     onAddCampaign={handleAddCampaign}
                     onEditCampaign={handleEditCampaign}
                     onDeleteCampaign={handleDeleteCampaign}
+                    onRefreshCampaigns={refreshCampaigns}
                   />
                 </TabsContent>
 
-                <TabsContent value="workflow">
-                  <ContentAnalysisWorkflow />
-                </TabsContent>
-
-                <TabsContent value="settings">
+                <TabsContent value="author-personalities">
                   <div className="space-y-6">
                     <div className="flex justify-between items-center">
                       <h2 className="text-2xl font-bold">Author Personalities</h2>
@@ -235,7 +268,42 @@ export default function ContentPlannerPage() {
                       </Link>
                     </div>
 
-                    {savedProfiles.length > 0 ? (
+                    {profilesLoading ? (
+                      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" style={{ 
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)'
+                      }}>
+                        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm w-full mx-4 border border-gray-200">
+                          <div className="flex flex-col items-center space-y-4">
+                            <div className="relative">
+                              <svg
+                                className="animate-spin h-12 w-12 text-[#3d545f]"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                />
+                              </svg>
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-900 text-center">
+                              Loading author personalities...
+                            </h3>
+                          </div>
+                        </div>
+                      </div>
+                    ) : savedProfiles.length > 0 ? (
                       <div className="space-y-4">
                         <div className="space-y-2">
                           {savedProfiles.map((profile) => (
@@ -299,11 +367,36 @@ export default function ContentPlannerPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Add Personality Module */}
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <div className="text-center">
+                      <button
+                        onClick={() => window.location.href = '/dashboard/author-personality/add'}
+                        className="p-6 rounded-full bg-gray-100 mb-4 hover:bg-gray-200 transition-colors cursor-pointer mx-auto block"
+                      >
+                        <Plus className="w-10 h-10 text-gray-600" />
+                      </button>
+                      <h3 className="text-xl font-semibold text-gray-900">Add New Personality</h3>
+                      <p className="text-gray-500 mt-1 mb-4">
+                        Create a new author personality to use for content generation
+                      </p>
+                      <Link href="/dashboard/author-personality/add">
+                        <Button className="bg-[#3d545f] text-white hover:bg-[#3d545f]/90">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Personality
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="workflow">
+                  <ContentAnalysisWorkflow />
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
-        )}
       </main>
     </div>
   )

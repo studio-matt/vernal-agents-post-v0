@@ -715,7 +715,7 @@ export function ContentPlannerWorkflow({ selectedCampaign, onStartAnalysis }: Co
               ))}
             </div>
           </div>
-          <Link href="/dashboard?tab=content-planner&view=campaigns">
+          <Link href="/dashboard/content-planner">
             <Button className="bg-[#3d545f] text-white hover:bg-[#3d545f]/90">Return to Campaigns</Button>
           </Link>
         </>

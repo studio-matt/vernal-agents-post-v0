@@ -1578,7 +1578,6 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Progress } from "@/components/ui/progress";
 import {
   Upload,
   FileText,
@@ -1595,6 +1594,7 @@ import {
   Bookmark,
   Check,
   User,
+  Plus,
 } from "lucide-react";
 import {
   Collapsible,
@@ -1603,6 +1603,8 @@ import {
 } from "@/components/ui/collapsible";
 
 import { PersonalityConfirmationModal } from "./PersonalityConfirmationModal";
+import { LoadingModal } from "./LoadingModal";
+import { createAuthorPersonality } from "./AuthorPersonalityService";
 
 const SAMPLE_AUTHOR_PROFILES = [
   {
@@ -1775,6 +1777,12 @@ interface AuthorMimicryProps {
     results?: boolean;
     profiles?: boolean;
   };
+  onSavePersonality?: (data: { name: string; description: string }) => void;
+  initialPersonality?: {
+    id: string;
+    name: string;
+    description: string;
+  };
 }
 
 export function AuthorMimicry({
@@ -1785,6 +1793,8 @@ export function AuthorMimicry({
     results: false,
     profiles: true,
   },
+  onSavePersonality,
+  initialPersonality,
 }: AuthorMimicryProps) {
   const [writingSamples, setWritingSamples] = useState<WritingSample[]>(
     Array(10)
@@ -1796,6 +1806,8 @@ export function AuthorMimicry({
         isUploaded: false,
       }))
   );
+
+  const [visibleSamplesCount, setVisibleSamplesCount] = useState(1);
 
   const [selectedFeatures, setSelectedFeatures] = useState({
     lexical: true,
@@ -1845,7 +1857,7 @@ export function AuthorMimicry({
   const [savedProfiles, setSavedProfiles] = useState(SAMPLE_AUTHOR_PROFILES);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [checkedProfiles, setCheckedProfiles] = useState<string[]>([]);
-  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileName, setNewProfileName] = useState(initialPersonality?.name || "");
 
   const [isWritingSamplesOpen, setIsWritingSamplesOpen] = useState(
     defaultOpenSections.writingSamples ?? true
@@ -1898,6 +1910,12 @@ export function AuthorMimicry({
             : sample
         )
       );
+    }
+  };
+
+  const handleAddWritingSample = () => {
+    if (visibleSamplesCount < 10) {
+      setVisibleSamplesCount(prev => prev + 1);
     }
   };
 
@@ -2027,18 +2045,45 @@ export function AuthorMimicry({
     });
   };
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!analysisStatus.isComplete || !newProfileName.trim()) return;
 
-    const newProfile = {
-      id: Date.now().toString(),
+    const personalityData = {
       name: newProfileName.trim(),
       description: `Based on ${writingSamples.filter((s) => s.isUploaded).length} writing samples`,
     };
 
-    setSavedProfiles([...savedProfiles, newProfile]);
-    setSelectedProfile(newProfile.id);
-    setNewProfileName("");
+    // If we have a callback for saving (edit mode), use it
+    if (onSavePersonality) {
+      onSavePersonality(personalityData);
+      return;
+    }
+
+    // Otherwise, use the create API (add mode)
+    try {
+      const response = await createAuthorPersonality(personalityData);
+      
+      if (response.status === "success") {
+        const newProfile = {
+          id: response.message.personality?.id || Date.now().toString(),
+          name: personalityData.name,
+          description: personalityData.description,
+        };
+
+        setSavedProfiles([...savedProfiles, newProfile]);
+        setSelectedProfile(newProfile.id);
+        setNewProfileName("");
+        
+        // Show success message
+        alert("Author personality saved successfully!");
+      } else {
+        console.error("Failed to save author personality:", response.message);
+        alert("Failed to save author personality. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error saving author personality:", error);
+      alert("An error occurred while saving the author personality.");
+    }
   };
 
   const handleLoadProfile = (profileId: string) => {
@@ -2220,7 +2265,7 @@ export function AuthorMimicry({
           <CollapsibleContent>
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {writingSamples.slice(0, 1).map((sample) => (
+                {writingSamples.slice(0, visibleSamplesCount).map((sample) => (
                   <div
                     key={sample.id}
                     className="space-y-2 border rounded-md p-4"
@@ -2302,6 +2347,21 @@ export function AuthorMimicry({
                   </div>
                 ))}
               </div>
+
+              {/* Add Writing Sample Button */}
+              {visibleSamplesCount < 10 && (
+                <div className="flex justify-center pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddWritingSample}
+                    className="flex items-center space-x-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Writing Sample</span>
+                  </Button>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Feature Selection</Label>
@@ -2399,15 +2459,6 @@ export function AuthorMimicry({
                 )}
               </Button>
 
-              {analysisStatus.isAnalyzing && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Analyzing text features</span>
-                    <span>{analysisStatus.progress}%</span>
-                  </div>
-                  <Progress value={analysisStatus.progress} />
-                </div>
-              )}
             </CardContent>
           </CollapsibleContent>
         </Collapsible>
@@ -2602,15 +2653,6 @@ export function AuthorMimicry({
                 )}
               </Button>
 
-              {trainingStatus.isTraining && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Training model</span>
-                    <span>{trainingStatus.progress}%</span>
-                  </div>
-                  <Progress value={trainingStatus.progress} />
-                </div>
-              )}
             </CardContent>
           </CollapsibleContent>
         </Collapsible>
@@ -2885,39 +2927,13 @@ export function AuthorMimicry({
                     </div>
                   ) : (
                     <div className="p-8 border rounded-md bg-gray-50 text-center text-gray-500">
-                      {generationStatus.isGenerating ? (
-                        <div className="flex flex-col items-center space-y-2">
-                          <svg
-                            className="animate-spin h-8 w-8 text-[#3d545f]"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          <p>Generating text in author's style...</p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center space-y-2">
-                          <Wand2 className="h-8 w-8 text-gray-400" />
-                          <p>
-                            Click "Generate" to create text in the author's
-                            style
-                          </p>
-                        </div>
-                      )}
+                      <div className="flex flex-col items-center space-y-2">
+                        <Wand2 className="h-8 w-8 text-gray-400" />
+                        <p>
+                          Click "Generate" to create text in the author's
+                          style
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2966,6 +2982,25 @@ export function AuthorMimicry({
           </CollapsibleContent>
         </Collapsible>
       </Card>
+      
+      {/* Loading Modals */}
+      <LoadingModal
+        isOpen={analysisStatus.isAnalyzing}
+        title="Analyzing text features"
+        progress={analysisStatus.progress}
+      />
+      
+      <LoadingModal
+        isOpen={trainingStatus.isTraining}
+        title="Training model"
+        progress={trainingStatus.progress}
+      />
+      
+      <LoadingModal
+        isOpen={generationStatus.isGenerating}
+        title="Generating text in author's style"
+      />
+      
       <PersonalityConfirmationModal
         isOpen={isConfirmModalOpen}
         onClose={() => setIsConfirmModalOpen(false)}

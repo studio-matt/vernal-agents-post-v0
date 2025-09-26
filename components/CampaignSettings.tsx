@@ -531,7 +531,7 @@ export function CampaignSettings({
         campaign_name: name.trim(),
         campaign_id: campaign.id || `campaign-${Date.now()}`,
         urls: urls,
-        query: query.trim(),
+        query: query?.trim() || "",
         description: description,
         keywords: keywordArray,
         type: type,
@@ -560,7 +560,7 @@ export function CampaignSettings({
           trendingKeyword,
           campaign_id: campaign.id || `campaign-${Date.now()}`,
           campaign_name: name.trim(),
-          description: query,
+          description: query || "",
         };
         response = await getTrendingContent(Trendingpayload);
       } else {
@@ -568,11 +568,12 @@ export function CampaignSettings({
       }
 
       if (response.status === "success") {
+        const responseData = response as any; // Type assertion for now
         const campaignDescription =
-          Array.isArray(response.posts) &&
-            response.posts.length > 0 &&
-            response.posts[0].text
-            ? response.posts[0].text
+          Array.isArray(responseData.posts) &&
+          responseData.posts.length > 0 &&
+          responseData.posts[0].text
+            ? responseData.posts[0].text
             : description.trim();
 
         const normalizeTopics = (topics?: string[]): string[] => {
@@ -585,17 +586,17 @@ export function CampaignSettings({
         };
 
         const campaignTopics =
-          Array.isArray(response.posts) &&
-            response.posts.length > 0 &&
-            response.posts[0].topics &&
-            Array.isArray(response.posts[0].topics)
-            ? normalizeTopics(response.posts[0].topics)
+          Array.isArray(responseData.posts) &&
+          responseData.posts.length > 0 &&
+          responseData.posts[0].topics &&
+          Array.isArray(responseData.posts[0].topics)
+            ? normalizeTopics(responseData.posts[0].topics)
               .map((t) => t.trim().charAt(0).toUpperCase() + t.slice(1))
               .filter((t) => !["non", "com"].includes(t.toLowerCase()))
-            : response.topics &&
-              Array.isArray(response.topics) &&
-              response.topics.length > 0
-              ? normalizeTopics(response.topics).map(
+            : responseData.topics &&
+              Array.isArray(responseData.topics) &&
+              responseData.topics.length > 0
+              ? normalizeTopics(responseData.topics).map(
                 (t) => t.charAt(0).toUpperCase() + t.slice(1)
               )
               : type === "keyword"
@@ -711,7 +712,16 @@ export function CampaignSettings({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Settings</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>Settings</CardTitle>
+            <Button
+              variant="ghost"
+              onClick={onCancel}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              Cancel, return to Campaigns
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
@@ -734,12 +744,12 @@ export function CampaignSettings({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="campaign-description">Query</Label>
+            <Label htmlFor="campaign-description">Additional Context</Label>
             <Textarea
               id="campaign-description"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Enter campaign description"
+              placeholder="Give us more context around the end goal of your campaign's keywords or URLs. For example, 'Focus on tools suitable for small to medium-sized enterprises in the healthcare sector'"
             />
           </div>
 
@@ -1583,13 +1593,15 @@ export function CampaignSettings({
               Settings Saved
             </DialogTitle>
             <DialogDescription className="text-center pt-2">
-              Your settings have been saved. Please build your Campaign Base to
-              continue.
+              Your settings have been saved. When you are ready to finalize, please hit the Build Your Campaign Base to finalize your campaign.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-center mt-4">
             <Button
-              onClick={() => setShowSavedModal(false)}
+              onClick={() => {
+                setShowSavedModal(false);
+                onCancel();
+              }}
               className="bg-green-600 text-white hover:bg-green-700"
             >
               OK

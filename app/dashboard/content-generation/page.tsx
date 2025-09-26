@@ -11,7 +11,7 @@ export default function ContentGenerationPage() {
       <Header username="John Doe" />
       <main className="p-6 max-w-7xl mx-auto space-y-6">
         <div className="flex items-center space-x-4">
-          <Link href="/dashboard" className="flex items-center text-white hover:text-gray-200">
+          <Link href="/dashboard/content-planner" className="flex items-center text-white hover:text-gray-200">
             <ChevronLeft className="h-5 w-5 mr-1" />
             Back to Campaign
           </Link>

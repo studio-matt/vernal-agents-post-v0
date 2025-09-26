@@ -316,6 +316,7 @@ export default function EditCampaignPage() {
 
       setIsLoading(true);
       try {
+        // Fetch campaign from API
         const editableCampaigns = await getCampaignsById(campaignId);
         localStorage.setItem("id", campaignId);
 
@@ -428,7 +429,7 @@ export default function EditCampaignPage() {
           ...updatedCampaign,
           updatedAt: new Date(),
         });
-        router.push("/dashboard?tab=content-planner&view=campaigns");
+        router.push("/dashboard/content-planner");
       } catch (err) {
         setError({
           isOpen: true,
@@ -599,7 +600,7 @@ export default function EditCampaignPage() {
         <main className="p-6 max-w-7xl mx-auto space-y-6">
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard?tab=content-planner&view=campaigns"
+              href="/dashboard/content-planner"
               className="flex items-center text-white hover:text-gray-200"
             >
               <ChevronLeft className="h-5 w-5 mr-1" />
@@ -626,7 +627,7 @@ export default function EditCampaignPage() {
         <main className="p-6 max-w-7xl mx-auto space-y-6">
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard?tab=content-planner&view=campaigns"
+              href="/dashboard/content-planner"
               className="flex items-center text-white hover:text-gray-200"
             >
               <ChevronLeft className="h-5 w-5 mr-1" />
@@ -645,7 +646,7 @@ export default function EditCampaignPage() {
                 The campaign you're looking for doesn't exist or has been
                 deleted.
               </p>
-              <Link href="/dashboard?tab=content-planner&view=campaigns">
+              <Link href="/dashboard/content-planner">
                 <Button className="bg-[#3d545f] text-white hover:bg-[#3d545f]/90">
                   Return to Campaigns
                 </Button>
@@ -664,7 +665,7 @@ export default function EditCampaignPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link
-              href="/dashboard?tab=content-planner&view=campaigns"
+              href="/dashboard/content-planner"
               className="flex items-center text-white hover:text-gray-200"
             >
               <ChevronLeft className="h-5 w-5 mr-1" />

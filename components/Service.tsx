@@ -335,20 +335,27 @@ export const loginUser = async ({
 
 export const deleteCampaignsById = async (campaign_id: string) => {
   try {
-    const endpoint = `campaigns/${campaign_id}`
+    // Use local API instead of external API
+    const response = await fetch(`/api/campaigns/${campaign_id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
 
-    const response = await Service(endpoint, "DELETE", undefined, undefined, false)
+    const data = await response.json();
 
-    if (response?.status === "success") {
+    if (data?.status === "success") {
       return {
         status: "success",
         message: "Deleted Successfully",
       }
     } else {
-      console.error("Error in deleting campaign:", response?.message || response?.error)
+      console.error("Error in deleting campaign:", data?.message || data?.error)
       return {
         status: "error",
-        message: response?.message || response?.error || "Error in deleting campaign",
+        message: data?.message || data?.error || "Error in deleting campaign",
       }
     }
   } catch (error) {
@@ -1284,47 +1291,98 @@ export const duplicateScheduleTime = async ({
 
 export const getAllCampaigns = async () => {
   try {
-    const endpoint = "campaigns"
+    // Use local API instead of external API
+    const response = await fetch('/api/campaigns', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
 
-    const response = await Service(endpoint, "GET", undefined, undefined, false)
+    const data = await response.json();
 
-    if (response?.status === "success") {
+    if (data?.status === "success") {
       return {
         status: "success",
-        message: response,
+        message: {
+          campaigns: data.campaigns
+        },
       }
     } else {
-      console.error("Analyze failed:", response?.message || response?.error)
+      console.error("Failed to fetch campaigns:", data?.message || data?.error)
       return {
         status: "error",
-        message: response?.message || response?.error || "campaigns couldn't be fetched",
+        message: data?.message || data?.error || "campaigns couldn't be fetched",
       }
     }
   } catch (error) {
-    console.error("Error during analyze:", error)
+    console.error("Error during fetch:", error)
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Unexpected error occurred during analysis.",
+      message: error instanceof Error ? error.message : "Unexpected error occurred during fetch.",
+    }
+  }
+}
+
+export const createCampaign = async (campaignData: any) => {
+  try {
+    // Use local API instead of external API
+    const response = await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+      body: JSON.stringify(campaignData),
+    });
+
+    const data = await response.json();
+
+    if (data?.status === "success") {
+      return {
+        status: "success",
+        message: data,
+      }
+    } else {
+      console.error("Campaign creation failed:", data?.message || data?.error)
+      return {
+        status: "error",
+        message: data?.message || data?.error || "Campaign couldn't be created",
+      }
+    }
+  } catch (error) {
+    console.error("Error creating campaign:", error)
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Unexpected error occurred during campaign creation.",
     }
   }
 }
 
 export const getCampaignsById = async (campaign_id: string) => {
   try {
-    const endpoint = `campaigns/${campaign_id}/raw_data`
+    // Use local API instead of external API
+    const response = await fetch(`/api/campaigns/${campaign_id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
 
-    const response = await Service(endpoint, "GET", undefined, undefined, false)
+    const data = await response.json();
 
-    if (response?.status === "success") {
+    if (data?.status === "success") {
       return {
         status: "success",
-        message: response,
+        message: data.message,
       }
     } else {
-      console.error("Failed to get campaigns for edit:", response?.message || response?.error)
+      console.error("Failed to get campaigns for edit:", data?.message || data?.error)
       return {
         status: "error",
-        message: response?.message || response?.error || "Failed to get campaigns for edit.",
+        message: data?.message || data?.error || "Failed to get campaigns for edit.",
       }
     }
   } catch (error) {

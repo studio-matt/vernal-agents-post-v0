@@ -285,7 +285,7 @@ export default function AccountSettings() {
       <main className="container max-w-6xl mx-auto p-6 space-y-6">
         <div className="flex items-center space-x-4">
           <Link
-            href="/dashboard"
+            href="/dashboard/content-planner"
             className="flex items-center text-white hover:text-gray-200"
           >
             <ChevronLeft className="h-5 w-5 mr-1" />

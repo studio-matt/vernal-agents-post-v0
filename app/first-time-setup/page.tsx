@@ -138,7 +138,7 @@ export default function FirstTimeSetup() {
   }
 
   const handleFinish = () => {
-    router.push("/dashboard")
+    router.push("/dashboard/content-planner")
   }
 
   return (

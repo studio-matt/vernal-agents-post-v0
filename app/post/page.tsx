@@ -12,6 +12,37 @@ import {
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Header } from "@/components/Header" // Added Header component import
+import { Checkbox } from "@/components/ui/checkbox"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { 
+  Grid3X3, 
+  List, 
+  Filter, 
+  Trash2, 
+  Calendar,
+  Instagram,
+  Facebook,
+  Youtube,
+  Twitter,
+  Linkedin,
+  Music
+} from "lucide-react"
 
 interface Post {
   id: number
@@ -22,7 +53,18 @@ interface Post {
   platform: string
   schedule_time: string
   image: string
+  image_url?: string
 }
+
+// Platform definitions with icons
+const PLATFORMS = [
+  { name: "Instagram", icon: Instagram },
+  { name: "Facebook", icon: Facebook },
+  { name: "YouTube", icon: Youtube },
+  { name: "Twitter", icon: Twitter },
+  { name: "LinkedIn", icon: Linkedin },
+  { name: "TikTok", icon: Music },
+]
 
 export default function Menu1Page() {
   const [scheduledPosts, setScheduledPosts] = useState<Post[]>([])
@@ -39,6 +81,84 @@ export default function Menu1Page() {
   const [isContentModalOpen, setIsContentModalOpen] = useState(false)
   const [modalContent, setModalContent] = useState<string>("")
   const [modalTitle, setModalTitle] = useState<string>("")
+  
+  // New state for view toggle, selection, and filtering
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
+  const [selectedPosts, setSelectedPosts] = useState<number[]>([])
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false)
+  const [filters, setFilters] = useState({
+    startDate: "",
+    endDate: "",
+    platforms: [] as string[]
+  })
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+
+  // Helper functions for selection and filtering
+  const handleSelectPost = (postId: number, checked: boolean) => {
+    if (checked) {
+      setSelectedPosts(prev => [...prev, postId])
+    } else {
+      setSelectedPosts(prev => prev.filter(id => id !== postId))
+    }
+  }
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedPosts(filteredPosts.map(post => post.id))
+    } else {
+      setSelectedPosts([])
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    try {
+      setGlobalLoading(true)
+      for (const postId of selectedPosts) {
+        await deletePostById(postId)
+      }
+      setScheduledPosts(prev => prev.filter(post => !selectedPosts.includes(post.id)))
+      setSelectedPosts([])
+      setIsBulkDeleteModalOpen(false)
+    } catch (error) {
+      console.error("Error deleting posts:", error)
+    } finally {
+      setGlobalLoading(false)
+    }
+  }
+
+  const handleFilterChange = (key: string, value: any) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+  }
+
+  const clearFilters = () => {
+    setFilters({
+      startDate: "",
+      endDate: "",
+      platforms: []
+    })
+  }
+
+  // Filter posts based on current filters
+  const filteredPosts = scheduledPosts.filter(post => {
+    const postDate = new Date(post.schedule_time)
+    const startDate = filters.startDate ? new Date(filters.startDate) : null
+    const endDate = filters.endDate ? new Date(filters.endDate) : null
+    
+    // Date filtering
+    if (startDate && postDate < startDate) return false
+    if (endDate && postDate > endDate) return false
+    
+    // Platform filtering - make it case insensitive
+    if (filters.platforms.length > 0) {
+      const postPlatformLower = post.platform.toLowerCase()
+      const hasMatchingPlatform = filters.platforms.some(platform => 
+        platform.toLowerCase() === postPlatformLower
+      )
+      if (!hasMatchingPlatform) return false
+    }
+    
+    return true
+  })
 
   const getSchedulePosts = async () => {
     try {
@@ -256,7 +376,119 @@ export default function Menu1Page() {
         <Header /> {/* Added Header component */}
         <main className="p-6 max-w-7xl mx-auto">
           <div className="space-y-6">
-            <h1 className="text-4xl font-extrabold text-white mb-6">Scheduled Posts</h1>
+            <div className="flex justify-between items-center">
+              <h1 className="text-4xl font-extrabold text-white">Scheduled Posts</h1>
+              
+              {/* Controls */}
+              <div className="flex items-center gap-3">
+                {/* Filter Dropdown */}
+                <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="bg-white text-gray-700 hover:bg-gray-50">
+                      <Filter className="h-4 w-4 mr-2" />
+                      Filter
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-80 p-4">
+                    <div className="space-y-4">
+                      <h3 className="font-semibold text-gray-900">Filter Posts</h3>
+                      
+                      {/* Date Range */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Date Range</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500">Start Date</label>
+                            <input
+                              type="date"
+                              value={filters.startDate}
+                              onChange={(e) => handleFilterChange("startDate", e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">End Date</label>
+                            <input
+                              type="date"
+                              value={filters.endDate}
+                              onChange={(e) => handleFilterChange("endDate", e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Platform Filter */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700">Platforms</label>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {PLATFORMS.map((platform) => {
+                            const IconComponent = platform.icon
+                            return (
+                              <label key={platform.name} className="flex items-center space-x-2 cursor-pointer">
+                                <Checkbox
+                                  checked={filters.platforms.includes(platform.name)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      handleFilterChange("platforms", [...filters.platforms, platform.name])
+                                    } else {
+                                      handleFilterChange("platforms", filters.platforms.filter(p => p !== platform.name))
+                                    }
+                                  }}
+                                />
+                                <IconComponent className="h-4 w-4" />
+                                <span className="text-sm">{platform.name}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between pt-2">
+                        <Button variant="outline" size="sm" onClick={clearFilters}>
+                          Clear
+                        </Button>
+                        <Button size="sm" onClick={() => setIsFilterOpen(false)}>
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Bulk Delete Button */}
+                {selectedPosts.length >= 2 && (
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => setIsBulkDeleteModalOpen(true)}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete ({selectedPosts.length})
+                  </Button>
+                )}
+                
+                {/* View Toggle */}
+                <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+                  <Button
+                    variant={viewMode === "list" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("list")}
+                    className="rounded-none"
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode === "grid" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("grid")}
+                    className="rounded-none"
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
 
             {loading && (
               <div className="flex justify-center items-center h-64">
@@ -268,16 +500,164 @@ export default function Menu1Page() {
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>
             )}
 
-            {!loading && !error && scheduledPosts.length === 0 && (
-              <div className="text-center text-gray-600 py-10">No scheduled posts found.</div>
+            {!loading && !error && filteredPosts.length === 0 && (
+              <div className="text-center text-gray-600 py-10">
+                {scheduledPosts.length === 0 ? "No scheduled posts found." : "No posts match the current filters."}
+              </div>
             )}
 
-            {!loading && !error && scheduledPosts.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {scheduledPosts
-                  .slice() // make a shallow copy to avoid mutating state
-                  .sort((a, b) => b.id - a.id)
-                  .map((post) => {
+            {!loading && !error && filteredPosts.length > 0 && (
+              <>
+                {/* Select All Checkbox */}
+                <div className="flex items-center space-x-2 mb-4">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedPosts.length === filteredPosts.length && filteredPosts.length > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <label htmlFor="select-all" className="text-sm font-medium text-white cursor-pointer">
+                    Select All ({filteredPosts.length})
+                  </label>
+                </div>
+
+                {/* List View */}
+                {viewMode === "list" && (
+                  <div className="space-y-3">
+                    {filteredPosts
+                      .slice()
+                      .sort((a, b) => b.id - a.id)
+                      .map((post) => {
+                        const scheduledHour = new Date(post.schedule_time).getHours()
+                        const formattedScheduledTime = scheduledHour < 10 ? `0${scheduledHour}:00` : `${scheduledHour}:00`
+                        const platformInfo = PLATFORMS.find(p => p.name === post.platform)
+                        const PlatformIcon = platformInfo?.icon || Music
+
+                        return (
+                          <Card key={post.id} className="bg-white border border-gray-200 shadow-sm" style={{ backgroundColor: 'white' }}>
+                            <CardContent className="p-4" style={{ backgroundColor: 'white' }}>
+                              <div className="flex items-start space-x-4">
+                                <Checkbox
+                                  checked={selectedPosts.includes(post.id)}
+                                  onCheckedChange={(checked) => handleSelectPost(post.id, !!checked)}
+                                  className="mt-1"
+                                />
+                                
+                                {/* Image */}
+                                <div className="flex-shrink-0">
+                                  {post.image_url ? (
+                                    <img
+                                      src={post.image_url}
+                                      alt={post.title}
+                                      className="w-20 h-20 object-cover rounded-md"
+                                      onError={(e) => {
+                                        e.currentTarget.src = "/placeholder-image.jpg"
+                                      }}
+                                    />
+                                  ) : (
+                                    <div className="w-20 h-20 bg-gray-200 rounded-md flex items-center justify-center text-gray-500 text-xs">
+                                      No Image
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Content */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <h3 className="text-lg font-semibold text-gray-900 mb-1">{post.title}</h3>
+                                      <p className="text-gray-600 text-sm line-clamp-2 mb-2">{post.content}</p>
+                                      
+                                      <div className="flex items-center space-x-4 text-sm text-gray-500">
+                                        <div className="flex items-center space-x-1">
+                                          <PlatformIcon className="h-4 w-4" />
+                                          <span>{post.platform}</span>
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                          <Calendar className="h-4 w-4" />
+                                          <span>{formatDate(post.schedule_time)}</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs">
+                                          {formattedScheduledTime}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Actions */}
+                                    <div className="flex flex-col space-y-2 ml-4">
+                                      <select
+                                        value={formattedScheduledTime}
+                                        onChange={(e) => handleTimeChange(e, post.content)}
+                                        className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                      >
+                                        {timeOptions.map((time) => (
+                                          <option key={time} value={time}>{time}</option>
+                                        ))}
+                                      </select>
+                                      
+                                      <div className="flex space-x-1">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setEditedContent(post.content)
+                                            setEditedPlatform(post.platform)
+                                            setCurrentPostId(post.id)
+                                            setIsModalOpen(true)
+                                          }}
+                                          disabled={actionLoading[post.id]?.regenerateContent}
+                                          className="text-xs px-2 py-1"
+                                        >
+                                          {actionLoading[post.id]?.regenerateContent ? (
+                                            <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-500"></div>
+                                          ) : (
+                                            "Edit"
+                                          )}
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleRegenerateImage(post.id, post.content)}
+                                          disabled={actionLoading[post.id]?.regenerateImage}
+                                          className="text-xs px-2 py-1"
+                                        >
+                                          {actionLoading[post.id]?.regenerateImage ? (
+                                            <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-blue-500"></div>
+                                          ) : (
+                                            "Image"
+                                          )}
+                                        </Button>
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          onClick={() => deletePost(post.id)}
+                                          disabled={actionLoading[post.id]?.delete}
+                                          className="text-xs px-2 py-1"
+                                        >
+                                          {actionLoading[post.id]?.delete ? (
+                                            <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-red-500"></div>
+                                          ) : (
+                                            "Delete"
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                  </div>
+                )}
+
+                {/* Grid View */}
+                {viewMode === "grid" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredPosts
+                      .slice()
+                      .sort((a, b) => b.id - a.id)
+                      .map((post) => {
                     // Extract the hour from the schedule_time
                     const scheduledHour = new Date(post.schedule_time).getHours() // Extract hour (0-23)
                     const formattedScheduledTime = scheduledHour < 10 ? `0${scheduledHour}:00` : `${scheduledHour}:00`
@@ -285,9 +665,15 @@ export default function Menu1Page() {
                     return (
                       <div
                         key={post.id}
-                        className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-300"
+                        className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-300 relative"
                       >
-                        <h2 className="text-xl font-semibold text-gray-800 mb-2">{post.title}</h2>
+                        <div className="absolute top-4 right-4">
+                          <Checkbox
+                            checked={selectedPosts.includes(post.id)}
+                            onCheckedChange={(checked) => handleSelectPost(post.id, !!checked)}
+                          />
+                        </div>
+                        <h2 className="text-xl font-semibold text-gray-800 mb-2 pr-8">{post.title}</h2>
                         {post.image_url ? (
                           <img
                             src={post.image_url || "/placeholder.svg"}
@@ -402,11 +788,38 @@ export default function Menu1Page() {
                       </div>
                     )
                   })}
-              </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </main>
       </div>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <AlertDialog open={isBulkDeleteModalOpen} onOpenChange={setIsBulkDeleteModalOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Selected Posts</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedPosts.length} selected posts? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={globalLoading}
+            >
+              {globalLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white mr-2"></div>
+              ) : null}
+              Delete {selectedPosts.length} Posts
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

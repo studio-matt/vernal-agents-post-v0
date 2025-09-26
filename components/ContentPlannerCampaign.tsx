@@ -32,6 +32,7 @@ import {
   deleteCampaignsById,
   getAllCampaigns,
   getTrendingContent,
+  createCampaign,
 } from "./Service";
 import { toast } from "sonner";
 
@@ -39,6 +40,7 @@ export interface Campaign {
   id: string;
   name: string;
   description: string;
+  query?: string;
   type: "keyword" | "url" | "trending";
   keywords?: string[];
   urls?: string[];
@@ -46,6 +48,7 @@ export interface Campaign {
   topics?: string[];
   createdAt: Date;
   updatedAt: Date;
+  status?: "INCOMPLETE" | "READY_TO_ACTIVATE" | "ACTIVE";
   extractionSettings?: {
     webScrapingDepth: number;
     includeImages: boolean;
@@ -81,6 +84,7 @@ interface ContentPlannerCampaignProps {
   ) => void;
   onEditCampaign: (id: string, campaign: Partial<Campaign>) => void;
   onDeleteCampaign: (id: string) => void;
+  onRefreshCampaigns?: () => void;
 }
 
 export function ContentPlannerCampaign({
@@ -88,6 +92,7 @@ export function ContentPlannerCampaign({
   onAddCampaign,
   onEditCampaign,
   onDeleteCampaign,
+  onRefreshCampaigns,
 }: ContentPlannerCampaignProps) {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
@@ -146,8 +151,20 @@ export function ContentPlannerCampaign({
   const [trendingTopics, setTrendingTopics] = useState<string[]>([]);
   const [topics, setTTopics] = useState<string[]>([]);
   const formRef = useRef<HTMLDivElement>(null);
-  const campaignsListRef = useRef<HTMLDivElement>(null); // Ref for the campaigns list container
   const [campaignDisplay, setCampaignDisplay] = useState<Campaign | null>(null);
+
+  // Helper function to determine campaign status
+  const getCampaignStatus = (campaign: Campaign): "INCOMPLETE" | "READY_TO_ACTIVATE" | "ACTIVE" => {
+    // If campaign has no topics, it's incomplete (not built yet)
+    if (!campaign.topics || campaign.topics.length === 0) {
+      return "INCOMPLETE";
+    }
+    
+    // If campaign has topics but no scheduled content, it's ready to activate
+    // For now, we'll assume if it has topics, it's ready to activate
+    // In a real app, you'd check for scheduled content
+    return "READY_TO_ACTIVATE";
+  };
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
 
@@ -156,45 +173,8 @@ export function ContentPlannerCampaign({
     setSettings(campaigns);
   }, [campaigns]);
 
-  // Fetch campaigns on mount and sort them
-  useEffect(() => {
-    const getAllCampaign = async () => {
-      setIsLoading(true);
-      try {
-        const response = await getAllCampaigns();
-        if (response.status === "success") {
-          const sortedCampaigns = (response.message.campaigns || []).sort(
-            (a: Campaign, b: Campaign) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-          setSettings(sortedCampaigns);
-        } else {
-          console.error(
-            "API Error Details:",
-            JSON.stringify(response, null, 2)
-          );
-          throw new Error(response.message || "Failed to analyze trends");
-        }
-      } catch (error) {
-        console.error("Error building campaign:", error);
-        setErrorMessage("Error building campaign.");
-        setShowErrorDialog(true); // Show dialog
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    getAllCampaign();
-  }, []);
+  // Remove duplicate campaign fetching - campaigns are already passed as props
 
-  // Scroll to top of campaigns list whenever settings change
-  useEffect(() => {
-    if (campaignsListRef.current && !isCreating) {
-      campaignsListRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
-  }, [settings, isCreating]);
 
   const resetForm = () => {
     setCampaignName("");
@@ -385,54 +365,91 @@ export function ContentPlannerCampaign({
     setIsMergeModalOpen(true);
   };
 
-  const confirmMergeCampaigns = () => {
-    const selectedCampaignData = settings?.filter((campaign) =>
-      selectedCampaigns.includes(campaign.id)
-    );
-    const mergedCampaignNames = selectedCampaignData
-      .map((c) => c.name)
-      .join(", ");
-    const mergedCampaign: Omit<Campaign, "id" | "createdAt" | "updatedAt"> = {
-      name: "Merged Research",
-      description: `This campaign is a merge of the following campaigns: ${mergedCampaignNames}`,
-      type: "keyword",
-      keywords: Array.from(
-        new Set(
-          selectedCampaignData
-            .filter((c) => c.type === "keyword" && c.keywords)
-            .flatMap((c) => c.keywords || [])
-        )
-      ),
-      urls: Array.from(
-        new Set(
-          selectedCampaignData
-            .filter((c) => c.type === "url" && c.urls)
-            .flatMap((c) => c.urls || [])
-        )
-      ),
-      trendingTopics: Array.from(
-        new Set(
-          selectedCampaignData
-            .filter((c) => c.type === "trending" && c.trendingTopics)
-            .flatMap((c) => c.trendingTopics || [])
-        )
-      ),
-      topics: Array.from(
-        new Set(
-          selectedCampaignData
-            .filter((c) => c.topics)
-            .flatMap((c) => c.topics || [])
-        )
-      ),
-      extractionSettings: selectedCampaignData[0].extractionSettings,
-      preprocessingSettings: selectedCampaignData[0].preprocessingSettings,
-      entitySettings: selectedCampaignData[0].entitySettings,
-      modelingSettings: selectedCampaignData[0].modelingSettings,
-    };
-    onAddCampaign(mergedCampaign);
-    setIsMergeModalOpen(false);
-    setIsMergeMode(false);
-    setSelectedCampaigns([]);
+  const confirmMergeCampaigns = async () => {
+    console.log("confirmMergeCampaigns function called!");
+    try {
+      console.log("Starting merge process...", { selectedCampaigns, settings });
+      setIsLoading(true);
+      
+      const selectedCampaignData = settings?.filter((campaign) =>
+        selectedCampaigns.includes(campaign.id)
+      );
+      console.log("Selected campaign data:", selectedCampaignData);
+      const mergedCampaignNames = selectedCampaignData
+        .map((c) => c.name)
+        .join(", ");
+      const mergedCampaign: Omit<Campaign, "id" | "createdAt" | "updatedAt"> = {
+        name: "Merged Research",
+        description: `This campaign is a merge of the following campaigns: ${mergedCampaignNames}`,
+        type: "keyword",
+        keywords: Array.from(
+          new Set(
+            selectedCampaignData
+              .filter((c) => c.type === "keyword" && c.keywords)
+              .flatMap((c) => c.keywords || [])
+          )
+        ),
+        urls: Array.from(
+          new Set(
+            selectedCampaignData
+              .filter((c) => c.type === "url" && c.urls)
+              .flatMap((c) => c.urls || [])
+          )
+        ),
+        trendingTopics: Array.from(
+          new Set(
+            selectedCampaignData
+              .filter((c) => c.type === "trending" && c.trendingTopics)
+              .flatMap((c) => c.trendingTopics || [])
+          )
+        ),
+        topics: Array.from(
+          new Set(
+            selectedCampaignData
+              .filter((c) => c.topics)
+              .flatMap((c) => c.topics || [])
+          )
+        ),
+        extractionSettings: selectedCampaignData[0].extractionSettings,
+        preprocessingSettings: selectedCampaignData[0].preprocessingSettings,
+        entitySettings: selectedCampaignData[0].entitySettings,
+        modelingSettings: selectedCampaignData[0].modelingSettings,
+      };
+
+      // Create campaign via API
+      console.log("Creating merged campaign via API:", mergedCampaign);
+      try {
+        const response = await createCampaign(mergedCampaign);
+        console.log("API response:", response);
+        
+        if (response.status === "success") {
+          toast.success("Campaigns merged successfully!");
+          
+          // Refresh campaigns from API to get the server-assigned ID
+          if (onRefreshCampaigns) {
+            console.log("Calling onRefreshCampaigns...");
+            onRefreshCampaigns();
+          } else {
+            console.log("onRefreshCampaigns not available");
+          }
+        } else {
+          toast.error("Failed to create merged campaign");
+        }
+      } catch (apiError) {
+        console.error("API error:", apiError);
+        toast.error("Failed to create merged campaign");
+      }
+      
+      // Close modal and reset state
+      setIsMergeModalOpen(false);
+      setIsMergeMode(false);
+      setSelectedCampaigns([]);
+    } catch (error) {
+      console.error("Error merging campaigns:", error);
+      toast.error("An unexpected error occurred while merging campaigns");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const cancelMerge = () => {
@@ -476,19 +493,39 @@ export function ContentPlannerCampaign({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#7A99A8]">
-        <main className="p-6 max-w-7xl mx-auto space-y-6">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-4xl font-extrabold text-white">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70" style={{ 
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)'
+      }}>
+        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-sm w-full mx-4 border border-gray-200">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <svg
+                className="animate-spin h-12 w-12 text-[#3d545f]"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 text-center">
               Loading campaigns...
-            </h1>
+            </h3>
           </div>
-          <Card>
-            <CardContent className="p-6 flex justify-center items-center min-h-[400px]">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            </CardContent>
-          </Card>
-        </main>
+        </div>
       </div>
     );
   }
@@ -514,9 +551,10 @@ export function ContentPlannerCampaign({
               </div>
             ) : (
               <>
-                <Button onClick={() => setIsMergeMode(true)} variant="outline">
+                {/* MERGE FUNCTIONALITY TEMPORARILY DISABLED - See hiddenForNow.md for re-implementation guide */}
+                {/* <Button onClick={() => setIsMergeMode(true)} variant="outline">
                   Merge Research
-                </Button>
+                </Button> */}
                 <Button
                   onClick={handleCreateCampaign}
                   className="bg-[#3d545f] text-white hover:bg-[#3d545f]/90"
@@ -570,9 +608,21 @@ export function ContentPlannerCampaign({
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {editingId ? "Edit Campaign" : "Create New Campaign"}
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle>
+                    {editingId ? "Edit Campaign" : "Create New Campaign"}
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      resetForm();
+                      setIsCreating(false);
+                    }}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    Cancel, return to Campaigns
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
@@ -773,13 +823,14 @@ export function ContentPlannerCampaign({
         </div>
       )}
 
-      <div ref={campaignsListRef} className="space-y-4">
+      <div className="space-y-4">
         {settings?.map((campaign) => (
           <Card key={campaign.id}>
             <CardContent className="p-6">
               <div className="flex justify-between items-start">
                 <div className="flex items-start">
-                  {isMergeMode && (
+                  {/* MERGE FUNCTIONALITY TEMPORARILY DISABLED - See hiddenForNow.md for re-implementation guide */}
+                  {/* {isMergeMode && (
                     <div className="mr-3 mt-1">
                       <input
                         type="checkbox"
@@ -789,7 +840,7 @@ export function ContentPlannerCampaign({
                         className="h-5 w-5 rounded border-gray-300 text-[#3d545f] focus:ring-[#3d545f]"
                       />
                     </div>
-                  )}
+                  )} */}
                   <div>
                     <div className="flex items-center space-x-2">
                       <h3 className="text-xl font-semibold">{campaign.name}</h3>
@@ -799,6 +850,19 @@ export function ContentPlannerCampaign({
                           : campaign.type === "url"
                             ? "URLs"
                             : "Trending"}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        getCampaignStatus(campaign) === "INCOMPLETE" 
+                          ? "bg-orange-100 text-orange-800" 
+                          : getCampaignStatus(campaign) === "READY_TO_ACTIVATE"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-green-100 text-green-800"
+                      }`}>
+                        {getCampaignStatus(campaign) === "INCOMPLETE" 
+                          ? "INCOMPLETE" 
+                          : getCampaignStatus(campaign) === "READY_TO_ACTIVATE"
+                            ? "READY TO ACTIVATE"
+                            : "ACTIVE"}
                       </span>
                     </div>
                     <p className="text-gray-500 mt-1">{campaign.description}</p>
@@ -901,7 +965,7 @@ export function ContentPlannerCampaign({
             </CardContent>
           </Card>
         ))}
-        {!isCreating && !isMergeMode && (
+        {!isCreating && (
           <Card>
             <CardContent className="p-6 flex flex-col items-center justify-center text-center">
               <button
@@ -923,7 +987,8 @@ export function ContentPlannerCampaign({
             </CardContent>
           </Card>
         )}
-        {isMergeMode && (
+        {/* MERGE FUNCTIONALITY TEMPORARILY DISABLED - See hiddenForNow.md for re-implementation guide */}
+        {/* {isMergeMode && (
           <div className="flex justify-center mt-4">
             <Button
               onClick={handleMergeCampaigns}
@@ -935,7 +1000,7 @@ export function ContentPlannerCampaign({
               Cancel Merge
             </Button>
           </div>
-        )}
+        )} */}
       </div>
       <AlertDialog open={isMergeModalOpen} onOpenChange={setIsMergeModalOpen}>
         <AlertDialogContent>

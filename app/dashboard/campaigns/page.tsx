@@ -17,8 +17,8 @@ export default function CampaignsPage() {
   const router = useRouter()
 
   useEffect(() => {
-    // Redirect to the dashboard with the content-planner tab selected
-    router.push("/dashboard?tab=content-planner&view=campaigns")
+    // Redirect to the content planner page
+    router.push("/dashboard/content-planner")
   }, [router])
 
   return (
