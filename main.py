@@ -8,6 +8,8 @@ import json
 import asyncio
 from typing import Optional, Dict, List, Union, Any
 from pydantic import BaseModel, EmailStr, ValidationError, Field
+import uuid
+from datetime import datetime
 from agents import (
     script_research_agent, qc_agent, script_rewriter_agent, regenrate_content_agent, regenrate_subcontent_agent,
     
@@ -61,6 +63,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# In-memory storage for progress tracking
+progress_storage: Dict[str, Dict[str, Any]] = {}
+
 # Initialize database manager
 db_manager = DatabaseManager()
 
@@ -2313,8 +2319,43 @@ class AnalyzeInput(BaseModel):
     iterations: int = 25
     pass_threshold: float = 0.7
 
+class ProgressStatus(BaseModel):
+    task_id: str
+    status: str  # "processing", "completed", "failed"
+    progress: int  # 0-100
+    current_step: str
+    message: str
+    created_at: datetime
+    updated_at: datetime
+
 @app.post("/analyze")
 async def analyze_websites(input_data: AnalyzeInput):
+    # Generate task ID for progress tracking
+    task_id = str(uuid.uuid4())
+    
+    # Initialize progress tracking
+    progress_storage[task_id] = {
+        "task_id": task_id,
+        "status": "processing",
+        "progress": 0,
+        "current_step": "starting",
+        "message": "Initializing analysis...",
+        "created_at": datetime.now(),
+        "updated_at": datetime.now(),
+        "result": None,
+        "error": None
+    }
+    
+    # Start background task
+    asyncio.create_task(process_analysis_background(task_id, input_data))
+    
+    return {
+        "status": "started",
+        "task_id": task_id,
+        "message": "Analysis started, use task_id to check progress"
+    }
+
+async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
     try:
         campaign_name = input_data.campaign_name.strip()
         campaign_id = input_data.campaign_id.strip()
@@ -2339,25 +2380,61 @@ async def analyze_websites(input_data: AnalyzeInput):
         iterations = input_data.iterations
         pass_threshold = input_data.pass_threshold
 
+        # Update progress: Validation
+        progress_storage[task_id].update({
+            "progress": 5,
+            "current_step": "validating",
+            "message": "Validating input parameters...",
+            "updated_at": datetime.now()
+        })
+
         # Validate inputs
         if not campaign_name:
             logger.error("Campaign name is empty")
-            return {"error": "Campaign name cannot be empty"}
+            progress_storage[task_id].update({
+                "status": "failed",
+                "error": "Campaign name cannot be empty",
+                "updated_at": datetime.now()
+            })
+            return
         if not campaign_id:
             logger.error("Campaign ID is empty")
-            return {"error": "Campaign ID cannot be empty"}
+            progress_storage[task_id].update({
+                "status": "failed",
+                "error": "Campaign ID cannot be empty",
+                "updated_at": datetime.now()
+            })
+            return
         if not all(isinstance(url, str) and url.strip() for url in urls):
             logger.error(f"Invalid URLs provided: {urls}")
-            return {"error": "All URLs must be non-empty strings"}
+            progress_storage[task_id].update({
+                "status": "failed",
+                "error": "All URLs must be non-empty strings",
+                "updated_at": datetime.now()
+            })
+            return
         if not query:
             logger.error("Query is empty")
-            return {"error": "Query cannot be empty"}
+            progress_storage[task_id].update({
+                "status": "failed",
+                "error": "Query cannot be empty",
+                "updated_at": datetime.now()
+            })
+            return
 
         logger.info(
             f"Received request for campaign: {campaign_name} (ID: {campaign_id}), "
             f"num_topics: {num_topics}, iterations: {iterations}, pass_threshold: {pass_threshold}, "
             f"topic_tool: {topic_tool}, urls: {urls}, keywords: {keywords}, depth: {depth}, max_pages: {max_pages}"
         )
+
+        # Update progress: Web scraping setup
+        progress_storage[task_id].update({
+            "progress": 15,
+            "current_step": "scraping_setup",
+            "message": "Setting up web scraping...",
+            "updated_at": datetime.now()
+        })
 
         task = (
             f"{query} for this: {urls}. "
@@ -2382,25 +2459,66 @@ async def analyze_websites(input_data: AnalyzeInput):
             browser=browser,
         )
 
+        # Update progress: Web scraping in progress
+        progress_storage[task_id].update({
+            "progress": 25,
+            "current_step": "scraping",
+            "message": f"Scraping {len(urls)} URLs...",
+            "updated_at": datetime.now()
+        })
+
         history = await agent.run()
         result = history.final_result()
 
         if result:
             parsed_posts: Posts = Posts.model_validate_json(result)
             logger.info(f"Scraped {len(parsed_posts.posts)} posts")
+            
+            # Update progress: Scraping completed
+            progress_storage[task_id].update({
+                "progress": 50,
+                "current_step": "scraping_complete",
+                "message": f"Successfully scraped {len(parsed_posts.posts)} posts",
+                "updated_at": datetime.now()
+            })
         else:
             logger.warning("No results found from scraping")
-            return {
-                "status": "success",
-                "campaign_name": campaign_name,
-                "campaign_id": campaign_id,
-                "task": task,
-                "result": "No results found.",
-                "topics": []
-            }
+            progress_storage[task_id].update({
+                "status": "completed",
+                "progress": 100,
+                "current_step": "completed",
+                "message": "No results found from scraping",
+                "result": {
+                    "status": "success",
+                    "campaign_name": campaign_name,
+                    "campaign_id": campaign_id,
+                    "task": task,
+                    "result": "No results found.",
+                    "topics": []
+                },
+                "updated_at": datetime.now()
+            })
+            return
+
+        # Update progress: Content processing
+        progress_storage[task_id].update({
+            "progress": 60,
+            "current_step": "processing_content",
+            "message": "Processing scraped content...",
+            "updated_at": datetime.now()
+        })
 
         texts = [post.text for post in parsed_posts.posts]
         logger.info(f"Processing {len(texts)} texts for topic modeling")
+        
+        # Update progress: Topic modeling
+        progress_storage[task_id].update({
+            "progress": 70,
+            "current_step": "topic_modeling",
+            "message": "Analyzing topics and extracting entities...",
+            "updated_at": datetime.now()
+        })
+        
         topics = extract_topics(texts, topic_tool, num_topics, iterations, query, keywords, urls)
         if not topics:
             logger.warning("No topics generated; using fallback keyword extraction")
@@ -2408,6 +2526,14 @@ async def analyze_websites(input_data: AnalyzeInput):
             message = "No topics generated; used keyword extraction as fallback"
         else:
             message = None
+
+        # Update progress: Entity extraction
+        progress_storage[task_id].update({
+            "progress": 80,
+            "current_step": "entity_extraction",
+            "message": "Extracting entities and processing text...",
+            "updated_at": datetime.now()
+        })
 
         processed_posts = ProcessedPosts(posts=[
             ProcessedPost(
@@ -2419,6 +2545,14 @@ async def analyze_websites(input_data: AnalyzeInput):
                 topics=topics
             ) for post in parsed_posts.posts
         ])
+
+        # Update progress: Database storage
+        progress_storage[task_id].update({
+            "progress": 90,
+            "current_step": "storing_data",
+            "message": "Storing results in database...",
+            "updated_at": datetime.now()
+        })
 
         db_manager = DatabaseManager1()
         loop = asyncio.get_running_loop()
@@ -2446,11 +2580,45 @@ async def analyze_websites(input_data: AnalyzeInput):
         }
         if message:
             response_data["message"] = message  
-        logger.info(f"Response sent: {response_data}")
-        return response_data
+
+        # Update progress: Completed
+        progress_storage[task_id].update({
+            "status": "completed",
+            "progress": 100,
+            "current_step": "completed",
+            "message": "Analysis completed successfully!",
+            "result": response_data,
+            "updated_at": datetime.now()
+        })
+
+        logger.info(f"Analysis completed for task {task_id}")
+        
     except Exception as e:
-        logger.error(f"Error in analyze endpoint: {str(e)}")
-        return {"error": f"Internal server error: {str(e)}"}
+        logger.error(f"Error in background analysis: {str(e)}")
+        progress_storage[task_id].update({
+            "status": "failed",
+            "error": f"Internal server error: {str(e)}",
+            "updated_at": datetime.now()
+        })
+
+@app.get("/analyze/status/{task_id}")
+async def get_analysis_status(task_id: str):
+    """Get current progress of analysis task"""
+    if task_id not in progress_storage:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    status_data = progress_storage[task_id]
+    return {
+        "task_id": task_id,
+        "status": status_data["status"],
+        "progress": status_data["progress"],
+        "current_step": status_data["current_step"],
+        "message": status_data["message"],
+        "created_at": status_data["created_at"].isoformat(),
+        "updated_at": status_data["updated_at"].isoformat(),
+        "result": status_data.get("result"),
+        "error": status_data.get("error")
+    }
 
 class GenerateIdeasInput(BaseModel):
     topics: List[str]
@@ -3750,6 +3918,26 @@ async def store_claude_key(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error storing Claude key: {str(e)}")
+
+# Endpoint to get user credentials
+@app.get("/get_user_credentials")
+async def get_user_credentials(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        credentials = {
+            "openai_key": current_user.openai_key,
+            "claude_key": current_user.claude_key,
+            "midjourney_key": current_user.midjourney_key,
+            "elevenlabs_key": current_user.elevenlabs_key,
+        }
+        return {
+            "status": "success",
+            "credentials": credentials
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching credentials: {str(e)}")
 
 
 if __name__ == "__main__":
