@@ -159,3 +159,15 @@ class StateToken(Base):
     oauth_token = Column(String(255), nullable=True)  # For Twitter OAuth
     oauth_token_secret = Column(String(255), nullable=True)
     user = relationship("User")
+
+class AuthorPersonality(Base):
+    __tablename__ = 'author_personalities'
+    id = Column(String(255), primary_key=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    user_id = Column(String(255), nullable=True)  # Optional: for user-specific personalities
+    
+    def __repr__(self):
+        return f"<AuthorPersonality(id={self.id}, name={self.name})>"

@@ -2681,6 +2681,78 @@ async def get_campaigns():
         logger.error(f"Error in get_campaigns: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.post("/campaigns", response_class=JSONResponse)
+async def create_campaign(campaign_data: dict):
+    try:
+        # Extract campaign data
+        campaign_name = campaign_data.get("name", "").strip()
+        description = campaign_data.get("description", "")
+        query = campaign_data.get("query", "").strip()
+        campaign_type = campaign_data.get("type", "keyword")
+        keywords = campaign_data.get("keywords", [])
+        urls = campaign_data.get("urls", [])
+        trending_topics = campaign_data.get("trendingTopics", [])
+        topics = campaign_data.get("topics", [])
+        extraction_settings = campaign_data.get("extractionSettings", {})
+        preprocessing_settings = campaign_data.get("preprocessingSettings", {})
+        entity_settings = campaign_data.get("entitySettings", {})
+        modeling_settings = campaign_data.get("modelingSettings", {})
+        
+        # Validate required fields
+        if not campaign_name:
+            return JSONResponse(content={"error": "Campaign name is required"}, status_code=400)
+        
+        # Generate campaign ID
+        campaign_id = f"campaign-{int(datetime.now().timestamp() * 1000)}"
+        
+        # Create campaign in database
+        db_manager = DatabaseManager1()
+        loop = asyncio.get_running_loop()
+        
+        # Convert lists to comma-separated strings for database storage
+        keywords_str = ','.join(keywords) if keywords else ""
+        urls_str = ','.join(urls) if urls else ""
+        trending_topics_str = ','.join(trending_topics) if trending_topics else ""
+        topics_str = ','.join(topics) if topics else ""
+        
+        # Store campaign
+        await loop.run_in_executor(
+            None,
+            db_manager.create_campaign,
+            campaign_id,
+            campaign_name,
+            description,
+            query,
+            campaign_type,
+            keywords_str,
+            urls_str,
+            trending_topics_str,
+            topics_str,
+            extraction_settings,
+            preprocessing_settings,
+            entity_settings,
+            modeling_settings
+        )
+        
+        logger.info(f"Created campaign: {campaign_id} - {campaign_name}")
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": {
+                "id": campaign_id,
+                "name": campaign_name,
+                "description": description,
+                "type": campaign_type,
+                "keywords": keywords,
+                "createdAt": datetime.now().isoformat(),
+                "updatedAt": datetime.now().isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in create_campaign: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 @app.put("/campaigns/{campaign_id}")
 async def update_campaign(campaign_id: str, input_data: AnalyzeInput):
     try:
@@ -3904,6 +3976,124 @@ async def store_claude_key(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error storing Claude key: {str(e)}")
+
+
+# Author Personalities API Endpoints
+@app.get("/api/author_personalities", response_class=JSONResponse)
+async def get_author_personalities():
+    try:
+        db_manager = DatabaseManager1()
+        loop = asyncio.get_running_loop()
+        personalities = await loop.run_in_executor(None, db_manager.get_all_author_personalities)
+        logger.info(f"Retrieved {len(personalities)} author personalities")
+        return JSONResponse(content={"status": "success", "message": {"personalities": personalities}})
+    except Exception as e:
+        logger.error(f"Error in get_author_personalities: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/author_personalities", response_class=JSONResponse)
+async def create_author_personality(personality_data: dict):
+    try:
+        name = personality_data.get("name", "").strip()
+        description = personality_data.get("description", "").strip()
+        
+        # Validate required fields
+        if not name:
+            return JSONResponse(content={"error": "Name is required"}, status_code=400)
+        
+        # Generate personality ID
+        personality_id = f"personality-{int(datetime.now().timestamp() * 1000)}"
+        
+        # Create personality in database
+        db_manager = DatabaseManager1()
+        loop = asyncio.get_running_loop()
+        
+        await loop.run_in_executor(
+            None,
+            db_manager.create_author_personality,
+            personality_id,
+            name,
+            description
+        )
+        
+        logger.info(f"Created author personality: {personality_id} - {name}")
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": {
+                "id": personality_id,
+                "name": name,
+                "description": description,
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in create_author_personality: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.put("/api/author_personalities/{personality_id}", response_class=JSONResponse)
+async def update_author_personality(personality_id: str, personality_data: dict):
+    try:
+        name = personality_data.get("name", "").strip()
+        description = personality_data.get("description", "").strip()
+        
+        # Validate required fields
+        if not name:
+            return JSONResponse(content={"error": "Name is required"}, status_code=400)
+        
+        # Update personality in database
+        db_manager = DatabaseManager1()
+        loop = asyncio.get_running_loop()
+        
+        await loop.run_in_executor(
+            None,
+            db_manager.update_author_personality,
+            personality_id,
+            name,
+            description
+        )
+        
+        logger.info(f"Updated author personality: {personality_id} - {name}")
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": {
+                "id": personality_id,
+                "name": name,
+                "description": description,
+                "updated_at": datetime.now().isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in update_author_personality: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.delete("/api/author_personalities/{personality_id}", response_class=JSONResponse)
+async def delete_author_personality(personality_id: str):
+    try:
+        # Delete personality from database
+        db_manager = DatabaseManager1()
+        loop = asyncio.get_running_loop()
+        
+        await loop.run_in_executor(
+            None,
+            db_manager.delete_author_personality,
+            personality_id
+        )
+        
+        logger.info(f"Deleted author personality: {personality_id}")
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": f"Author personality {personality_id} deleted successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in delete_author_personality: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":
