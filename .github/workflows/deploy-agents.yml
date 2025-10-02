@@ -1,0 +1,53 @@
+name: Deploy Agents Backend to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "agents-backend/**"
+      - "backend-server/**"
+
+env:
+  AWS_REGION: us-east-1
+  AGENTS_EC2_USER: ubuntu
+  AGENTS_EC2_HOST: "34.204.6.126"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-agents:
+    name: Deploy Agents Backend
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AGENTS_AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AGENTS_AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy Agents Backend to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ env.AGENTS_EC2_HOST }}
+        username: ${{ env.AGENTS_EC2_USER }}
+        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
+        script: |
+          # Navigate to the agents backend directory
+          cd /home/ubuntu/agents-backend
+          
+          # Pull latest changes
+          git pull origin main
+          
+          # Install Python dependencies
+          pip install -r requirements.txt
+          
+          # Restart the agents service
+          sudo systemctl restart agents-backend
+          sudo systemctl status agents-backend
