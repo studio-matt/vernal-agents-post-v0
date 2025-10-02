@@ -30,7 +30,7 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Test Agents EC2 Connection
-      uses: appleboy/ssh-action@v1.0.4
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ env.AGENTS_EC2_HOST }}
         username: ${{ env.AGENTS_EC2_USER }}
