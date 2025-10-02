@@ -26,7 +26,7 @@ export const Service = async (
   const queryString = queryParams ? `?${new URLSearchParams(queryParams).toString()}` : ""
 
   const url = `${API_BASE_URL}/${endpoint}${queryString}`
-  const token = localStorage.getItem("token")
+  const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
   console.log(`🌐 Service call: ${method} ${url}`)
   console.log(`🔑 Token present: ${!!token}`)
