@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache</title>
+</head>
+<body>
+    <h1>Clear Application Cache</h1>
+    <button onclick="clearCache()">Clear localStorage and Refresh</button>
+    <div id="result"></div>
+
+    <script>
+        function clearCache() {
+            try {
+                // Clear all localStorage items
+                localStorage.clear();
+                
+                // Clear sessionStorage too
+                sessionStorage.clear();
+                
+                document.getElementById('result').innerHTML = `
+                    <h3>✅ Cache Cleared Successfully!</h3>
+                    <p>localStorage and sessionStorage have been cleared.</p>
+                    <p>Now refresh the main application to see the updated data.</p>
+                    <button onclick="window.close()">Close This Window</button>
+                `;
+                
+                console.log('Cache cleared successfully');
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>❌ Error Clearing Cache</h3>
+                    <p style="color: red;">${error.message}</p>
+                `;
+                console.error('Error clearing cache:', error);
+            }
+        }
+    </script>
+</body>
+</html>

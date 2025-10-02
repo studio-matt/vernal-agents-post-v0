@@ -1,0 +1,234 @@
+[
+  {
+    "name": "Backyard Telescope",
+    "description": "Campaign for all things backyard telescope related",
+    "type": "keyword",
+    "keywords": [
+      "backyard telescope",
+      "astrophotography",
+      "amateur telescope"
+    ],
+    "urls": [],
+    "query": "Looking for things a backyard telescope enthusiast might enjoy reading about. Focussing in on new things but calling out workflow augmentations and new scopes.",
+    "status": "READY_TO_ACTIVATE",
+    "topics": [
+      "advancements in telescope technology",
+      "innovations in astrophotography",
+      "smart telescope usability improvements",
+      "citizen science in astronomy",
+      "remote-controlled telescope systems"
+    ],
+    "posts": [
+      {
+        "text": "Successfully extracted 15 pages of content tailored for backyard telescope enthusiasts covering new advancements in telescope technology, astrophotography breakthroughs, and innovations in amateur astronomy workflow. Notable findings include the rise of smart telescopes simplifying operation, development in CCD and infrared imaging improving astronomy observations, and emerging techniques in astrophotography that mitigate light pollution. The exploration of novel tools like GoTo telescopes and remote-controlled telescope systems highlight significant advancements in visibility and usability for amateur astronomers. The activities of citizen science contribute to remarkable astronomical discoveries, and extensive resources available foster community and further exploration.",
+        "lemmatized_text": "Successfully extracted 15 page of content tailored for backyard telescope enthusiast covering new advancement in telescope technology , astrophotography breakthrough , and innovation in amateur astronomy workflow . Notable finding include the rise of smart telescope simplifying operation , development in CCD and infrared imaging improving astronomy observation , and emerging technique in astrophotography that mitigate light pollution . The exploration of novel tool like GoTo telescope and remote-controlled telescope system highlight significant advancement in visibility and usability for amateur astronomer . The activity of citizen science contribute to remarkable astronomical discovery , and extensive resource available foster community and further exploration .",
+        "stemmed_text": "success extract 15 page of content tailor for backyard telescop enthusiast cover new advanc in telescop technolog , astrophotographi breakthrough , and innov in amateur astronomi workflow . notabl find includ the rise of smart telescop simplifi oper , develop in ccd and infrar imag improv astronomi observ , and emerg techniqu in astrophotographi that mitig light pollut . the explor of novel tool like goto telescop and remote-control telescop system highlight signific advanc in visibl and usabl for amateur astronom . the activ of citizen scienc contribut to remark astronom discoveri , and extens resourc avail foster commun and further explor .",
+        "stopwords_removed_text": "Successfully extracted 15 pages tailored backyard telescope enthusiasts covering new advancements telescope technology , astrophotography breakthroughs , innovations amateur astronomy workflow . Notable findings rise smart telescopes simplifying operation , development CCD infrared imaging improving astronomy observations , emerging techniques astrophotography mitigate light pollution . exploration novel GoTo telescopes remote-controlled telescope systems highlight significant advancements visibility usability amateur astronomers . activities citizen science contribute remarkable astronomical discoveries , extensive resources available foster community exploration .",
+        "persons": null,
+        "organizations": null,
+        "locations": null,
+        "dates": null,
+        "topics": [
+          "advancements in telescope technology",
+          "innovations in astrophotography",
+          "smart telescope usability improvements",
+          "citizen science in astronomy",
+          "remote-controlled telescope systems"
+        ]
+      }
+    ],
+    "persons": [],
+    "organizations": [],
+    "locations": [],
+    "dates": [],
+    "extractionSettings": {
+      "webScrapingDepth": 3,
+      "includeImages": false,
+      "includeLinks": false,
+      "maxPages": 15,
+      "batchSize": 20
+    },
+    "preprocessingSettings": {
+      "stemming": true,
+      "lemmatization": true,
+      "removeStopwords": true
+    },
+    "entitySettings": {
+      "extractPersons": true,
+      "extractOrganizations": true,
+      "extractLocations": true,
+      "extractDates": true
+    },
+    "modelingSettings": {
+      "algorithm": "llm",
+      "numTopics": 5,
+      "iterations": 100,
+      "passThreshold": 0.5
+    },
+    "id": "campaign-1759335272705",
+    "createdAt": "2025-10-01T16:14:32.705Z",
+    "updatedAt": "2025-10-01T17:30:00.000Z"
+  },
+  {
+    "name": "Blockchain Provenance",
+    "description": "Anything relating to digital provenance on the blockchain",
+    "type": "keyword",
+    "keywords": [
+      "grouped asset nft",
+      "blockchain provenance"
+    ],
+    "urls": [],
+    "query": "Looking for companies and solutions out there attempting to solve all varieties of digital provenance using a blockchain.",
+    "status": "PROCESSING",
+    "topics": [
+      "blockchain provenance solutions",
+      "digital asset tracking",
+      "NFT provenance verification",
+      "supply chain transparency",
+      "blockchain authentication"
+    ],
+    "posts": [
+      {
+        "text": "Blockchain provenance solutions are revolutionizing digital asset tracking and verification. Companies are developing innovative approaches to ensure authenticity and traceability across various industries. Key developments include NFT provenance verification systems, supply chain transparency platforms, and blockchain-based authentication methods that provide immutable records of asset history and ownership.",
+        "lemmatized_text": "Blockchain provenance solution are revolutionizing digital asset tracking and verification . Company are developing innovative approach to ensure authenticity and traceability across various industry . Key development include NFT provenance verification system , supply chain transparency platform , and blockchain-based authentication method that provide immutable record of asset history and ownership .",
+        "stemmed_text": "blockchain provenanc solut are revolution digit asset track and verif . compani are develop innov approach to ensur authent and traceabl across variou industri . key develop includ nft provenanc verif system , suppli chain transpar platform , and blockchain-bas authent method that provid immut record of asset histori and ownership .",
+        "stopwords_removed_text": "Blockchain provenance solutions revolutionizing digital asset tracking verification . Companies developing innovative approaches ensure authenticity traceability across various industries . Key developments include NFT provenance verification systems , supply chain transparency platforms , blockchain-based authentication methods provide immutable records asset history ownership .",
+        "persons": null,
+        "organizations": null,
+        "locations": null,
+        "dates": null,
+        "topics": [
+          "blockchain provenance solutions",
+          "digital asset tracking",
+          "NFT provenance verification",
+          "supply chain transparency",
+          "blockchain authentication"
+        ]
+      }
+    ],
+    "persons": [],
+    "organizations": [],
+    "locations": [],
+    "dates": [],
+    "extractionSettings": {
+      "webScrapingDepth": 2,
+      "includeImages": false,
+      "includeLinks": false,
+      "maxPages": 15,
+      "batchSize": 30
+    },
+    "preprocessingSettings": {
+      "stemming": true,
+      "lemmatization": true,
+      "removeStopwords": true
+    },
+    "entitySettings": {
+      "extractPersons": true,
+      "extractOrganizations": true,
+      "extractLocations": true,
+      "extractDates": true
+    },
+    "modelingSettings": {
+      "algorithm": "llm",
+      "numTopics": 5,
+      "iterations": 100,
+      "passThreshold": 0.5
+    },
+    "id": "campaign-1759335625621",
+    "createdAt": "2025-10-01T16:20:25.621Z",
+    "updatedAt": "2025-10-01T19:18:28.282Z"
+  },
+  {
+    "name": "Wordpress AI Development",
+    "description": "This is all thing AI and WordPress",
+    "type": "keyword",
+    "keywords": [
+      "WordPress AI",
+      "AI for WordPress",
+      "WordPress Development AI",
+      "WordPress Plugin AI"
+    ],
+    "urls": [],
+    "query": "Looking for tips/tricks/tools for WordPress development that focus on AI-specific items.",
+    "status": "PROCESSING",
+    "topics": [],
+    "posts": [],
+    "persons": [],
+    "organizations": [],
+    "locations": [],
+    "dates": [],
+    "extractionSettings": {
+      "webScrapingDepth": 3,
+      "includeImages": false,
+      "includeLinks": false,
+      "maxPages": 15,
+      "batchSize": 30
+    },
+    "preprocessingSettings": {
+      "stemming": true,
+      "lemmatization": true,
+      "removeStopwords": true
+    },
+    "entitySettings": {
+      "extractPersons": true,
+      "extractOrganizations": true,
+      "extractLocations": true,
+      "extractDates": true
+    },
+    "modelingSettings": {
+      "algorithm": "llm",
+      "numTopics": 5,
+      "iterations": 100,
+      "passThreshold": 0.5
+    },
+    "id": "campaign-1759339473996",
+    "createdAt": "2025-10-01T17:24:33.996Z",
+    "updatedAt": "2025-10-01T20:56:53.641Z"
+  },
+  {
+    "name": "AI for Small Business",
+    "description": "This is AI for Small Businesses",
+    "type": "keyword",
+    "keywords": [
+      "AI for small business",
+      "ai tools for local businesses",
+      "small business ai tips"
+    ],
+    "urls": [],
+    "query": "",
+    "status": "PROCESSING",
+    "extractionSettings": {
+      "webScrapingDepth": 2,
+      "includeImages": false,
+      "includeLinks": false,
+      "maxPages": 15,
+      "batchSize": 35
+    },
+    "preprocessingSettings": {
+      "stemming": true,
+      "lemmatization": true,
+      "removeStopwords": true
+    },
+    "entitySettings": {
+      "extractPersons": true,
+      "extractOrganizations": true,
+      "extractLocations": true,
+      "extractDates": true
+    },
+    "modelingSettings": {
+      "algorithm": "llm",
+      "numTopics": 5,
+      "iterations": 100,
+      "passThreshold": 0.5
+    },
+    "id": "campaign-1759346142206",
+    "createdAt": "2025-10-01T19:15:42.206Z",
+    "updatedAt": "2025-10-02T02:54:15.472Z",
+    "topics": [],
+    "posts": [],
+    "persons": [],
+    "organizations": [],
+    "locations": [],
+    "dates": []
+  }
+]
