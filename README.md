@@ -1,1 +1,1 @@
-# MultiAgent - Test Deployment
+# MultiAgent - Test Deployment - Simplified
