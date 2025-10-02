@@ -33,7 +33,7 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Deploy Agents Backend to EC2
-      uses: appleboy/ssh-action@v1.0.4
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ env.AGENTS_EC2_HOST }}
         username: ${{ env.AGENTS_EC2_USER }}
@@ -54,12 +54,13 @@ jobs:
           if [ ! -d ".git" ]; then
             git init
             git remote add origin https://$GIT_TOKEN@github.com/studio-matt/vernal-agents-post-v0.git
+            git fetch origin main
+            git checkout -b main origin/main
           else
             git remote set-url origin https://$GIT_TOKEN@github.com/studio-matt/vernal-agents-post-v0.git
+            git fetch origin main
+            git reset --hard origin/main
           fi
-          
-          # Pull latest changes
-          git pull origin main
           
           # Install Python dependencies
           pip install -r requirements.txt
