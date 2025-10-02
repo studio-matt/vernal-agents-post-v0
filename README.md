@@ -25,7 +25,7 @@ CREATE TABLE campaigns (
     urls JSON, -- Array of strings
     trending_topics JSON, -- Array of strings
     topics JSON, -- Array of strings
-    status ENUM('INCOMPLETE', 'READY_TO_ACTIVATE', 'ACTIVE') DEFAULT 'INCOMPLETE',
+    status ENUM('INCOMPLETE', 'PROCESSING', 'READY_TO_ACTIVATE', 'ACTIVE') DEFAULT 'INCOMPLETE',
     extraction_settings JSON,
     preprocessing_settings JSON,
     entity_settings JSON,
@@ -50,7 +50,7 @@ CREATE TABLE campaigns (
   "urls": [String],
   "trendingTopics": [String],
   "topics": [String],
-  "status": String, // "INCOMPLETE", "READY_TO_ACTIVATE", or "ACTIVE"
+    "status": String, // "INCOMPLETE", "PROCESSING", "READY_TO_ACTIVATE", or "ACTIVE"
   "extractionSettings": Object,
   "preprocessingSettings": Object,
   "entitySettings": Object,
@@ -71,6 +71,77 @@ POST   /campaigns              - Create new campaign
 GET    /campaigns/{id}         - Get specific campaign
 PUT    /campaigns/{id}         - Update campaign
 DELETE /campaigns/{id}         - Delete campaign
+```
+
+#### 3. Progress Tracking System
+
+The application includes real-time progress tracking for campaign analysis. The following setup is required:
+
+**Database Fields for Progress Tracking:**
+```sql
+-- Add these fields to the campaigns table
+ALTER TABLE campaigns ADD COLUMN progress INT DEFAULT 0; -- 0-100
+ALTER TABLE campaigns ADD COLUMN current_step VARCHAR(255); -- Current processing step
+ALTER TABLE campaigns ADD COLUMN progress_message TEXT; -- Progress description
+ALTER TABLE campaigns ADD COLUMN task_id VARCHAR(255); -- Background task ID
+```
+
+**Progress Tracking API Endpoints:**
+```
+POST   /analyze                - Start analysis (returns task_id)
+GET    /analyze/status/{task_id} - Get real-time progress
+```
+
+**Progress Tracking Implementation:**
+- **Real-time polling**: Frontend polls every 2 seconds for progress updates
+- **Meaningful increments**: Progress jumps in steps (5%, 15%, 25%, 50%, 70%, 85%, 90%, 100%)
+- **Fallback system**: If API unavailable, uses time-based progress estimation
+- **Persistent state**: Progress persists across page refreshes and login sessions
+
+**Progress Steps:**
+- 5% - Validating input parameters
+- 15% - Setting up web scraping
+- 25% - Web scraping in progress
+- 50% - Scraping completed
+- 60% - Processing scraped content
+- 70% - Analyzing topics and extracting entities
+- 80% - Extracting entities and processing text
+- 90% - Storing results in database
+- 100% - Analysis completed successfully
+
+**Progress Tracking API Response Format:**
+
+```typescript
+// POST /analyze
+Request Body:
+{
+  "campaign_name": "Test Campaign",
+  "campaign_id": "campaign-123",
+  "urls": ["https://example.com"],
+  "query": "test query",
+  "keywords": ["keyword1", "keyword2"]
+}
+
+Response:
+{
+  "status": "started",
+  "task_id": "task-uuid-123",
+  "message": "Analysis started, use task_id to check progress"
+}
+
+// GET /analyze/status/{task_id}
+Response:
+{
+  "task_id": "task-uuid-123",
+  "status": "processing", // "processing", "completed", "failed"
+  "progress": 50, // 0-100
+  "current_step": "scraping",
+  "message": "Scraping 3 URLs...",
+  "created_at": "2025-01-01T00:00:00Z",
+  "updated_at": "2025-01-01T00:00:00Z",
+  "result": null, // Final results when completed
+  "error": null   // Error message if failed
+}
 ```
 
 **Expected Request/Response Format:**
@@ -413,7 +484,8 @@ Before deploying to production, ensure the backend team implements:
 When moving to production:
 
 - [ ] Backend API endpoints implemented
-- [ ] Database schema created
+- [ ] Database schema created (including progress tracking fields)
+- [ ] Progress tracking API endpoints implemented (`/analyze`, `/analyze/status/{task_id}`)
 - [ ] Authentication integrated
 - [ ] CORS configured
 - [ ] Update `Service.tsx` API URLs
@@ -422,6 +494,8 @@ When moving to production:
 - [ ] Test all campaign functionality
 - [ ] Verify campaign merge works
 - [ ] Test campaign persistence
+- [ ] Test progress tracking (real-time updates)
+- [ ] Test progress persistence across page refreshes
 
 ## Troubleshooting
 
@@ -433,6 +507,9 @@ When moving to production:
 5. **CORS errors**: Ensure proper CORS configuration on backend
 6. **Authentication errors**: Verify token handling in API calls
 7. **Database connection issues**: Check database configuration and connectivity
+8. **Progress not updating**: Check `/analyze/status/{task_id}` endpoint implementation
+9. **Progress stuck at 0%**: Verify progress tracking fields in database
+10. **Progress increments too small**: Check if using time-based fallback instead of API progress
 
 ### Debug Steps:
 1. Check browser network tab for API call failures

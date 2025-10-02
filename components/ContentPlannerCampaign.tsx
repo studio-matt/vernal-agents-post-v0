@@ -46,9 +46,47 @@ export interface Campaign {
   urls?: string[];
   trendingTopics?: string[];
   topics?: string[];
+  persons?: string[];
+  organizations?: string[];
+  locations?: string[];
+  dates?: string[];
+  posts?: {
+    url?: string;
+    title?: string;
+    text: string;
+    lemmatized_text?: string;
+    stemmed_text?: string;
+    stopwords_removed_text?: string;
+    persons?: string[];
+    organizations?: string[];
+    locations?: string[];
+    dates?: string[];
+    topics?: string[];
+    entities?: {
+      persons?: string[];
+      organizations?: string[];
+      locations?: string[];
+      dates?: string[];
+    };
+  }[];
+  summary?: {
+    total_urls_scraped: number;
+    total_content_size: string;
+    extraction_settings_used: {
+      depth: number;
+      max_pages: number;
+      batch_size: number;
+      include_links: boolean;
+    };
+  };
   createdAt: Date;
   updatedAt: Date;
-  status?: "INCOMPLETE" | "READY_TO_ACTIVATE" | "ACTIVE";
+  status?: "INCOMPLETE" | "PROCESSING" | "READY_TO_ACTIVATE" | "ACTIVE";
+  // Progress tracking fields
+  progress?: number;
+  currentStep?: string;
+  progressMessage?: string;
+  taskId?: string;
   extractionSettings?: {
     webScrapingDepth: number;
     includeImages: boolean;
@@ -112,6 +150,15 @@ export function ContentPlannerCampaign({
     isOpen: false,
     message: "",
   });
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    campaignId: string | null;
+    campaignName: string;
+  }>({
+    isOpen: false,
+    campaignId: null,
+    campaignName: "",
+  });
   const [isSettingsMode, setIsSettingsMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [extractionSettings, setExtractionSettings] = useState({
@@ -152,18 +199,79 @@ export function ContentPlannerCampaign({
   const [topics, setTTopics] = useState<string[]>([]);
   const formRef = useRef<HTMLDivElement>(null);
   const [campaignDisplay, setCampaignDisplay] = useState<Campaign | null>(null);
+  const [processingStartTimes, setProcessingStartTimes] = useState<Record<string, number>>({});
+  const [pollingIntervals, setPollingIntervals] = useState<Record<string, NodeJS.Timeout>>({});
 
-  // Helper function to determine campaign status
-  const getCampaignStatus = (campaign: Campaign): "INCOMPLETE" | "READY_TO_ACTIVATE" | "ACTIVE" => {
-    // If campaign has no topics, it's incomplete (not built yet)
-    if (!campaign.topics || campaign.topics.length === 0) {
-      return "INCOMPLETE";
+  // Helper function to get elapsed time for processing campaigns
+  const getElapsedTime = (campaign: Campaign): string => {
+    if (getCampaignStatus(campaign) !== "PROCESSING") return "";
+    
+    // Use updatedAt if available (for re-processing), otherwise createdAt
+    const startTime = processingStartTimes[campaign.id] || 
+                     new Date(campaign.updatedAt || campaign.createdAt).getTime();
+    const now = Date.now();
+    const elapsed = now - startTime;
+    const minutes = Math.floor(elapsed / 60000);
+    const seconds = Math.floor((elapsed % 60000) / 1000);
+    
+    return `${minutes}m ${seconds}s`;
+  };
+
+  // Helper function to get progress percentage
+  const getProgressPercentage = (campaign: Campaign): number => {
+    if (getCampaignStatus(campaign) !== "PROCESSING") return 0;
+    
+    // Use real API progress if available, otherwise fall back to time-based
+    if (campaign.progress !== undefined) {
+      console.log(`[Progress] Using API progress: ${campaign.progress}% for campaign ${campaign.id}`);
+      return campaign.progress;
     }
     
-    // If campaign has topics but no scheduled content, it's ready to activate
-    // For now, we'll assume if it has topics, it's ready to activate
-    // In a real app, you'd check for scheduled content
-    return "READY_TO_ACTIVATE";
+    // Fallback to time-based progress
+    const startTime = processingStartTimes[campaign.id] || 
+                     new Date(campaign.updatedAt || campaign.createdAt).getTime();
+    const now = Date.now();
+    const elapsed = now - startTime;
+    const minutes = elapsed / 60000;
+    
+    // Progress in meaningful increments over 5 minutes
+    let timeBasedProgress = 0;
+    if (minutes < 0.5) timeBasedProgress = 5;      // 0-30 seconds: 5%
+    else if (minutes < 1) timeBasedProgress = 15;   // 30-60 seconds: 15%
+    else if (minutes < 2) timeBasedProgress = 25;   // 1-2 minutes: 25%
+    else if (minutes < 3) timeBasedProgress = 50;   // 2-3 minutes: 50%
+    else if (minutes < 4) timeBasedProgress = 70;   // 3-4 minutes: 70%
+    else if (minutes < 5) timeBasedProgress = 85;   // 4-5 minutes: 85%
+    else timeBasedProgress = 90;                    // 5+ minutes: 90%
+    
+    console.log(`[Progress] Using time-based progress: ${timeBasedProgress}% for campaign ${campaign.id} (${minutes.toFixed(1)} minutes elapsed)`);
+    return timeBasedProgress;
+  };
+
+  // Helper function to determine campaign status
+  const getCampaignStatus = (campaign: Campaign): "INCOMPLETE" | "PROCESSING" | "READY_TO_ACTIVATE" | "ACTIVE" => {
+    // If campaign has topics, it's ready to activate (successfully built)
+    if (campaign.topics && campaign.topics.length > 0) {
+      return "READY_TO_ACTIVATE";
+    }
+    
+    // If campaign is marked as processing but has no topics, it might have failed
+    // Check if it's been processing for more than 5 minutes since last update
+    if (campaign.status === "PROCESSING") {
+      const updatedAt = new Date(campaign.updatedAt);
+      const now = new Date();
+      const minutesSinceUpdate = (now.getTime() - updatedAt.getTime()) / (1000 * 60);
+      
+      // If it's been processing for more than 5 minutes since last update, mark as incomplete
+      if (minutesSinceUpdate > 5) {
+        return "INCOMPLETE";
+      }
+      
+      return "PROCESSING";
+    }
+    
+    // If campaign has no topics, it's incomplete (not built yet)
+    return "INCOMPLETE";
   };
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
@@ -171,6 +279,88 @@ export function ContentPlannerCampaign({
   // Sync settings with campaigns prop whenever campaigns change
   useEffect(() => {
     setSettings(campaigns);
+  }, [campaigns]);
+
+  // Polling function for progress updates
+  const pollProgress = async (campaignId: string, taskId: string) => {
+    try {
+      const { getAnalysisStatus } = await import('@/components/Service');
+      const status = await getAnalysisStatus(taskId);
+      
+      if (status.status === "error") {
+        console.error("Error polling progress:", status.message);
+        return;
+      }
+
+      // Update campaign with progress data
+      console.log(`[Progress] Campaign ${campaignId}: ${status.progress}% - ${status.current_step} - ${status.message}`);
+      setSettings(prev => prev.map(campaign => 
+        campaign.id === campaignId 
+          ? {
+              ...campaign,
+              progress: status.progress,
+              currentStep: status.current_step,
+              progressMessage: status.message,
+              status: status.status === "completed" ? "READY_TO_ACTIVATE" : 
+                      status.status === "failed" ? "INCOMPLETE" : "PROCESSING"
+            }
+          : campaign
+      ));
+
+      // Stop polling if completed or failed
+      if (status.status === "completed" || status.status === "failed") {
+        if (pollingIntervals[campaignId]) {
+          clearInterval(pollingIntervals[campaignId]);
+          setPollingIntervals(prev => {
+            const newIntervals = { ...prev };
+            delete newIntervals[campaignId];
+            return newIntervals;
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error polling progress:", error);
+    }
+  };
+
+  // Update processing start times and start polling when campaigns change to PROCESSING
+  useEffect(() => {
+    campaigns.forEach(campaign => {
+      if (getCampaignStatus(campaign) === "PROCESSING" && campaign.taskId) {
+        // Always update start time for PROCESSING campaigns to handle re-processing
+        const startTime = new Date(campaign.updatedAt || campaign.createdAt).getTime();
+        setProcessingStartTimes(prev => ({
+          ...prev,
+          [campaign.id]: startTime
+        }));
+
+        // Start polling if not already polling
+        if (!pollingIntervals[campaign.id]) {
+          const interval = setInterval(() => {
+            pollProgress(campaign.id, campaign.taskId!);
+          }, 2000); // Poll every 2 seconds
+
+          setPollingIntervals(prev => ({
+            ...prev,
+            [campaign.id]: interval
+          }));
+        }
+      }
+    });
+  }, [campaigns, pollingIntervals]);
+
+  // Update elapsed time every second for processing campaigns
+  useEffect(() => {
+    const hasProcessingCampaigns = campaigns.some(campaign => getCampaignStatus(campaign) === "PROCESSING");
+    
+    if (!hasProcessingCampaigns) return;
+
+    const interval = setInterval(() => {
+      // Force re-render to update elapsed time
+      setSettings(prev => [...prev]);
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, [campaigns]);
 
   // Remove duplicate campaign fetching - campaigns are already passed as props
@@ -488,6 +678,61 @@ export function ContentPlannerCampaign({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const openDeleteModal = (id: string, name: string) => {
+    setDeleteModal({
+      isOpen: true,
+      campaignId: id,
+      campaignName: name,
+    });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({
+      isOpen: false,
+      campaignId: null,
+      campaignName: "",
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (deleteModal.campaignId) {
+      await deleteCampaign(deleteModal.campaignId);
+      closeDeleteModal();
+    }
+  };
+
+  const resetCampaignStatus = async (campaignId: string) => {
+    try {
+      // Update campaign status to INCOMPLETE
+      const response = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: "INCOMPLETE" })
+      });
+
+      if (response.ok) {
+        // Update local state
+        setSettings((prevCampaigns) => {
+          const updatedCampaigns = prevCampaigns.map((campaign) =>
+            campaign.id === campaignId
+              ? { ...campaign, status: "INCOMPLETE" as const }
+              : campaign
+          );
+          return updatedCampaigns;
+        });
+        
+        toast.success("Campaign status reset to incomplete. You can now try building it again.");
+      } else {
+        toast.error("Failed to reset campaign status");
+      }
+    } catch (error) {
+      console.error("Error resetting campaign status:", error);
+      toast.error("Error resetting campaign status");
     }
   };
 
@@ -854,18 +1099,53 @@ export function ContentPlannerCampaign({
                       <span className={`text-xs px-2 py-1 rounded-full ${
                         getCampaignStatus(campaign) === "INCOMPLETE" 
                           ? "bg-orange-100 text-orange-800" 
-                          : getCampaignStatus(campaign) === "READY_TO_ACTIVATE"
-                            ? "bg-blue-100 text-blue-800"
-                            : "bg-green-100 text-green-800"
+                          : getCampaignStatus(campaign) === "PROCESSING"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : getCampaignStatus(campaign) === "READY_TO_ACTIVATE"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-green-100 text-green-800"
                       }`}>
                         {getCampaignStatus(campaign) === "INCOMPLETE" 
                           ? "INCOMPLETE" 
-                          : getCampaignStatus(campaign) === "READY_TO_ACTIVATE"
-                            ? "READY TO ACTIVATE"
-                            : "ACTIVE"}
+                          : getCampaignStatus(campaign) === "PROCESSING"
+                            ? "PROCESSING"
+                            : getCampaignStatus(campaign) === "READY_TO_ACTIVATE"
+                              ? "READY TO ACTIVATE"
+                              : "ACTIVE"}
                       </span>
                     </div>
                     <p className="text-gray-500 mt-1">{campaign.description}</p>
+                    
+                    {/* Progress indicator for processing campaigns */}
+                    {getCampaignStatus(campaign) === "PROCESSING" && (
+                      <div className="mt-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                            <span className="text-sm font-semibold text-blue-800">Building Campaign...</span>
+                          </div>
+                          <div className="text-sm font-mono text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                            ⏱️ {getElapsedTime(campaign)}
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-blue-700 mb-3 p-2 bg-blue-100 rounded border-l-4 border-blue-400">
+                          <strong>⏱️ Important:</strong> This process can take 2-5 minutes as it has a lot to do! Please be patient as we collect all we need.
+                        </div>
+                        
+                        <div className="w-full bg-blue-200 rounded-full h-2.5 mb-3">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${getProgressPercentage(campaign)}%` }}
+                          ></div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-xs text-blue-600">
+                          <span>{campaign.progressMessage || "🔄 Processing keywords, extracting content, and analyzing topics..."}</span>
+                          <span className="font-medium">{Math.round(getProgressPercentage(campaign))}%</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex space-x-2">
@@ -875,10 +1155,21 @@ export function ContentPlannerCampaign({
                       Edit
                     </Button>
                   </Link>
+                  {getCampaignStatus(campaign) === "PROCESSING" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetCampaignStatus(campaign.id)}
+                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                    >
+                      <Key className="w-4 h-4 mr-2" />
+                      Reset Status
+                    </Button>
+                  )}
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => deleteCampaign(campaign.id)}
+                    onClick={() => openDeleteModal(campaign.id, campaign.name)}
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete
@@ -1018,6 +1309,37 @@ export function ContentPlannerCampaign({
             </AlertDialogCancel>
             <AlertDialogAction onClick={confirmMergeCampaigns}>
               Merge Campaigns
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteModal.isOpen} onOpenChange={closeDeleteModal}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-500" />
+              Delete Campaign
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Are you sure you want to delete the campaign <strong>"{deleteModal.campaignName}"</strong>?
+              </p>
+              <p className="text-red-600 font-medium">
+                ⚠️ This action cannot be undone. All campaign data and settings will be permanently deleted.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={closeDeleteModal}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Campaign
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

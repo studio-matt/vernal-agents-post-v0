@@ -151,7 +151,7 @@ export default function EditCampaignPage() {
     message: "",
   });
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("settings");
+  const [activeTab, setActiveTab] = useState("extraction-results");
   const [trendingPlatform, setTrendingPlatform] = useState("x");
   const [queueItems, setQueueItems] = useState<
     Array<{ id: string; type: string; name: string; source: string }>
@@ -383,7 +383,7 @@ export default function EditCampaignPage() {
 
   useEffect(() => { }, [trendingTopics]);
 
-  const handleSaveCampaign = () => {
+  const handleSaveCampaign = async () => {
     if (!campaign) return;
 
     setIsSaving(true);
@@ -422,23 +422,34 @@ export default function EditCampaignPage() {
       console.log("Saved trendingTopics to localStorage:", updatedPayload);
     }
 
-    setTimeout(() => {
-      try {
+    try {
+      // Import the updateCampaign function from Service
+      const { updateCampaign } = await import('@/components/Service');
+      
+      const response = await updateCampaign(campaign.id, updatedCampaign);
+      
+      if (response.status === 'success') {
         setCampaign({
           ...campaign,
           ...updatedCampaign,
           updatedAt: new Date(),
         });
         router.push("/dashboard/content-planner");
-      } catch (err) {
+      } else {
         setError({
           isOpen: true,
-          message: "Failed to save campaign. Please try again later.",
+          message: response.message || "Failed to save campaign. Please try again later.",
         });
-      } finally {
-        setIsSaving(false);
       }
-    }, 1000);
+    } catch (err) {
+      console.error("Error saving campaign:", err);
+      setError({
+        isOpen: true,
+        message: "Failed to save campaign. Please try again later.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const closeErrorDialog = () => {
@@ -1293,60 +1304,244 @@ export default function EditCampaignPage() {
                 value="extraction-results"
                 className="relative z-10 mt-6"
               >
-                <CampaignResults
-                  title="Information Extraction Results"
-                  icon={<Database className="h-5 w-5" />}
-                  campaign={campaign}
-                  stage="extraction"
-                  hasResults={false}
-                  onRunAnalysis={() => {
-                    // In a real app, this would trigger the extraction process
-                    console.log(
-                      "Running extraction for campaign:",
-                      campaign.id
-                    );
-                  }}
-                />
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open('/test-extraction-api.html', '_blank')}
+                        className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Test API Directly
+                      </Button>
+                      <span className="text-sm text-gray-500">
+                        Debug extraction issues by testing the external API
+                      </span>
+                    </div>
+                  </div>
+                  <CampaignResults
+                    title="Information Extraction Results"
+                    icon={<Database className="h-5 w-5" />}
+                    campaign={campaign}
+                    stage="extraction"
+                    hasResults={false}
+                    onRunAnalysis={async () => {
+                      // Clear existing data and set campaign status to PROCESSING to show progress bar
+                      await fetch(`/api/campaigns/${campaign.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          status: "PROCESSING",
+                          topics: [],
+                          posts: [],
+                          persons: [],
+                          organizations: [],
+                          locations: [],
+                          dates: [],
+                          updatedAt: new Date().toISOString()
+                        })
+                      });
+                      
+                      // IMMEDIATELY redirect to campaigns page to show progress bar
+                      window.location.href = '/dashboard/content-planner';
+                      
+                      // Continue processing in background (this won't execute due to redirect)
+                      // But we'll start it anyway in case the redirect fails
+                      setTimeout(async () => {
+                        try {
+                          // Create the payload exactly like the working build function
+                          const payload = {
+                            campaign_name: campaign.name,
+                            campaign_id: campaign.id,
+                            urls: campaign.urls || [],
+                            query: campaign.query || "",
+                            description: campaign.description,
+                            keywords: campaign.keywords || [],
+                            type: campaign.type,
+                            depth: campaign.extractionSettings?.webScrapingDepth || 2,
+                            max_pages: campaign.extractionSettings?.maxPages || 10,
+                            batch_size: campaign.extractionSettings?.batchSize || 10,
+                            include_links: campaign.extractionSettings?.includeLinks || false,
+                            stem: campaign.preprocessingSettings?.stemming || false,
+                            lemmatize: campaign.preprocessingSettings?.lemmatization || false,
+                            remove_stopwords_toggle: campaign.preprocessingSettings?.removeStopwords || false,
+                            extract_persons: campaign.entitySettings?.extractPersons || false,
+                            extract_organizations: campaign.entitySettings?.extractOrganizations || false,
+                            extract_locations: campaign.entitySettings?.extractLocations || false,
+                            extract_dates: campaign.entitySettings?.extractDates || false,
+                            topic_tool: campaign.modelingSettings?.algorithm || "llm",
+                            num_topics: campaign.modelingSettings?.numTopics || 5,
+                            iterations: campaign.modelingSettings?.iterations || 100,
+                            pass_threshold: campaign.modelingSettings?.passThreshold || 0.5,
+                          };
+
+                          // Import the analyzeTrends function
+                          const { analyzeTrends } = await import('@/components/Service');
+                          
+                          // Call the API
+                          const response = await analyzeTrends(payload);
+
+                          if (response.status === "started") {
+                            // Store task ID for progress tracking
+                            await fetch(`/api/campaigns/${campaign.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ 
+                                taskId: response.task_id,
+                                status: "PROCESSING"
+                              })
+                            });
+                          } else if (response.status === "success") {
+                            const responseData = response as any;
+                            
+                            // Use the exact same logic as the working function
+                            const campaignDescription =
+                              Array.isArray(responseData.posts) &&
+                              responseData.posts.length > 0 &&
+                              responseData.posts[0].text
+                                ? responseData.posts[0].text
+                                : campaign.description;
+
+                            const normalizeTopics = (topics?: string[]): string[] => {
+                              if (!topics || !Array.isArray(topics)) return [];
+                              return topics
+                                .flatMap((t) =>
+                                  t.includes(",") ? t.split(",").map((s) => s.trim()) : t.trim()
+                                )
+                                .filter(Boolean);
+                            };
+
+                            const campaignTopics =
+                              Array.isArray(responseData.posts) &&
+                              responseData.posts.length > 0 &&
+                              responseData.posts[0].topics &&
+                              Array.isArray(responseData.posts[0].topics)
+                                ? normalizeTopics(responseData.posts[0].topics)
+                                  .map((t) => t.trim().charAt(0).toUpperCase() + t.slice(1))
+                                  .filter((t) => !["non", "com"].includes(t.toLowerCase()))
+                                : responseData.topics &&
+                                  Array.isArray(responseData.topics) &&
+                                  responseData.topics.length > 0
+                                  ? normalizeTopics(responseData.topics).map(
+                                    (t) => t.charAt(0).toUpperCase() + t.slice(1)
+                                  )
+                                  : campaign.keywords || [];
+
+                            // Update the existing campaign with the analyzed data
+                            const campaignUpdate = {
+                              name: payload.campaign_name,
+                              description: campaignDescription,
+                              topics: campaignTopics,
+                              posts: responseData.posts || [],
+                              persons: responseData.persons || [],
+                              organizations: responseData.organizations || [],
+                              locations: responseData.locations || [],
+                              dates: responseData.dates || [],
+                              status: "READY_TO_ACTIVATE"
+                            };
+
+                            // Update the campaign in the database
+                            const updateResponse = await fetch(`/api/campaigns/${campaign.id}`, {
+                              method: 'PUT',
+                              headers: {
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify(campaignUpdate)
+                            });
+                            
+                            if (updateResponse.ok) {
+                              // Show success toast
+                              const { toast } = await import('sonner');
+                              toast.success("Campaign Analysis Complete", {
+                                description: "Your campaign has been successfully updated with new data.",
+                              });
+                            }
+                          }
+                        } catch (error) {
+                          console.error("Background processing error:", error);
+                        }
+                      }, 100);
+                    }}
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent
                 value="preprocessing-results"
                 className="relative z-10 mt-6"
               >
-                <CampaignResults
-                  title="Preprocessing Results"
-                  icon={<Code className="h-5 w-5" />}
-                  campaign={campaign}
-                  stage="preprocessing"
-                  hasResults={false}
-                  onRunAnalysis={() => {
-                    // In a real app, this would trigger the preprocessing
-                    console.log(
-                      "Running preprocessing for campaign:",
-                      campaign.id
-                    );
-                  }}
-                />
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open('/test-extraction-api.html', '_blank')}
+                        className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Test API Directly
+                      </Button>
+                      <span className="text-sm text-gray-500">
+                        Debug extraction issues by testing the external API
+                      </span>
+                    </div>
+                  </div>
+                  <CampaignResults
+                    title="Preprocessing Results"
+                    icon={<Code className="h-5 w-5" />}
+                    campaign={campaign}
+                    stage="preprocessing"
+                    hasResults={false}
+                    onRunAnalysis={() => {
+                      // In a real app, this would trigger the preprocessing
+                      console.log(
+                        "Running preprocessing for campaign:",
+                        campaign.id
+                      );
+                    }}
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent
                 value="entity-results"
                 className="relative z-10 mt-6"
               >
-                <CampaignResults
-                  title="Entity Recognition Results"
-                  icon={<Network className="h-5 w-5" />}
-                  campaign={campaign}
-                  stage="entity"
-                  hasResults={false}
-                  onRunAnalysis={() => {
-                    // In a real app, this would trigger the entity recognition
-                    console.log(
-                      "Running entity recognition for campaign:",
-                      campaign.id
-                    );
-                  }}
-                />
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open('/test-extraction-api.html', '_blank')}
+                        className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Test API Directly
+                      </Button>
+                      <span className="text-sm text-gray-500">
+                        Debug extraction issues by testing the external API
+                      </span>
+                    </div>
+                  </div>
+                  <CampaignResults
+                    title="Entity Recognition Results"
+                    icon={<Network className="h-5 w-5" />}
+                    campaign={campaign}
+                    stage="entity"
+                    hasResults={false}
+                    onRunAnalysis={() => {
+                      // In a real app, this would trigger the entity recognition
+                      console.log(
+                        "Running entity recognition for campaign:",
+                        campaign.id
+                      );
+                    }}
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent value="topic-results" className="relative z-10 mt-6">

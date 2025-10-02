@@ -15,6 +15,7 @@ import Link from "next/link"
 import { getAllCampaigns } from "@/components/Service"
 import { getAllAuthorPersonalities, deleteAuthorPersonality } from "@/components/AuthorPersonalityService"
 import { toast } from "sonner"
+import { LoadingModal } from "@/components/LoadingModal"
 
 const SAMPLE_AUTHOR_PROFILES = [
   {
@@ -52,6 +53,7 @@ export default function ContentPlannerPage() {
   const [checkedProfiles, setCheckedProfiles] = useState<string[]>([])
   const [showContentPlanner, setShowContentPlanner] = useState(true)
   const [profilesLoading, setProfilesLoading] = useState(false)
+  const [campaignsLoading, setCampaignsLoading] = useState(true)
 
   const searchParams = useSearchParams()
   const viewParam = searchParams.get("view")
@@ -64,14 +66,19 @@ export default function ContentPlannerPage() {
   useEffect(() => {
     const fetchCampaigns = async () => {
       try {
+        console.log("🔍 ContentPlannerPage: Starting to fetch campaigns...");
+        setCampaignsLoading(true)
         const response = await getAllCampaigns()
+        console.log("🔍 ContentPlannerPage: Response from getAllCampaigns:", response);
         if (response.status === "success") {
           const fetchedCampaigns = response.message.campaigns || []
+          console.log("🔍 ContentPlannerPage: Fetched campaigns:", fetchedCampaigns.length, "campaigns");
           // Sort campaigns by createdAt in descending order (newest first)
           fetchedCampaigns.sort(
             (a: Campaign, b: Campaign) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
           )
           setCampaigns(fetchedCampaigns)
+          console.log("🔍 ContentPlannerPage: Set campaigns in state:", fetchedCampaigns);
           setShowContentPlanner(true) // Show content planner by default
         } else {
           console.error("Failed to fetch campaigns:", response.message)
@@ -80,6 +87,8 @@ export default function ContentPlannerPage() {
       } catch (error) {
         console.error("Error fetching campaigns:", error)
         toast.error("An unexpected error occurred while loading campaigns.")
+      } finally {
+        setCampaignsLoading(false)
       }
     }
     fetchCampaigns()
@@ -120,27 +129,39 @@ export default function ContentPlannerPage() {
     }
   }, [contentPlannerTab])
 
-  const handleAddCampaign = (campaign: Omit<Campaign, "id" | "createdAt" | "updatedAt">) => {
+  const handleAddCampaign = async (campaign: Omit<Campaign, "id" | "createdAt" | "updatedAt">) => {
     console.log("handleAddCampaign called with:", campaign);
-    const newCampaign: Campaign = {
-      ...campaign,
-      id: `campaign-${Date.now()}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-    console.log("Created new campaign:", newCampaign);
+    
+    try {
+      const { createCampaign } = await import('@/components/Service');
+      const response = await createCampaign(campaign);
+      
+      if (response.status === 'success') {
+        const newCampaign = response.message.message;
+        console.log("Created new campaign:", newCampaign);
 
-    setCampaigns((prev) => {
-      const updatedCampaigns = [...prev, newCampaign]
-      // Sort campaigns by createdAt in descending order (newest first)
-      updatedCampaigns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      return updatedCampaigns
-    })
+        setCampaigns((prev) => {
+          const updatedCampaigns = [...prev, newCampaign]
+          // Sort campaigns by createdAt in descending order (newest first)
+          updatedCampaigns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          return updatedCampaigns
+        })
+        
+        toast.success("Campaign created successfully!");
+      } else {
+        console.error("Failed to create campaign:", response.message);
+        toast.error(response.message || "Failed to create campaign");
+      }
+    } catch (error) {
+      console.error("Error creating campaign:", error);
+      toast.error("An unexpected error occurred while creating the campaign");
+    }
   }
 
   const refreshCampaigns = async () => {
     try {
       console.log("Refreshing campaigns...");
+      setCampaignsLoading(true)
       const response = await getAllCampaigns()
       console.log("Refresh response:", response);
       if (response.status === "success") {
@@ -159,18 +180,38 @@ export default function ContentPlannerPage() {
     } catch (error) {
       console.error("Error refreshing campaigns:", error)
       toast.error("An unexpected error occurred while refreshing campaigns.")
+    } finally {
+      setCampaignsLoading(false)
     }
   }
 
-  const handleEditCampaign = (id: string, updatedCampaign: Partial<Campaign>) => {
-    setCampaigns((prev) => {
-      const updatedCampaigns = prev.map((campaign) =>
-        campaign.id === id ? { ...campaign, ...updatedCampaign, updatedAt: new Date() } : campaign,
-      )
-      // Sort campaigns by createdAt in descending order (newest first)
-      updatedCampaigns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      return updatedCampaigns
-    })
+  const handleEditCampaign = async (id: string, updatedCampaign: Partial<Campaign>) => {
+    try {
+      const { updateCampaign } = await import('@/components/Service');
+      const response = await updateCampaign(id, updatedCampaign);
+      
+      if (response.status === 'success') {
+        const updatedCampaignData = response.message.message;
+        console.log("Updated campaign:", updatedCampaignData);
+
+        setCampaigns((prev) => {
+          const updatedCampaigns = prev.map((campaign) =>
+            campaign.id === id ? { ...campaign, ...updatedCampaignData, updatedAt: new Date() } : campaign,
+          )
+          // Sort campaigns by createdAt in descending order (newest first)
+          updatedCampaigns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          return updatedCampaigns
+        })
+        
+        toast.success("Campaign updated successfully!");
+      } else {
+        console.error("Failed to update campaign:", response.message);
+        toast.error(response.message || "Failed to update campaign");
+      }
+    } catch (error) {
+      console.error("Error updating campaign:", error);
+      toast.error("An unexpected error occurred while updating the campaign");
+    }
   }
 
   const handleDeleteCampaign = (id: string) => {
@@ -398,6 +439,12 @@ export default function ContentPlannerPage() {
             </CardContent>
           </Card>
       </main>
+      
+      {/* Loading modal for campaigns */}
+      <LoadingModal 
+        isOpen={campaignsLoading} 
+        title="Loading campaigns..." 
+      />
     </div>
   )
 }

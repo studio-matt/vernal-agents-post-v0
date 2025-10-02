@@ -9,11 +9,21 @@ import Link from "next/link";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 export default function AddAuthorPersonalityPage() {
   const router = useRouter();
   const [contentPlannerTab, setContentPlannerTab] = useState<"campaigns" | "workflow" | "author-personalities">("author-personalities");
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to form when page loads (mirroring create campaign behavior)
+  useEffect(() => {
+    setTimeout(() => {
+      if (formRef.current) {
+        formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+  }, []);
 
   // Handle content planner tab changes
   const handleContentPlannerTabChange = (value: string) => {
@@ -38,18 +48,7 @@ export default function AddAuthorPersonalityPage() {
 
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Add Author Personality</CardTitle>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    router.push("/dashboard/content-planner");
-                  }}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  Cancel, return to Content Planner
-                </Button>
-              </div>
+              <CardTitle>Add Author Personality</CardTitle>
             </CardHeader>
 
             <CardContent className="p-6">
@@ -71,10 +70,21 @@ export default function AddAuthorPersonalityPage() {
                 </TabsList>
 
               <TabsContent value="author-personalities">
-                <div className="space-y-6">
+                <div ref={formRef} className="space-y-6">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Create New Author Personality</CardTitle>
+                      <div className="flex justify-between items-center">
+                        <CardTitle>Create New Author Personality</CardTitle>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            router.push("/dashboard/content-planner");
+                          }}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          Cancel, return to Content Planner
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <p className="text-gray-500 mb-6">

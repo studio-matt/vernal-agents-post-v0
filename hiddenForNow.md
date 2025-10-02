@@ -237,3 +237,74 @@ The merge functionality depends on:
 - Original campaigns are not deleted, only a new merged campaign is created
 - The merge combines keywords, URLs, trending topics, and other settings
 - The merged campaign name follows the pattern: "Merged: Campaign1 + Campaign2"
+
+---
+
+# Midjourney and ElevenLabs Connections - Re-enable Guide
+
+## Overview
+The Midjourney and ElevenLabs connections have been temporarily disabled from the credentials page. This document provides instructions for re-enabling them.
+
+## What Was Disabled
+The following elements have been commented out in `/app/account-settings/page.tsx`:
+
+1. **Platform imports** - `storeElevenLabsKey` and `storeMidjourneyKey` imports
+2. **Platform array** - "Midjourney" and "Eleven Labs" removed from `MODEL_PLATFORMS`
+
+## Files Modified
+- `/app/account-settings/page.tsx` - Credentials page with platform connections
+
+## Re-enable Steps
+
+### Step 1: Uncomment Platform Imports
+
+In `/app/account-settings/page.tsx`, uncomment the imports:
+
+```tsx
+// Line ~17-18: Uncomment the imports
+import {
+  linkedinConnect,
+  twitterConnect,
+  wordpressConnect,
+  storeClaudeKey,
+  storeElevenLabsKey, // uncomment this line
+  storeMidjourneyKey, // uncomment this line
+  storeOpenAIKey,
+} from "@/components/Service"
+```
+
+### Step 2: Add Platforms Back to Array
+
+In `/app/account-settings/page.tsx`, add the platforms back:
+
+```tsx
+// Line ~31: Add platforms back to the array
+const MODEL_PLATFORMS = ["OpenAI", "Claude", "Midjourney", "Eleven Labs"]
+```
+
+### Step 3: Verify Backend Endpoints
+
+Ensure these backend endpoints are working:
+- `POST /store_midjourney_key` - Store Midjourney API key
+- `POST /store_elevenlabs_key` - Store ElevenLabs API key
+
+### Step 4: Test the Functionality
+
+1. **Navigate to Credentials**: Go to account settings page
+2. **Verify Platforms**: Check that Midjourney and ElevenLabs appear in the list
+3. **Test Key Storage**: Enter API keys and test storage functionality
+4. **Verify Persistence**: Refresh page and confirm keys are still displayed
+
+## Backend Dependencies
+
+The platforms depend on these backend functions:
+- `store_midjourney_key` endpoint in `/backend-server/main.py`
+- `store_elevenlabs_key` endpoint in `/backend-server/main.py`
+- User model fields: `midjourney_key` and `elevenlabs_key`
+
+## Notes
+
+- Both platforms use the same UI pattern as OpenAI and Claude
+- API keys are stored in the user's database record
+- The storage functions are already implemented in `Service.tsx`
+- No additional frontend changes are needed beyond uncommenting

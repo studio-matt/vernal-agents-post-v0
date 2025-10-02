@@ -49,7 +49,9 @@ import {
   AnalyzeTrendsResponse,
   getAllCampaigns,
   getTrendingContent,
+  getUserCredentials,
 } from "@/components/Service";
+import { ApiKeyModal } from "./ApiKeyModal";
 import { Campaign as CampaignBase } from "@/components/ContentPlannerCampaign";
 
 // Extend the Campaign type to include topics and posts
@@ -95,14 +97,14 @@ interface Campaign1 extends CampaignBase {
   topics?: string[];
   posts?: {
     text: string;
-    lemmatized_text: string | null;
-    stemmed_text: string | null;
-    stopwords_removed_text: string | null;
-    persons: string[];
-    organizations: string[];
-    locations: string[];
-    dates: string[];
-    topics: string[];
+    lemmatized_text?: string;
+    stemmed_text?: string;
+    stopwords_removed_text?: string;
+    persons?: string[];
+    organizations?: string[];
+    locations?: string[];
+    dates?: string[];
+    topics?: string[];
   }[];
 }
 
@@ -133,10 +135,14 @@ export function CampaignSettings({
   const [keywords, setKeywords] = useState<string[]>(campaign.keywords || []);
   const [urlInput, setUrlInput] = useState("");
   const [urls, setUrls] = useState<string[]>(campaign.urls || []);
+  const [trendingTopics, setTrendingTopics] = useState<string[]>(campaign.trendingTopics || []);
   const [isSaving, setIsSaving] = useState(false);
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [showCampaignBuildingMessage, setShowCampaignBuildingMessage] = useState("");
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [pendingCampaignData, setPendingCampaignData] = useState<AnalyzeTrendsInput | null>(null);
+  const [error, setError] = useState({ isOpen: false, message: "" });
 
   // Advanced settings with enforced false defaults for toggles
   const [extractionSettings, setExtractionSettings] = useState({
@@ -508,50 +514,167 @@ export function CampaignSettings({
 
   const handleSaveSettings = (e: React.MouseEvent) => {
     e.preventDefault();
+    
+    // Validate that name is filled out
+    if (!name.trim()) {
+      setError({
+        isOpen: true,
+        message: "To save a campaign to edit later, you must at least give it a name. You can edit the rest later by hitting edit.",
+      });
+      return;
+    }
+    
     setIsSaving(true);
+    
+    // Create the campaign data
+    const campaignData = {
+      name,
+      description,
+      type,
+      keywords: type === "keyword" ? keywords : undefined,
+      urls: type === "url" ? urls : undefined,
+      trendingTopics: type === "trending" ? trendingTopics : undefined,
+      query,
+      extractionSettings,
+      preprocessingSettings,
+      entitySettings,
+      modelingSettings,
+    };
+    
+    // Call the onSave prop to persist the campaign
+    onSave(campaignData);
+    
     setTimeout(() => {
       setIsSaving(false);
       setShowSavedModal(true);
     }, 1000);
   };
 
+  const checkForValidApiKeys = async (): Promise<boolean> => {
+    try {
+      // Check localStorage first
+      const localOpenAIKey = localStorage.getItem("openai_api_key");
+      const localClaudeKey = localStorage.getItem("claude_api_key");
+      
+      if (localOpenAIKey || localClaudeKey) {
+        console.log("🔍 Found stored keys in localStorage");
+        return true;
+      }
+      
+      // Check backend for stored keys
+      const response = await getUserCredentials();
+      if (response.success && response.credentials) {
+        const { openai_key, claude_key } = response.credentials;
+        if (openai_key || claude_key) {
+          console.log("🔍 Found stored keys in backend");
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("Error checking for valid API keys:", error);
+      return false;
+    }
+  };
+
   const handleBuildCampaign = async () => {
+    console.log("🚀 Starting campaign build...");
     console.log("keywords", keywords);
     console.log("urls", urls);
-    if (keywords.length === 0 && urls.length === 0) {
-      alert("Enter either url or keyword")
-      return
+    
+    // Validate required fields
+    if (!name.trim()) {
+      setError({
+        isOpen: true,
+        message: "Campaign name is required to build a campaign.",
+      });
+      return;
     }
+    
+    if (type === "keyword" && keywords.length === 0) {
+      setError({
+        isOpen: true,
+        message: "Please add at least one keyword or phrase to build a campaign.",
+      });
+      return;
+    }
+    
+    if (type === "url" && urls.length === 0) {
+      setError({
+        isOpen: true,
+        message: "Please add at least one URL to build a campaign.",
+      });
+      return;
+    }
+    
+    if (type === "trending" && trendingTopics.length === 0) {
+      setError({
+        isOpen: true,
+        message: "Please add at least one trending topic to build a campaign.",
+      });
+      return;
+    }
+
+    // Check if we already have valid API keys before showing modal
+    console.log("🔍 Checking for valid API keys...");
+    const hasValidKeys = await checkForValidApiKeys();
+    console.log("🔍 Has valid keys:", hasValidKeys);
+    
+    const payload: AnalyzeTrendsInput = {
+      campaign_name: name.trim(),
+      campaign_id: campaign.id || `campaign-${Date.now()}`,
+      urls: urls,
+      query: query?.trim() || "",
+      description: description,
+      keywords: keywords,
+      type: type,
+      depth: extractionSettings.webScrapingDepth,
+      max_pages: extractionSettings.maxPages,
+      batch_size: extractionSettings.batchSize,
+      include_links: extractionSettings.includeLinks,
+      stem: preprocessingSettings.stemming,
+      lemmatize: preprocessingSettings.lemmatization,
+      remove_stopwords_toggle: preprocessingSettings.removeStopwords,
+      extract_persons: entitySettings.extractPersons,
+      extract_organizations: entitySettings.extractOrganizations,
+      extract_locations: entitySettings.extractLocations,
+      extract_dates: entitySettings.extractDates,
+      topic_tool: modelingSettings.algorithm || "llm",
+      num_topics: modelingSettings.numTopics,
+      iterations: modelingSettings.iterations,
+      pass_threshold: modelingSettings.passThreshold,
+    };
+    
+    setPendingCampaignData(payload);
+    
+    if (hasValidKeys) {
+      // If we have valid keys, proceed directly to campaign creation
+      console.log("✅ Valid keys found, proceeding to campaign creation");
+      handleApiKeySuccess();
+    } else {
+      // Show the API key modal to get valid keys
+      console.log("❌ No valid keys found, showing API key modal");
+      setShowApiKeyModal(true);
+    }
+  };
+
+  const executeCampaignBuild = async (campaignData?: AnalyzeTrendsInput) => {
+    const dataToUse = campaignData || pendingCampaignData;
+    if (!dataToUse) return;
+
+    console.log("🚀 Starting campaign build with data:", dataToUse);
+    console.log("🔑 Current API keys in localStorage:", {
+      openai: localStorage.getItem("openai_api_key") ? "***" : "null",
+      claude: localStorage.getItem("claude_api_key") ? "***" : "null"
+    });
+
+    // Campaign should already be created with PROCESSING status
+    const campaignId = dataToUse.campaign_id;
+    console.log("🚀 Building campaign with ID:", campaignId);
 
     setIsBuilding(true);
     try {
-      const keywordArray = keywords;
-
-      const payload: AnalyzeTrendsInput = {
-        campaign_name: name.trim(),
-        campaign_id: campaign.id || `campaign-${Date.now()}`,
-        urls: urls,
-        query: query?.trim() || "",
-        description: description,
-        keywords: keywordArray,
-        type: type,
-        depth: extractionSettings.webScrapingDepth,
-        max_pages: extractionSettings.maxPages,
-        batch_size: extractionSettings.batchSize,
-        include_links: extractionSettings.includeLinks,
-        stem: preprocessingSettings.stemming,
-        lemmatize: preprocessingSettings.lemmatization,
-        remove_stopwords_toggle: preprocessingSettings.removeStopwords,
-        extract_persons: entitySettings.extractPersons,
-        extract_organizations: entitySettings.extractOrganizations,
-        extract_locations: entitySettings.extractLocations,
-        extract_dates: entitySettings.extractDates,
-        topic_tool: modelingSettings.algorithm || "llm",
-        num_topics: modelingSettings.numTopics,
-        iterations: modelingSettings.iterations,
-        pass_threshold: modelingSettings.passThreshold,
-      };
-
       setShowCampaignBuildingMessage("The campaign is being built; it will take a while.In the meantime, you can continue with the other tasks.")
 
       let response;
@@ -564,11 +687,31 @@ export function CampaignSettings({
         };
         response = await getTrendingContent(Trendingpayload);
       } else {
-        response = await analyzeTrends(payload);
+        console.log("📡 Calling analyzeTrends API...");
+        response = await analyzeTrends(dataToUse);
+        console.log("📡 analyzeTrends response:", response);
       }
 
       if (response.status === "success") {
+        console.log("✅ Campaign build successful!");
         const responseData = response as any; // Type assertion for now
+        
+        // Debug: Log the response data to see what we're getting
+        console.log("🔍 Full API response data:", JSON.stringify(responseData, null, 2));
+        console.log("🔍 Posts array:", responseData.posts);
+        console.log("🔍 Topics array:", responseData.topics);
+        console.log("🔍 Keywords array:", responseData.keywords);
+        
+        // Check if we actually got any data
+        if (!responseData.posts || responseData.posts.length === 0) {
+          console.warn("⚠️ API returned success but no posts extracted");
+          toast({
+            variant: "destructive",
+            title: "Extraction Warning",
+            description: "The analysis completed but no content was extracted. This might be due to invalid URLs or keywords.",
+          });
+        }
+        
         const campaignDescription =
           Array.isArray(responseData.posts) &&
           responseData.posts.length > 0 &&
@@ -605,60 +748,47 @@ export function CampaignSettings({
                   ? campaign.trendingTopics || []
                   : [];
 
-        const newCampaign: Campaign = {
-          id: campaign.id || `campaign-${Date.now()}`,
-          name: name.trim(),
+        // Update the existing campaign with the analyzed data
+        const campaignUpdate = {
+          name: dataToUse.campaign_name,
           description: campaignDescription,
-          type,
-          keywords: type === "keyword" ? keywords : undefined,
-          urls: type === "url" ? urls : undefined,
-          trendingTopics:
-            type === "trending" ? campaign.trendingTopics || [] : undefined,
-          createdAt: campaign.createdAt || new Date(),
-          updatedAt: new Date(),
           topics: campaignTopics,
-          extractionSettings,
-          preprocessingSettings,
-          entitySettings,
-          modelingSettings,
+          posts: responseData.posts || [],
+          persons: responseData.persons || [],
+          organizations: responseData.organizations || [],
+          locations: responseData.locations || [],
+          dates: responseData.dates || [],
+          status: "READY_TO_ACTIVATE"
         };
 
-        setSettings((prevCampaigns) => {
-          let updatedCampaigns;
-          if (campaign.id) {
-            updatedCampaigns = prevCampaigns.map((c) =>
-              c.id === campaign.id ? newCampaign : c
-            );
-          } else {
-            updatedCampaigns = [...prevCampaigns, newCampaign];
+        // Update the campaign in the database
+        if (campaignId) {
+          try {
+            console.log("🔄 Updating campaign in database:", campaignId);
+            console.log("📦 Campaign update data:", campaignUpdate);
+            
+            const updateResponse = await fetch(`/api/campaigns/${campaignId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(campaignUpdate)
+            });
+            
+            if (updateResponse.ok) {
+              const updateResult = await updateResponse.json();
+              console.log("✅ Campaign updated successfully:", updateResult);
+            } else {
+              console.error("❌ Campaign update failed:", updateResponse.status, updateResponse.statusText);
+              const errorText = await updateResponse.text();
+              console.error("❌ Error details:", errorText);
+            }
+          } catch (error) {
+            console.error("❌ Failed to update campaign with analyzed data:", error);
           }
-          // Sort campaigns by createdAt in descending order (newest first)
-          updatedCampaigns.sort(
-            (a: Campaign, b: Campaign) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-          return updatedCampaigns;
-        });
-
-        const updatedCampaign: Omit<
-          Campaign,
-          "id" | "createdAt" | "updatedAt"
-        > = {
-          name: name.trim(),
-          description: campaignDescription,
-          type,
-          keywords: type === "keyword" ? keywords : undefined,
-          urls: type === "url" ? urls : undefined,
-          trendingTopics:
-            type === "trending" ? campaign.trendingTopics || [] : undefined,
-          topics: campaignTopics,
-          extractionSettings,
-          preprocessingSettings,
-          entitySettings,
-          modelingSettings,
-        };
-
-        onSave(updatedCampaign);
+        } else {
+          console.error("❌ No campaign ID available for update");
+        }
 
         // Fetch updated campaigns from API
         const apiResponse = await getAllCampaigns();
@@ -676,6 +806,8 @@ export function CampaignSettings({
           );
         }
 
+        // Status is already updated in the campaign update above
+
         toast({
           title: "Campaign Built Successfully",
           description:
@@ -684,23 +816,118 @@ export function CampaignSettings({
 
         onCancel();
       } else {
-        console.error("API Error Details:", JSON.stringify(response, null, 2));
-        throw new Error(response.message || "Failed to analyze trends");
+        console.error("❌ API Error Details:", JSON.stringify(response, null, 2));
+        
+        // Check if it's an API key error
+        const errorMessage = response.message || "Failed to analyze trends";
+        console.log("❌ Error message:", errorMessage);
+        if (errorMessage.includes("API key") || errorMessage.includes("authentication") || errorMessage.includes("unauthorized")) {
+          console.log("🔑 API key error detected, showing modal");
+          setShowApiKeyModal(true);
+          return;
+        }
+        
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.error("Error building campaign:", error);
+      console.error("❌ Error building campaign:", error);
+      
+      // Check if it's an API key error
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+      console.log("❌ Error message:", errorMessage);
+      if (errorMessage.includes("API key") || errorMessage.includes("authentication") || errorMessage.includes("unauthorized")) {
+        console.log("🔑 API key error detected, showing modal");
+        setShowApiKeyModal(true);
+        return;
+      }
+      
       toast({
         variant: "destructive",
         title: "Error Building Campaign",
-        description:
-          error instanceof Error
-            ? error.message
-            : "An unexpected error occurred.",
+        description: errorMessage,
       });
     } finally {
+      console.log("🏁 Campaign build process finished");
       setShowCampaignBuildingMessage("")
       setIsBuilding(false);
     }
+  };
+
+  const handleApiKeySuccess = async () => {
+    setShowApiKeyModal(false);
+    if (pendingCampaignData) {
+      // Create campaign in database first with PROCESSING status
+      try {
+        const campaignToCreate = {
+          name: pendingCampaignData.campaign_name,
+          description: pendingCampaignData.description || pendingCampaignData.query || "",
+          type: pendingCampaignData.type,
+          keywords: pendingCampaignData.keywords || [],
+          urls: pendingCampaignData.urls || [],
+          query: pendingCampaignData.query || "",
+          status: "PROCESSING",
+          extractionSettings: {
+            webScrapingDepth: pendingCampaignData.depth || 1,
+            includeImages: false,
+            includeLinks: pendingCampaignData.include_links || false,
+            maxPages: pendingCampaignData.max_pages || 10,
+            batchSize: pendingCampaignData.batch_size || 5
+          },
+          preprocessingSettings: {
+            stemming: pendingCampaignData.stem || false,
+            lemmatization: pendingCampaignData.lemmatize || false,
+            removeStopwords: pendingCampaignData.remove_stopwords_toggle || false
+          },
+          entitySettings: {
+            extractPersons: pendingCampaignData.extract_persons || false,
+            extractOrganizations: pendingCampaignData.extract_organizations || false,
+            extractLocations: pendingCampaignData.extract_locations || false,
+            extractDates: pendingCampaignData.extract_dates || false
+          },
+          modelingSettings: {
+            algorithm: pendingCampaignData.topic_tool || "llm",
+            numTopics: pendingCampaignData.num_topics || 5,
+            iterations: pendingCampaignData.iterations || 10,
+            passThreshold: pendingCampaignData.pass_threshold || 0.5
+          }
+        };
+
+        const response = await fetch('/api/campaigns', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(campaignToCreate)
+        });
+
+        if (response.ok) {
+          const createdCampaign = await response.json();
+          console.log("✅ Campaign created with PROCESSING status:", createdCampaign);
+          
+          // Update the pending campaign data with the created campaign ID
+          const updatedPendingData = {
+            ...pendingCampaignData,
+            campaign_id: createdCampaign.message.id
+          };
+          
+          // Start campaign build in background
+          executeCampaignBuild(updatedPendingData);
+          
+          // Redirect to campaigns page
+          window.location.href = '/dashboard/content-planner';
+        } else {
+          console.error("Failed to create campaign:", await response.text());
+        }
+      } catch (error) {
+        console.error("Error creating campaign:", error);
+      }
+    }
+    
+    // Show a toast notification about successful key storage
+    toast({
+      title: "API Keys Stored Successfully",
+      description: "Your API keys have been saved and will be available in your credentials page.",
+    });
   };
 
   // Render a loading state until defaults are set
@@ -872,7 +1099,7 @@ export function CampaignSettings({
           <CardTitle>Advanced Settings</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="extraction">
+          <Tabs defaultValue="extraction" className="w-full">
             <TabsList className="w-full mb-4">
               <TabsTrigger value="extraction" className="flex-1">
                 <Database className="w-4 h-4 mr-2" />
@@ -1610,11 +1837,39 @@ export function CampaignSettings({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={error.isOpen} onOpenChange={(open) => setError({ isOpen: open, message: "" })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <InfoIcon className="h-5 w-5 text-red-500" />
+              Validation Error
+            </DialogTitle>
+            <DialogDescription className="text-center pt-2">
+              {error.message}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center mt-4">
+            <Button
+              onClick={() => setError({ isOpen: false, message: "" })}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ParameterInfoModal
         isOpen={infoModal.isOpen}
         onClose={closeInfoModal}
         title={infoModal.title}
         description={infoModal.description}
+      />
+
+      <ApiKeyModal
+        isOpen={showApiKeyModal}
+        onClose={() => setShowApiKeyModal(false)}
+        onSuccess={handleApiKeySuccess}
       />
     </div>
   );

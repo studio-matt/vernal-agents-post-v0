@@ -1,9 +1,9 @@
 import axios, { type AxiosResponse } from "axios"
 
 // const API_BASE_URL = "https://9167-2405-201-3009-d013-b1a1-3a83-9303-f835.ngrok-free.app";
-// const API_BASE_URL = "https://themachine.vernalcontentum.com";
+const API_BASE_URL = "https://themachine.vernalcontentum.com"
 
-const API_BASE_URL = "https://multiagent-933293844713.us-central1.run.app";
+// const API_BASE_URL = "https://multiagent-933293844713.us-central1.run.app";
 
 /**
  * Generic service for making API calls
@@ -27,10 +27,6 @@ export const Service = async (
 
   const url = `${API_BASE_URL}/${endpoint}${queryString}`
   const token = localStorage.getItem("token")
-
-  console.log(`🌐 Service call: ${method} ${url}`)
-  console.log(`🔑 Token present: ${!!token}`)
-  console.log(`📦 Payload:`, formData)
 
   try {
     const headers: Record<string, string> = {
@@ -60,16 +56,12 @@ export const Service = async (
       },
     })
 
-    console.log(`✅ API response status: ${response.status}`)
-    console.log(`📊 API response data:`, response.data)
-    
     return response.data
   } catch (error) {
     console.error(`❌ Error during API call to ${endpoint}:`, error)
     throw error
   }
 }
-
 
 /**
  * Call the /signup endpoint
@@ -89,34 +81,76 @@ export const signupUser = async ({
   contact: string
 }): Promise<any> => {
   try {
-    // TEMPORARY LOCAL SIGNUP - Since external APIs are down
-    console.log("[v0] Using local signup fallback")
-    
-    // Simple validation
-    if (!username || !email || !password) {
-      return {
-        status: "error",
-        message: "All fields are required",
-      }
+    const endpoint = "register"
+
+    const payload = {
+      username,
+      email,
+      password,
+      contact,
     }
-    
-    // For now, always succeed
-    console.log("[v0] Local signup successful")
-    
+
+    const response = await Service(endpoint, "POST", payload)
+
     return {
-      status: "success",
-      message: "Account created successfully! You can now log in.",
+      status: response?.status || "error",
+      message: response?.message || "Something went wrong.",
     }
   } catch (error: any) {
-    console.error("Error during local signup:", error)
+    console.error("Error during signup:", error)
+
+    const errorMessage =
+      error?.response?.data?.detail || error?.message || "An unexpected error occurred. Please try again."
+
     return {
       status: "error",
-      message: "Signup failed. Please try again.",
+      message: errorMessage,
     }
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const deletePostById = async (id: string): Promise<any> => {
   try {
@@ -141,7 +175,48 @@ export const deletePostById = async (id: string): Promise<any> => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const verifyEmail = async ({
   email,
@@ -176,7 +251,48 @@ export const verifyEmail = async ({
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const forgetPassword = async ({
   email,
@@ -208,7 +324,48 @@ export const forgetPassword = async ({
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const resetPassword = async ({
   email,
@@ -247,7 +404,48 @@ export const resetPassword = async ({
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const resendotp = async ({
   email,
@@ -279,7 +477,48 @@ export const resendotp = async ({
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 /**
  * Call the /login endpoint
@@ -294,46 +533,109 @@ export const loginUser = async ({
   password: string
 }): Promise<any> => {
   try {
-    // TEMPORARY LOCAL AUTH - Since external APIs are down
-    console.log("[v0] Using local authentication fallback")
-    
-    // Simple validation
-    if (!username || !password) {
-      return {
-        status: "error",
-        message: "Username and password are required",
-      }
+    const endpoint = "login"
+
+    const payload = {
+      username,
+      password,
     }
-    
-    // For now, accept any non-empty credentials
-    if (username.length > 0 && password.length > 0) {
-      const mockToken = "local-auth-token-" + Date.now()
-      console.log("[v0] Local login successful")
-      
+
+    console.log("[v0] Login payload being sent:", payload)
+    console.log("[v0] API endpoint:", `${API_BASE_URL}/${endpoint}`)
+
+    const response = await Service(endpoint, "POST", payload, undefined, true)
+
+    console.log("[v0] Login API response:", response)
+
+    if (response?.access_token || response?.token) {
       return {
         status: "success",
-        token: mockToken,
+        token: response.access_token || response.token,
+      }
+    } else if (response?.status === "success") {
+      return {
+        status: "success",
+        token: response.token || response.access_token,
+      }
+    } else {
+      console.error("Login failed:", response?.message || response?.error)
+      return {
+        status: "error",
+        message: response?.message || response?.error || "Unexpected login response",
       }
     }
-    
-    return {
-      status: "error",
-      message: "Invalid credentials",
-    }
   } catch (error: any) {
-    console.error("[v0] Error during local login:", error)
+    console.error("[v0] Error during login - full error:", error)
+    console.error("[v0] Error response data:", error?.response?.data)
+    console.error("[v0] Error status:", error?.response?.status)
+    console.error("[v0] Error headers:", error?.response?.headers)
+
+    let errorMessage = "User does not exist. Please register first."
+
+    if (error?.response?.data?.detail && Array.isArray(error?.response?.data?.detail)) {
+      // Extract messages from the detail array
+      const messages = error.response.data.detail
+        .map((err: any) => err.msg || err.message || "Unknown error")
+        .join(", ")
+      errorMessage = messages || errorMessage
+    } else if (error?.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error?.message) {
+      errorMessage = error.message
+    }
+
     return {
       status: "error",
-      message: "Login failed. Please try again.",
+      message: errorMessage,
     }
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const deleteCampaignsById = async (campaign_id: string) => {
   try {
-    console.log("🗑️ Deleting campaign:", campaign_id);
     // Use local API instead of external API
     const response = await fetch(`/api/campaigns/${campaign_id}`, {
       method: 'DELETE',
@@ -343,25 +645,22 @@ export const deleteCampaignsById = async (campaign_id: string) => {
       },
     });
 
-    console.log("🗑️ Delete response status:", response.status);
     const data = await response.json();
-    console.log("🗑️ Delete response data:", data);
 
     if (data?.status === "success") {
-      console.log("✅ Campaign deleted successfully from backend");
       return {
         status: "success",
         message: "Deleted Successfully",
       }
     } else {
-      console.error("❌ Error in deleting campaign:", data?.message || data?.error)
+      console.error("Error in deleting campaign:", data?.message || data?.error)
       return {
         status: "error",
         message: data?.message || data?.error || "Error in deleting campaign",
       }
     }
   } catch (error) {
-    console.error("❌ Error in deleting campaign", error)
+    console.error("Error in deleting campaign", error)
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Unexpected error occurred while deleting campaigns.",
@@ -369,7 +668,48 @@ export const deleteCampaignsById = async (campaign_id: string) => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const getTrendingContent = async (payload: TrendingContentPayload) => {
   try {
@@ -407,7 +747,48 @@ export const getTrendingContent = async (payload: TrendingContentPayload) => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const generateContent = async ({
   campaign_name,
@@ -489,44 +870,120 @@ export const generateContent = async ({
   }
 }
 
-
-
-export const getScheduledPosts = async () => {
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
   try {
-    // Use local API instead of external API
-    const response = await fetch('/api/scheduled-posts', {
-      method: 'GET',
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
       headers: {
-        'Content-Type': 'application/json',
         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
     });
 
     const data = await response.json();
-    console.log("getScheduledPosts", data);
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
 
-    if (data?.status === "success") {
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
+
+export const getScheduledPosts = async () => {
+  try {
+    const endpoint = "get_scheduled_posts"
+
+    const response = await Service(endpoint, "GET", undefined, undefined, false)
+
+    console.log("getScheduledPosts", response)
+
+    if (response?.status === "success") {
       return {
         status: "success",
-        message: data,
+        message: response,
       }
     } else {
-      console.error("Failed to get scheduled posts:", data?.message || data?.error)
+      console.error("Analyze failed:", response?.message || response?.error)
       return {
         status: "error",
-        message: data?.message || data?.error || "Failed to get scheduled posts.",
+        message: response?.message || response?.error || "campaigns couldn't be fetched",
       }
     }
   } catch (error) {
-    console.error("Error during getScheduledPosts:", error)
+    console.error("Error during analyze:", error)
     return {
       status: "error",
-      message: error instanceof Error ? error.message : "Unexpected error occurred in getScheduledPosts.",
+      message: error instanceof Error ? error.message : "Unexpected error occurred during analysis.",
     }
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const generateIdeas = async () => {
   try {
@@ -583,7 +1040,48 @@ export const generateIdeas = async () => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const generateContentAPI = async () => {
   try {
@@ -649,7 +1147,48 @@ export const generateContentAPI = async () => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const regenerateContentAPI = async ({ id, query, platform }: { id: string; query: string; platform: string }) => {
   try {
@@ -680,7 +1219,48 @@ export const regenerateContentAPI = async ({ id, query, platform }: { id: string
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const generateImageMachineContent = async (payload: {
   id: string
@@ -726,7 +1306,48 @@ export const generateImageMachineContent = async (payload: {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const storeClaudeKey = async (apiKey: string): Promise<any> => {
   try {
@@ -742,84 +1363,69 @@ export const storeClaudeKey = async (apiKey: string): Promise<any> => {
       return { success: false, message: "API key is required" }
     }
 
-    console.log("🔄 Storing Claude key via local API...");
-    const response = await fetch('/api/credentials/claude', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ api_key: apiKey }),
-    });
+    const response = await Service("store_claude_key", "POST", { api_key: apiKey }, undefined, true)
 
-    const data = await response.json();
-    console.log("🔄 Claude key storage response:", data);
-
-    if (data?.status === "success") {
+    if (response?.status === "success") {
       return {
         success: true,
-        message: data.message || "Claude key stored successfully",
+        message: response.message || "Claude key stored successfully",
       }
     } else {
-      const errorMessage = data?.message || "Failed to store Claude API key"
-      console.error("Failed to store Claude key:", data)
+      const errorMessage = response?.detail?.[0]?.msg || response?.message || "Failed to store Claude API key"
+      console.error("Failed to store Claude key:", response)
       return { success: false, message: errorMessage }
     }
   } catch (error: any) {
     console.error("Error during Claude key storage:", error)
     return {
       success: false,
-      message: error?.message || "Failed to store Claude API key",
+      message: error?.detail?.[0]?.msg || "Failed to store Claude API key",
     }
   }
 }
 
-
-
-// Function to fetch stored user credentials
-export const getUserCredentials = async (): Promise<any> => {
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
   try {
-    const token = localStorage.getItem("token")
-    console.log("🔍 getUserCredentials: Token exists:", !!token)
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
-    if (!token) {
-      console.error("No token found in localStorage.")
-      return { success: false, message: "No token found" }
-    }
-
-    console.log("🔍 getUserCredentials: Calling local API...");
-    const response = await fetch('/api/credentials', {
-      method: 'GET',
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
     });
 
     const data = await response.json();
-    console.log("🔍 getUserCredentials: API response:", data);
-
-    if (data?.status === "success") {
-      console.log("✅ getUserCredentials: Success, credentials:", data.credentials);
-      return {
-        success: true,
-        credentials: data.credentials || {},
-      }
-    } else {
-      const errorMessage = data?.message || "Failed to fetch credentials"
-      console.error("❌ getUserCredentials: Failed to fetch credentials:", data)
-      return { success: false, message: errorMessage }
-    }
-  } catch (error: any) {
-    console.error("❌ getUserCredentials: Error during credentials fetch:", error)
-    return {
-      success: false,
-      message: error?.message || "Failed to fetch credentials",
-    }
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
   }
-}
+};
 
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const storeElevenLabsKey = async (apiKey: string): Promise<any> => {
   try {
@@ -856,7 +1462,48 @@ export const storeElevenLabsKey = async (apiKey: string): Promise<any> => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const storeMidjourneyKey = async (apiKey: string): Promise<any> => {
   try {
@@ -893,7 +1540,48 @@ export const storeMidjourneyKey = async (apiKey: string): Promise<any> => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const storeOpenAIKey = async (apiKey: string): Promise<any> => {
   try {
@@ -909,39 +1597,69 @@ export const storeOpenAIKey = async (apiKey: string): Promise<any> => {
       return { success: false, message: "API key is required" }
     }
 
-    console.log("🔄 Storing OpenAI key via local API...");
-    const response = await fetch('/api/credentials/openai', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ api_key: apiKey }),
-    });
+    const response = await Service("store_openai_key", "POST", { api_key: apiKey }, undefined, true)
 
-    const data = await response.json();
-    console.log("🔄 OpenAI key storage response:", data);
-
-    if (data?.status === "success") {
+    if (response?.status === "success") {
       return {
         success: true,
-        message: data.message || "OpenAI key stored successfully",
+        message: response.message || "OpenAI key stored successfully",
       }
     } else {
-      const errorMessage = data?.message || "Failed to store OpenAI API key"
-      console.error("Failed to store OpenAI key:", data)
+      const errorMessage = response?.detail?.[0]?.msg || response?.message || "Failed to store OpenAI API key"
+      console.error("Failed to store OpenAI key:", response)
       return { success: false, message: errorMessage }
     }
   } catch (error: any) {
     console.error("Error during OpenAI key storage:", error)
     return {
       success: false,
-      message: error?.message || "Failed to store OpenAI API key",
+      message: error?.detail?.[0]?.msg || "Failed to store OpenAI API key",
     }
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 // MLLM code:
 /**
@@ -1061,7 +1779,6 @@ export const handleFileUpload = async () => {
   }
 }
 
-
 /**
  * Call the /regenerate_script_v1 endpoint
  * @param params - Object containing content, query, and platform
@@ -1106,7 +1823,6 @@ export const regenerateScript = async ({
   }
 }
 
-
 /**
  * Call the /regenerate_content endpoint
  * @param week_content - The week_content to regenerate
@@ -1140,7 +1856,6 @@ export const regenerateContent = async (content: string): Promise<any> => {
     return null
   }
 }
-
 
 /**
  * Call the /regenerate_subcontent endpoint
@@ -1176,7 +1891,6 @@ export const regenerateSubContent = async (content: string): Promise<any> => {
   }
 }
 
-
 /**
  * Call the /config/${agent_name}_agent endpoint
  * @param Role
@@ -1199,7 +1913,6 @@ export const plateformScriptAgent = async (agent_name: string): Promise<any> => 
   }
 }
 
-
 /**
  * Call the /config/${agent_name}_task endpoint
  * @param Role
@@ -1221,7 +1934,6 @@ export const plateformScriptTask = async (agent_name: string): Promise<any> => {
     return null
   }
 }
-
 
 /**
  * Call the /regenrate_subcontent_task endpoint
@@ -1258,7 +1970,6 @@ export const regenerateContentTask = async ({
     return null
   }
 }
-
 
 /**
  * Call the /regenrate_subcontent_agent endpoint
@@ -1299,7 +2010,6 @@ export const regenerateContentAgent = async ({
   }
 }
 
-
 /**
  * Call the /generate_image endpoint
  * @param params - Object containing content, query, and platform
@@ -1337,7 +2047,6 @@ export const generateImage = async ({
   }
 }
 
-
 /**
  * Call the /content/schedule-time endpoint
  * @param content - The text content to be scheduled
@@ -1365,7 +2074,6 @@ export const scheduleTime = async ({
     return null
   }
 }
-
 
 /**
  * Call the /content/schedule-time endpoint
@@ -1398,10 +2106,8 @@ export const duplicateScheduleTime = async ({
   }
 }
 
-
 export const getAllCampaigns = async () => {
   try {
-    console.log("🔍 getAllCampaigns: Starting to fetch campaigns...");
     // Use local API instead of external API
     const response = await fetch('/api/campaigns', {
       method: 'GET',
@@ -1411,12 +2117,9 @@ export const getAllCampaigns = async () => {
       },
     });
 
-    console.log("🔍 getAllCampaigns: Response status:", response.status);
     const data = await response.json();
-    console.log("🔍 getAllCampaigns: Response data:", data);
 
     if (data?.status === "success") {
-      console.log("🔍 getAllCampaigns: Success! Found", data.campaigns?.length || 0, "campaigns");
       return {
         status: "success",
         message: {
@@ -1439,7 +2142,48 @@ export const getAllCampaigns = async () => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const createCampaign = async (campaignData: any) => {
   try {
@@ -1476,44 +2220,48 @@ export const createCampaign = async (campaignData: any) => {
   }
 }
 
-
-
-export const updateCampaign = async (campaignId: string, campaignData: any) => {
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
   try {
-    // Use local API instead of external API
-    const response = await fetch(`/api/campaigns/${campaignId}`, {
-      method: 'PUT',
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
       headers: {
-        'Content-Type': 'application/json',
         ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
-      body: JSON.stringify(campaignData),
     });
 
     const data = await response.json();
-
-    if (data?.status === "success") {
-      return {
-        status: "success",
-        message: data,
-      }
-    } else {
-      console.error("Campaign update failed:", data?.message || data?.error)
-      return {
-        status: "error",
-        message: data?.message || data?.error || "Campaign couldn't be updated",
-      }
-    }
+    return data;
   } catch (error) {
-    console.error("Error updating campaign:", error)
-    return {
-      status: "error",
-      message: error instanceof Error ? error.message : "Unexpected error occurred during campaign update.",
-    }
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
   }
-}
+};
 
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 export const getCampaignsById = async (campaign_id: string) => {
   try {
@@ -1549,7 +2297,48 @@ export const getCampaignsById = async (campaign_id: string) => {
   }
 }
 
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
 
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
+  }
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};
 
 /**
  * Call the /linkedin/auth endpoint
@@ -1576,7 +2365,6 @@ export const linkedinConnect = async (): Promise<any> => {
   }
 }
 
-
 /**
  * Call the /twitter/auth endpoint
  * @param urls - List of LinkedIn URLs
@@ -1602,7 +2390,6 @@ export const twitterConnect = async (): Promise<any> => {
     console.error("Error during LinkedIn connection:", error)
   }
 }
-
 
 /**
  * Call the /wordpress/auth endpoint
@@ -1648,7 +2435,6 @@ export const wordpressConnect = async (site_url: string, username: string, passw
   }
 }
 
-
 /**
  * Input parameters for the analyzeTrends API
  */
@@ -1681,8 +2467,6 @@ export interface AnalyzeTrendsInput {
  * Post structure in the response
  */
 interface Post {
-  url?: string
-  title?: string
   text?: string
   lemmatized_text?: string | null
   stemmed_text?: string | null
@@ -1692,41 +2476,19 @@ interface Post {
   locations?: string[]
   dates?: string[]
   topics?: string[]
-  entities?: {
-    persons?: string[]
-    organizations?: string[]
-    locations?: string[]
-    dates?: string[]
-  }
 }
-
 
 /**
  * Response structure for the analyzeTrends API
  */
 export interface AnalyzeTrendsResponse {
-  status: "success" | "error" | "started"
+  status: "success" | "error"
   task?: string
-  task_id?: string
   campaign_name?: string
   campaign_id?: string
   keywords?: string[]
   posts?: Post[]
   topics?: string[]
-  summary?: {
-    total_urls_scraped: number
-    total_content_size: string
-    extraction_settings_used: {
-      depth: number
-      max_pages: number
-      batch_size: number
-      include_links: boolean
-    }
-  }
-  persons?: string[]
-  organizations?: string[]
-  locations?: string[]
-  dates?: string[]
   message?: string
 }
 
@@ -1790,11 +2552,15 @@ export const analyzeTrends = async ({
     console.log("API Payload:", JSON.stringify(payload, null, 2))
     const response = await Service(endpoint, "POST", payload, undefined, false)
 
-    if (response?.status === "started") {
+    if (response?.status === "success") {
       return {
-        status: "started",
-        task_id: response.task_id,
-        message: response.message,
+        status: "success",
+        task: response.task,
+        campaign_name: response.campaign_name,
+        campaign_id: response.campaign_id,
+        keywords: response.keywords || keywords,
+        posts: response.posts,
+        topics: response.topics,
       }
     } else {
       console.error("Analyze failed:", response?.message || response?.error)
@@ -1812,28 +2578,45 @@ export const analyzeTrends = async ({
   }
 }
 
-
-
-
-export const getAnalysisStatus = async (taskId: string): Promise<any> => {
+// API Key storage functions
+export const storeOpenAIKey = async (apiKey: string) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/analyze/status/${taskId}`, {
-      method: "GET",
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_openai_key', {
+      method: 'POST',
+      body: formData,
       headers: {
-        "Content-Type": "application/json",
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
-    })
+    });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    return await response.json()
-  } catch (error: any) {
-    console.error("Error getting analysis status:", error)
-    return {
-      status: "error",
-      message: error.message || "Failed to get analysis status",
-    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store OpenAI key:", error);
+    return { status: "error", message: "Failed to store OpenAI key" };
   }
-}
+};
+
+export const storeClaudeKey = async (apiKey: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+
+    const response = await fetch('https://themachine.vernalcontentum.com/store_claude_key', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+      },
+    });
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Failed to store Claude key:", error);
+    return { status: "error", message: "Failed to store Claude key" };
+  }
+};

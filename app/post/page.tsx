@@ -2,13 +2,14 @@
 
 import type React from "react"
 
-import {
+import { 
   deletePostById,
   generateImageMachineContent,
   getScheduledPosts,
   regenerateContentAPI,
   scheduleTime,
 } from "@/components/Service"
+import { toast } from "sonner"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Header } from "@/components/Header" // Added Header component import
@@ -86,6 +87,7 @@ export default function Menu1Page() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list")
   const [selectedPosts, setSelectedPosts] = useState<number[]>([])
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState({ current: 0, total: 0 })
   const [filters, setFilters] = useState({
     startDate: "",
     endDate: "",
@@ -113,14 +115,46 @@ export default function Menu1Page() {
   const handleBulkDelete = async () => {
     try {
       setGlobalLoading(true)
-      for (const postId of selectedPosts) {
-        await deletePostById(postId)
+      setDeleteProgress({ current: 0, total: selectedPosts.length })
+      
+      const deletedPosts: number[] = []
+      const failedDeletions: number[] = []
+      
+      for (let i = 0; i < selectedPosts.length; i++) {
+        const postId = selectedPosts[i]
+        try {
+          await deletePostById(postId.toString())
+          deletedPosts.push(postId)
+        } catch (error) {
+          console.error(`Error deleting post ${postId}:`, error)
+          failedDeletions.push(postId)
+        }
+        
+        setDeleteProgress({ current: i + 1, total: selectedPosts.length })
+        
+        // Add small delay to show progress
+        if (i < selectedPosts.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
       }
-      setScheduledPosts(prev => prev.filter(post => !selectedPosts.includes(post.id)))
+      
+      // Update the posts list
+      setScheduledPosts(prev => prev.filter(post => !deletedPosts.includes(post.id)))
       setSelectedPosts([])
       setIsBulkDeleteModalOpen(false)
+      setDeleteProgress({ current: 0, total: 0 })
+      
+      // Show success/error messages
+      if (deletedPosts.length > 0) {
+        toast.success(`Successfully deleted ${deletedPosts.length} post${deletedPosts.length > 1 ? 's' : ''}`)
+      }
+      if (failedDeletions.length > 0) {
+        toast.error(`Failed to delete ${failedDeletions.length} post${failedDeletions.length > 1 ? 's' : ''}`)
+      }
+      
     } catch (error) {
-      console.error("Error deleting posts:", error)
+      console.error("Error in bulk delete:", error)
+      toast.error("An unexpected error occurred during deletion")
     } finally {
       setGlobalLoading(false)
     }
@@ -139,7 +173,7 @@ export default function Menu1Page() {
   }
 
   // Filter posts based on current filters
-  const filteredPosts = scheduledPosts.filter(post => {
+  const filteredPosts = (scheduledPosts || []).filter(post => {
     const postDate = new Date(post.schedule_time)
     const startDate = filters.startDate ? new Date(filters.startDate) : null
     const endDate = filters.endDate ? new Date(filters.endDate) : null
@@ -268,15 +302,17 @@ export default function Menu1Page() {
         ...prev,
         [postId]: { ...prev[postId], delete: true },
       }))
-      const response = await deletePostById(postId)
+      const response = await deletePostById(postId.toString())
       if (response.status === "success") {
         await getSchedulePosts()
+        toast.success("Post deleted successfully")
       } else {
         console.error("Failed to delete post:", response.message)
+        toast.error("Failed to delete post: " + response.message)
       }
     } catch (error) {
       console.error("Error deleting post:", error)
-      setError("Error deleting post:")
+      toast.error("Error deleting post")
     } finally {
       setGlobalLoading(false) // Set global loading to false
       setActionLoading((prev) => ({
@@ -374,10 +410,13 @@ export default function Menu1Page() {
 
       <div className="min-h-screen bg-[#7A99A8]">
         <Header /> {/* Added Header component */}
-        <main className="p-6 max-w-7xl mx-auto">
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h1 className="text-4xl font-extrabold text-white">Scheduled Posts</h1>
+        <main className="p-6 max-w-7xl mx-auto space-y-6">
+          <h1 className="text-4xl font-extrabold text-white">Scheduled Posts</h1>
+
+          <Card className="w-full">
+            <CardContent className="p-6">
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
               
               {/* Controls */}
               <div className="flex items-center gap-3">
@@ -502,7 +541,7 @@ export default function Menu1Page() {
 
             {!loading && !error && filteredPosts.length === 0 && (
               <div className="text-center text-gray-600 py-10">
-                {scheduledPosts.length === 0 ? "No scheduled posts found." : "No posts match the current filters."}
+                {(scheduledPosts || []).length === 0 ? "No scheduled posts found." : "No posts match the current filters."}
               </div>
             )}
 
@@ -792,7 +831,9 @@ export default function Menu1Page() {
                 )}
               </>
             )}
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </main>
       </div>
 
@@ -800,22 +841,59 @@ export default function Menu1Page() {
       <AlertDialog open={isBulkDeleteModalOpen} onOpenChange={setIsBulkDeleteModalOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Selected Posts</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {selectedPosts.length} selected posts? This action cannot be undone.
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-500" />
+              Delete Selected Posts
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Are you sure you want to delete <strong>{selectedPosts.length} selected posts</strong>?
+              </p>
+              <p className="text-red-600 font-medium">
+                ⚠️ This action cannot be undone. All selected posts and their data will be permanently deleted.
+              </p>
+              {selectedPosts.length > 10 && (
+                <p className="text-orange-600 font-medium">
+                  ⏱️ This may take a moment as you're deleting {selectedPosts.length} posts.
+                </p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          
+          {/* Progress indicator */}
+          {globalLoading && deleteProgress.total > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Deleting posts...</span>
+                <span>{deleteProgress.current} of {deleteProgress.total}</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-red-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+          
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={globalLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
               disabled={globalLoading}
             >
               {globalLoading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white mr-2"></div>
-              ) : null}
-              Delete {selectedPosts.length} Posts
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-white mr-2"></div>
+                  Deleting... ({deleteProgress.current}/{deleteProgress.total})
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete {selectedPosts.length} Posts
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

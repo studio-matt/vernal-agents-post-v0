@@ -236,6 +236,7 @@ interface ContentProps {
     item: { id: string; type: string; name: string; source: string },
     isSelected: boolean
   ) => void;
+  setstoreAllValues?: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }
 
 function WordCloudContent({
@@ -249,42 +250,58 @@ function WordCloudContent({
     React.SetStateAction<{ [key: string]: any }>
   >;
 }) {
-  // Add useEffect to trigger handleItemSelect for all items on initial render
-  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>(
-    {}
-  );
-  const keywords = [
-    { id: "marketing", name: "marketing", count: 42 },
-    { id: "content", name: "content", count: 36 },
-    { id: "strategy", name: "strategy", count: 31 },
-    { id: "digital", name: "digital", count: 28 },
-    { id: "social", name: "social", count: 24 },
-    { id: "analytics", name: "analytics", count: 21 },
-    { id: "engagement", name: "engagement", count: 18 },
-    { id: "audience", name: "audience", count: 15 },
-    { id: "campaign", name: "campaign", count: 12 },
-    { id: "brand", name: "brand", count: 9 },
-    { id: "conversion", name: "conversion", count: 6 },
-    { id: "optimization", name: "optimization", count: 3 },
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
+  const [keywords, setKeywords] = useState<{ id: string; name: string; count: number }[]>([]);
+  const [allTopics, setAllTopics] = useState<{ keyword: string; color: string }[]>([]);
+
+  const colorPalette = [
+    "#FF5733", "#33C1FF", "#33FF57", "#FF33A8",
+    "#8D33FF", "#FFC133", "#4BFFDB", "#FFD733",
   ];
 
-  const [allTopics, setAllTopics] = useState([]);
-
+  // Process campaign data to extract keywords and topics
   useEffect(() => {
-    const stored = localStorage.getItem("topics");
-    if (stored) {
-      const parsed: string[] = JSON.parse(stored);
-      setAllTopics(parsed);
+    const processCampaignData = () => {
+      // Get keywords from campaign
+      const campaignKeywords = campaign.keywords || [];
+      
+      // Get topics from campaign (from LLM analysis)
+      const campaignTopics = campaign.topics || [];
+      
+      // Combine keywords and topics for word cloud
+      const allWords = [...campaignKeywords, ...campaignTopics];
+      
+      // Count word frequencies (simple word counting)
+      const wordCounts: { [key: string]: number } = {};
+      allWords.forEach(word => {
+        const normalizedWord = word.toLowerCase().trim();
+        if (normalizedWord) {
+          wordCounts[normalizedWord] = (wordCounts[normalizedWord] || 0) + 1;
+        }
+      });
+      
+      // Convert to array format for display
+      const processedKeywords = Object.entries(wordCounts)
+        .map(([word, count]) => ({
+          id: word,
+          name: word,
+          count: count
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 20); // Limit to top 20 words
+      
+      setKeywords(processedKeywords);
+      
+      // Create color-coded topic data for visualization
+      const colorCodedTopics = campaignTopics.map((topic, index) => ({
+        keyword: topic,
+        color: colorPalette[index % colorPalette.length],
+      }));
+      setAllTopics(colorCodedTopics);
+    };
 
-      // // Initialize all keywords as unchecked
-      // const initialCheckedState = parsed.reduce((acc, keyword) => {
-      //   acc[`keyword-${keyword}`] = false
-      //   return acc
-      // }, {} as { [key: string]: boolean })
-
-      // setCheckedItems(initialCheckedState)
-    }
-  }, []);
+    processCampaignData();
+  }, [campaign]);
 
   const handleCheckboxChange = (keyword: string, checked: boolean) => {
     const id = `keyword-${keyword}`;
@@ -517,12 +534,12 @@ function WordCloudContent({
         </Card> */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top Keywordsff</CardTitle>
+            <CardTitle className="text-base">Top Keywords</CardTitle>
           </CardHeader>
           <CardContent className="p-4">
             <div className="space-y-3">
-              {allTopics.map((keyword, index) => {
-                const id = `keyword-${keyword}`;
+              {keywords.map((keyword, index) => {
+                const id = `keyword-${keyword.id}`;
                 return (
                   <div key={id}>
                     <div className="flex justify-between items-center">
@@ -531,11 +548,14 @@ function WordCloudContent({
                           id={id}
                           checked={!!checkedItems[id]}
                           onCheckedChange={(checked) =>
-                            handleCheckboxChange(keyword, !!checked)
+                            handleCheckboxChange(keyword.name, !!checked)
                           }
                           className="mr-2"
                         />
-                        <label htmlFor={id}>{keyword}</label>
+                        <label htmlFor={id}>{keyword.name}</label>
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {keyword.count} occurrences
                       </div>
                     </div>
                   </div>
@@ -590,35 +610,102 @@ function WordCloudContent({
 function MicroSentimentContent({
   campaign,
   handleItemSelect,
+  setstoreAllValues,
 }: {
   campaign: Campaign;
   handleItemSelect: (item: any, isSelected: boolean) => void;
+  setstoreAllValues?: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }) {
-  // Add state for checked items
-  const [checkedItems, setCheckedItems] = useState({
-    "sentiment-marketing": true,
-    "sentiment-content": true,
-    "sentiment-strategy": true,
-    "sentiment-digital": true,
-    "sentiment-social": true,
-    positive: true,
-    neutral: true,
-    negative: true,
-  });
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
+  const [sentiments, setSentiments] = useState<{ id: string; name: string; percentage: number }[]>([]);
+  const [topicSentiments, setTopicSentiments] = useState<{ id: string; name: string; score: number }[]>([]);
 
-  const sentiments = [
-    { id: "positive", name: "Positive", percentage: 68 },
-    { id: "neutral", name: "Neutral", percentage: 24 },
-    { id: "negative", name: "Negative", percentage: 8 },
-  ];
+  // Simple sentiment analysis function
+  const analyzeSentiment = (text: string): 'positive' | 'neutral' | 'negative' => {
+    const positiveWords = ['good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'best', 'perfect', 'outstanding'];
+    const negativeWords = ['bad', 'terrible', 'awful', 'horrible', 'worst', 'hate', 'disappointing', 'poor', 'fail', 'problem'];
+    
+    const words = text.toLowerCase().split(/\s+/);
+    let positiveCount = 0;
+    let negativeCount = 0;
+    
+    words.forEach(word => {
+      if (positiveWords.includes(word)) positiveCount++;
+      if (negativeWords.includes(word)) negativeCount++;
+    });
+    
+    if (positiveCount > negativeCount) return 'positive';
+    if (negativeCount > positiveCount) return 'negative';
+    return 'neutral';
+  };
 
-  const topicSentiments = [
-    { id: "marketing", name: "Marketing", score: 70 },
-    { id: "content", name: "Content", score: 75 },
-    { id: "strategy", name: "Strategy", score: 55 },
-    { id: "digital", name: "Digital", score: 60 },
-    { id: "social", name: "Social", score: 50 },
-  ];
+  // Process campaign data for sentiment analysis
+  useEffect(() => {
+    const processCampaignData = () => {
+      // Analyze sentiment from campaign content
+      const allTexts: string[] = [];
+      
+      // Collect all text content from campaign
+      if (campaign.description) allTexts.push(campaign.description);
+      if (campaign.query) allTexts.push(campaign.query);
+      if (campaign.keywords) allTexts.push(campaign.keywords.join(' '));
+      if (campaign.topics) allTexts.push(campaign.topics.join(' '));
+      
+      // Analyze overall sentiment
+      const combinedText = allTexts.join(' ');
+      const overallSentiment = analyzeSentiment(combinedText);
+      
+      // Calculate sentiment percentages (simplified)
+      const sentimentCounts = { positive: 0, neutral: 0, negative: 0 };
+      allTexts.forEach(text => {
+        const sentiment = analyzeSentiment(text);
+        sentimentCounts[sentiment]++;
+      });
+      
+      const total = allTexts.length || 1;
+      const processedSentiments = [
+        { id: "positive", name: "Positive", percentage: Math.round((sentimentCounts.positive / total) * 100) },
+        { id: "neutral", name: "Neutral", percentage: Math.round((sentimentCounts.neutral / total) * 100) },
+        { id: "negative", name: "Negative", percentage: Math.round((sentimentCounts.negative / total) * 100) }
+      ];
+      
+      setSentiments(processedSentiments);
+      
+      // Analyze topic-specific sentiment
+      const topicSentimentData: { id: string; name: string; score: number }[] = [];
+      
+      if (campaign.topics) {
+        campaign.topics.forEach(topic => {
+          const sentiment = analyzeSentiment(topic);
+          let score = 50; // neutral baseline
+          if (sentiment === 'positive') score = 70 + Math.random() * 20;
+          if (sentiment === 'negative') score = 20 + Math.random() * 20;
+          
+          topicSentimentData.push({
+            id: topic.toLowerCase().replace(/\s+/g, '-'),
+            name: topic,
+            score: Math.round(score)
+          });
+        });
+      }
+      
+      setTopicSentiments(topicSentimentData);
+      
+      // Initialize checked items
+      const initialCheckedState = {
+        positive: true,
+        neutral: true,
+        negative: true,
+        ...topicSentimentData.reduce((acc, topic) => {
+          acc[`sentiment-${topic.id}`] = true;
+          return acc;
+        }, {} as { [key: string]: boolean })
+      };
+      setCheckedItems(initialCheckedState);
+    };
+
+    processCampaignData();
+  }, [campaign]);
 
   return (
     <div className="space-y-4">
@@ -665,14 +752,13 @@ function MicroSentimentContent({
                       ></div>
                     </div>
                     <Checkbox
-                      type="checkbox"
                       id={sentiment.id}
                       className="mr-2"
                       checked={checkedItems[sentiment.id]}
-                      onChange={(e) => {
+                      onCheckedChange={(checked) => {
                         setCheckedItems((prev) => ({
                           ...prev,
-                          [sentiment.id]: !!e.target.checked,
+                          [sentiment.id]: !!checked,
                         }));
                         if (handleItemSelect) {
                           handleItemSelect(
@@ -682,7 +768,7 @@ function MicroSentimentContent({
                               name: sentiment.name,
                               source: "micro-sentiment",
                             },
-                            e.target.checked
+                            !!checked
                           );
                         }
                       }}
@@ -957,34 +1043,15 @@ function MicroSentimentContent({
 function TopicalMapContent({
   campaign,
   onSelectItem,
+  setstoreAllValues,
 }: {
   campaign: Campaign;
   onSelectItem: (item: any, isSelected: boolean) => void;
+  setstoreAllValues?: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }) {
-  // Add state for checked items
-  const [checkedItems, setCheckedItems] = useState({
-    "topic-marketing-strategy": true,
-    "topic-content-creation": true,
-    "topic-digital-channels": true,
-    "topic-analytics-metrics": true,
-    "topic-audience-engagement": true,
-  });
-
-  const topics = [
-    { id: "marketingStrategy", name: "Marketing Strategy", coverage: 28 },
-    { id: "contentCreation", name: "Content Creation", coverage: 24 },
-    { id: "digitalChannels", name: "Digital Channels", coverage: 22 },
-    { id: "analyticsMetrics", name: "Analytics & Metrics", coverage: 18 },
-    { id: "audienceEngagement", name: "Audience Engagement", coverage: 8 },
-  ];
-
-  [
-    { "keyword": "React", "color": "#61dafb" },
-    { "keyword": "TypeScript", "color": "#3178c6" }
-  ]
-
-
-  const [allTopics, setAllTopics] = useState([]);
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
+  const [topics, setTopics] = useState<{ id: string; name: string; coverage: number }[]>([]);
+  const [allTopics, setAllTopics] = useState<{ keyword: string; color: string }[]>([]);
 
   const colorPalette = [
     "#FF5733", // Red-Orange
@@ -997,25 +1064,39 @@ function TopicalMapContent({
     "#FFD733", // Yellow
   ];
 
-
+  // Process campaign data to extract topics
   useEffect(() => {
-    const stored = localStorage.getItem("topics");
-    if (stored) {
-      const parsed: string[] = JSON.parse(stored);
-
-      const colorPalette = [
-        "#FF5733", "#33C1FF", "#33FF57", "#FF33A8",
-        "#8D33FF", "#FFC133", "#4BFFDB", "#FFD733",
-      ];
-
-      const parsedData = parsed.map((item, index) => ({
-        keyword: item,
+    const processCampaignData = () => {
+      // Get topics from campaign (from LLM analysis)
+      const campaignTopics = campaign.topics || [];
+      
+      // Create topic objects with coverage percentages
+      const processedTopics = campaignTopics.map((topic, index) => ({
+        id: `topic-${topic.toLowerCase().replace(/\s+/g, '-')}`,
+        name: topic,
+        coverage: Math.max(10, 100 - (index * 15)) // Decreasing coverage for visual variety
+      }));
+      
+      setTopics(processedTopics);
+      
+      // Initialize checked items for all topics
+      const initialCheckedState = processedTopics.reduce((acc, topic) => {
+        acc[topic.id] = true;
+        return acc;
+      }, {} as { [key: string]: boolean });
+      setCheckedItems(initialCheckedState);
+      
+      // Create color-coded topic data for visualization
+      const colorCodedTopics = campaignTopics.map((topic, index) => ({
+        keyword: topic,
         color: colorPalette[index % colorPalette.length],
       }));
+      
+      setAllTopics(colorCodedTopics);
+    };
 
-      setAllTopics(parsedData);
-    }
-  }, []);
+    processCampaignData();
+  }, [campaign]);
 
 
 
@@ -1388,51 +1469,93 @@ function TopicalMapContent({
 function KnowledgeGraphContent({
   campaign,
   handleItemSelect,
+  setstoreAllValues,
 }: {
   campaign: Campaign;
   handleItemSelect: (item: any, isSelected: boolean) => void;
+  setstoreAllValues?: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }) {
-  // Add state for checked items
-  const [checkedItems, setCheckedItems] = useState({
-    "entity-digital-marketing": true,
-    "entity-content-strategy": true,
-    "entity-channel-distribution": true,
-    "entity-performance-analytics": true,
-    "entity-blog-articles": true,
-  });
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
+  const [entities, setEntities] = useState<{ id: string; name: string; type: string; connections: number }[]>([]);
 
-  const entities = [
-    {
-      id: "digitalMarketing",
-      name: "Digital Marketing",
-      type: "Concept",
-      connections: 3,
-    },
-    {
-      id: "contentStrategy",
-      name: "Content Strategy",
-      type: "Process",
-      connections: 3,
-    },
-    {
-      id: "channelDistribution",
-      name: "Channel Distribution",
-      type: "Process",
-      connections: 3,
-    },
-    {
-      id: "performanceAnalytics",
-      name: "Performance Analytics",
-      type: "Process",
-      connections: 2,
-    },
-    {
-      id: "blogArticles",
-      name: "Blog Articles",
-      type: "Content Type",
-      connections: 1,
-    },
-  ];
+  // Process campaign data to extract entities
+  useEffect(() => {
+    const processCampaignData = () => {
+      // Extract entities from campaign data
+      const allEntities: { id: string; name: string; type: string; connections: number }[] = [];
+      
+      // Add persons
+      if (campaign.persons && Array.isArray(campaign.persons)) {
+        campaign.persons.forEach((person, index) => {
+          allEntities.push({
+            id: `person-${index}`,
+            name: person,
+            type: "Person",
+            connections: Math.floor(Math.random() * 3) + 1 // Random connections for visualization
+          });
+        });
+      }
+      
+      // Add organizations
+      if (campaign.organizations && Array.isArray(campaign.organizations)) {
+        campaign.organizations.forEach((org, index) => {
+          allEntities.push({
+            id: `org-${index}`,
+            name: org,
+            type: "Organization",
+            connections: Math.floor(Math.random() * 4) + 2
+          });
+        });
+      }
+      
+      // Add locations
+      if (campaign.locations && Array.isArray(campaign.locations)) {
+        campaign.locations.forEach((location, index) => {
+          allEntities.push({
+            id: `location-${index}`,
+            name: location,
+            type: "Location",
+            connections: Math.floor(Math.random() * 2) + 1
+          });
+        });
+      }
+      
+      // Add dates
+      if (campaign.dates && Array.isArray(campaign.dates)) {
+        campaign.dates.forEach((date, index) => {
+          allEntities.push({
+            id: `date-${index}`,
+            name: date,
+            type: "Date",
+            connections: Math.floor(Math.random() * 2) + 1
+          });
+        });
+      }
+      
+      // Add topics as concepts
+      if (campaign.topics && Array.isArray(campaign.topics)) {
+        campaign.topics.forEach((topic, index) => {
+          allEntities.push({
+            id: `topic-${index}`,
+            name: topic,
+            type: "Concept",
+            connections: Math.floor(Math.random() * 3) + 2
+          });
+        });
+      }
+      
+      setEntities(allEntities);
+      
+      // Initialize checked items for all entities
+      const initialCheckedState = allEntities.reduce((acc, entity) => {
+        acc[`entity-${entity.id}`] = true;
+        return acc;
+      }, {} as { [key: string]: boolean });
+      setCheckedItems(initialCheckedState);
+    };
+
+    processCampaignData();
+  }, [campaign]);
 
   return (
     <div className="space-y-4">
@@ -1806,60 +1929,75 @@ function KnowledgeGraphContent({
 function HashtagGeneratorContent({
   campaign,
   handleItemSelect,
+  setstoreAllValues,
 }: {
   campaign: Campaign;
   handleItemSelect: (item: any, isSelected: boolean) => void;
+  setstoreAllValues?: React.Dispatch<React.SetStateAction<{ [key: string]: any }>>;
 }) {
-  // Add state for checked items
-  const [checkedItems, setCheckedItems] = useState({
-    "hashtag-digitalMarketing": true,
-    "hashtag-contentStrategy": true,
-    "hashtag-marketingTips": true,
-    "hashtag-brandGrowth": true,
-    "hashtag-socialMediaMarketing": true,
-    "hashtag-contentCreation": true,
-    "hashtag-marketingStrategy": true,
-    "hashtag-digitalSuccess": true,
-    "hashtag-businessGrowth": true,
-    "hashtag-marketingAnalytics": true,
-    "hashtag-contentMarketing": true,
-    "hashtag-brandAwareness": true,
-  });
+  const [checkedItems, setCheckedItems] = useState<{ [key: string]: boolean }>({});
+  const [hashtags, setHashtags] = useState<{ id: string; name: string; category: string }[]>([]);
 
-  const hashtags = [
-    { id: "digitalMarketing", name: "#DigitalMarketing", category: "Industry" },
-    { id: "contentStrategy", name: "#ContentStrategy", category: "Trending" },
-    { id: "marketingTips", name: "#MarketingTips", category: "Trending" },
-    { id: "brandGrowth", name: "#BrandGrowth", category: "Campaign-Specific" },
-    {
-      id: "socialMediaMarketing",
-      name: "#SocialMediaMarketing",
-      category: "Niche",
-    },
-    {
-      id: "contentCreation",
-      name: "#ContentCreation",
-      category: "Campaign-Specific",
-    },
-    {
-      id: "marketingStrategy",
-      name: "#MarketingStrategy",
-      category: "Industry",
-    },
-    { id: "digitalSuccess", name: "#DigitalSuccess", category: "Trending" },
-    {
-      id: "businessGrowth",
-      name: "#BusinessGrowth",
-      category: "Campaign-Specific",
-    },
-    {
-      id: "marketingAnalytics",
-      name: "#MarketingAnalytics",
-      category: "Niche",
-    },
-    { id: "contentMarketing", name: "#ContentMarketing", category: "Industry" },
-    { id: "brandAwareness", name: "#BrandAwareness", category: "Niche" },
-  ];
+  // Process campaign data to generate hashtags
+  useEffect(() => {
+    const processCampaignData = () => {
+      const generatedHashtags: { id: string; name: string; category: string }[] = [];
+      
+      // Generate hashtags from campaign topics
+      if (campaign.topics && Array.isArray(campaign.topics)) {
+        campaign.topics.forEach((topic, index) => {
+          const hashtagName = `#${topic.replace(/\s+/g, '')}`;
+          generatedHashtags.push({
+            id: `topic-${index}`,
+            name: hashtagName,
+            category: "Campaign-Specific"
+          });
+        });
+      }
+      
+      // Generate hashtags from campaign keywords
+      if (campaign.keywords && Array.isArray(campaign.keywords)) {
+        campaign.keywords.forEach((keyword, index) => {
+          const hashtagName = `#${keyword.replace(/\s+/g, '')}`;
+          generatedHashtags.push({
+            id: `keyword-${index}`,
+            name: hashtagName,
+            category: "Industry"
+          });
+        });
+      }
+      
+      // Add some generic marketing hashtags based on campaign type
+      const genericHashtags = [
+        { id: "marketing", name: "#Marketing", category: "Industry" },
+        { id: "content", name: "#Content", category: "Trending" },
+        { id: "strategy", name: "#Strategy", category: "Trending" },
+        { id: "digital", name: "#Digital", category: "Industry" },
+        { id: "growth", name: "#Growth", category: "Trending" },
+        { id: "success", name: "#Success", category: "Trending" },
+        { id: "innovation", name: "#Innovation", category: "Niche" },
+        { id: "analytics", name: "#Analytics", category: "Niche" }
+      ];
+      
+      // Add generic hashtags if we don't have enough campaign-specific ones
+      if (generatedHashtags.length < 8) {
+        genericHashtags.slice(0, 8 - generatedHashtags.length).forEach(hashtag => {
+          generatedHashtags.push(hashtag);
+        });
+      }
+      
+      setHashtags(generatedHashtags);
+      
+      // Initialize checked items for all hashtags
+      const initialCheckedState = generatedHashtags.reduce((acc, hashtag) => {
+        acc[`hashtag-${hashtag.id}`] = true;
+        return acc;
+      }, {} as { [key: string]: boolean });
+      setCheckedItems(initialCheckedState);
+    };
+
+    processCampaignData();
+  }, [campaign]);
 
   return (
     <div className="space-y-4">

@@ -14,9 +14,8 @@ import {
   twitterConnect,
   wordpressConnect,
   storeClaudeKey,
-  storeElevenLabsKey,
-  storeMidjourneyKey,
   storeOpenAIKey,
+  getUserCredentials,
 } from "@/components/Service"
 
 interface PlatformConnection {
@@ -28,7 +27,7 @@ interface PlatformConnection {
   applicationPassword?: string
 }
 
-const MODEL_PLATFORMS = ["OpenAI", "Claude", "Midjourney", "Eleven Labs"]
+const MODEL_PLATFORMS = ["OpenAI", "Claude"] // "Midjourney", "Eleven Labs" - commented out for now
 const SOCIAL_PLATFORMS = ["Instagram", "Facebook", "YouTube", "Twitter", "LinkedIn", "WordPress", "TikTok"]
 const ALL_PLATFORMS = [...MODEL_PLATFORMS, ...SOCIAL_PLATFORMS]
 
@@ -83,6 +82,80 @@ export default function AccountSettings() {
       setIsSignInPhase(false)
     }
   }, [linkedinConnected, twitterConnected, wordpressConnected])
+
+  // Fetch stored credentials on component mount
+  useEffect(() => {
+    const fetchStoredCredentials = async () => {
+      try {
+        console.log("🔍 Fetching stored credentials...");
+        const response = await getUserCredentials()
+        console.log("🔍 getUserCredentials response:", response);
+        
+        if (response.success && response.credentials) {
+          const { openai_key, claude_key } = response.credentials
+          console.log("🔍 Found credentials:", { openai_key: openai_key ? "***" : "null", claude_key: claude_key ? "***" : "null" });
+          
+          // Update connections with stored API keys
+          setConnections(prev => ({
+            ...prev,
+            "OpenAI": { apiKey: openai_key || "" },
+            "Claude": { apiKey: claude_key || "" },
+          }))
+          
+          // Update active platforms based on stored keys
+          setActivePlatforms(prev => ({
+            ...prev,
+            "OpenAI": !!openai_key,
+            "Claude": !!claude_key,
+          }))
+        } else {
+          console.log("🔍 No credentials found or error:", response);
+        }
+      } catch (error) {
+        console.error("Failed to fetch stored credentials:", error)
+      }
+    }
+
+    fetchStoredCredentials()
+  }, [])
+
+  // Add a function to refresh credentials (can be called manually)
+  const refreshCredentials = async () => {
+    try {
+      console.log("🔄 Refreshing credentials...");
+      const response = await getUserCredentials()
+      console.log("🔄 Refresh response:", response);
+      
+      if (response.success && response.credentials) {
+        const { openai_key, claude_key } = response.credentials
+        console.log("🔄 Refreshed credentials:", { openai_key: openai_key ? "***" : "null", claude_key: claude_key ? "***" : "null" });
+        
+        setConnections(prev => {
+          const newConnections = {
+            ...prev,
+            "OpenAI": { apiKey: openai_key || "" },
+            "Claude": { apiKey: claude_key || "" },
+          };
+          console.log("🔄 Updated connections:", newConnections);
+          return newConnections;
+        })
+        
+        setActivePlatforms(prev => {
+          const newActivePlatforms = {
+            ...prev,
+            "OpenAI": !!openai_key,
+            "Claude": !!claude_key,
+          };
+          console.log("🔄 Updated active platforms:", newActivePlatforms);
+          return newActivePlatforms;
+        })
+      } else {
+        console.log("❌ No credentials found or error in response");
+      }
+    } catch (error) {
+      console.error("Failed to refresh credentials:", error)
+    }
+  }
 
   const handleLinkedInConnect = async () => {
     setLinkedinLoading(true)
@@ -307,10 +380,12 @@ export default function AccountSettings() {
           result = await storeClaudeKey(apiKey)
           break
         case "Eleven Labs":
-          result = await storeElevenLabsKey(apiKey)
+          // result = await storeElevenLabsKey(apiKey) // Function not available
+          result = { success: false, message: "ElevenLabs key storage not implemented" }
           break
         case "Midjourney":
-          result = await storeMidjourneyKey(apiKey)
+          // result = await storeMidjourneyKey(apiKey) // Function not available
+          result = { success: false, message: "Midjourney key storage not implemented" }
           break
         case "OpenAI":
           result = await storeOpenAIKey(apiKey)
@@ -441,12 +516,41 @@ export default function AccountSettings() {
     <div className="min-h-screen bg-[#7A99A8]">
       <Header />
       <main className="container max-w-6xl mx-auto p-6 space-y-6">
-        <div className="flex items-center space-x-4">
-          <Link href="/dashboard/content-planner" className="flex items-center text-white hover:text-gray-200">
-            <ChevronLeft className="h-5 w-5 mr-1" />
-            Back to Dashboard
-          </Link>
-          <h1 className="text-4xl font-extrabold text-white">Account Settings</h1>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link href="/dashboard/content-planner" className="flex items-center text-white hover:text-gray-200">
+              <ChevronLeft className="h-5 w-5 mr-1" />
+              Back to Dashboard
+            </Link>
+            <h1 className="text-4xl font-extrabold text-white">Account Settings</h1>
+          </div>
+          <div className="flex space-x-2">
+            <Button 
+              onClick={refreshCredentials}
+              variant="outline"
+              className="bg-white text-gray-700 hover:bg-gray-100"
+            >
+              <RotateCw className="h-4 w-4 mr-2" />
+              Refresh Credentials
+            </Button>
+            <Button 
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/test-credentials');
+                  const data = await response.json();
+                  console.log("🧪 Test endpoint response:", data);
+                  alert(`Test response: ${JSON.stringify(data, null, 2)}`);
+                } catch (error) {
+                  console.error("Test endpoint error:", error);
+                  alert(`Test error: ${error}`);
+                }
+              }}
+              variant="outline"
+              className="bg-blue-100 text-blue-700 hover:bg-blue-200"
+            >
+              Test API
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-10">
