@@ -33,13 +33,16 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Deploy Agents Backend to EC2
-      uses: appleboy/ssh-action@v1.0.3
+      uses: appleboy/ssh-action@v1.0.4
       with:
         host: ${{ env.AGENTS_EC2_HOST }}
         username: ${{ env.AGENTS_EC2_USER }}
         key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
         envs: GIT_TOKEN
         script: |
+          # Create directory if it doesn't exist
+          mkdir -p /home/ubuntu/vernal-agents-post-v0
+          
           # Navigate to the agents backend directory
           cd /home/ubuntu/vernal-agents-post-v0
           
@@ -47,8 +50,13 @@ jobs:
           git config --global user.email "deploy@vernalcontentum.com"
           git config --global user.name "Deploy Bot"
           
-          # Set up GitHub authentication using environment variable
-          git remote set-url origin https://$GIT_TOKEN@github.com/studio-matt/vernal-agents-post-v0.git
+          # Initialize git repo if it doesn't exist
+          if [ ! -d ".git" ]; then
+            git init
+            git remote add origin https://$GIT_TOKEN@github.com/studio-matt/vernal-agents-post-v0.git
+          else
+            git remote set-url origin https://$GIT_TOKEN@github.com/studio-matt/vernal-agents-post-v0.git
+          fi
           
           # Pull latest changes
           git pull origin main
