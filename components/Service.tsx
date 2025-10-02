@@ -1,9 +1,9 @@
 import axios, { type AxiosResponse } from "axios"
 
 // const API_BASE_URL = "https://9167-2405-201-3009-d013-b1a1-3a83-9303-f835.ngrok-free.app";
-// const API_BASE_URL = "https://themachine.vernalcontentum.com";
+// const API_BASE_URL = "https://multiagent-933293844713.us-central1.run.app";
 
-const API_BASE_URL = "https://multiagent-933293844713.us-central1.run.app";
+const API_BASE_URL = "https://themachine.vernalcontentum.com";
 
 /**
  * Generic service for making API calls
