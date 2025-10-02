@@ -3,9 +3,6 @@ name: Deploy Agents Backend to EC2
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - "agents-backend/**"
-      - "backend-server/**"
 
 env:
   AWS_REGION: us-east-1
