@@ -25,8 +25,11 @@ jobs:
     - name: Create deployment package
       run: |
         mkdir -p deployment
-        cp -r * deployment/
-        tar -czf agents-deployment.tar.gz -C deployment .
+        cp -r . deployment/ 2>/dev/null || true
+        cd deployment
+        rm -rf .git .github deployment
+        tar -czf ../agents-deployment.tar.gz .
+        cd ..
 
     - name: Copy to Agents Server
       uses: appleboy/scp-action@v0.1.3
