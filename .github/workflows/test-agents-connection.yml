@@ -23,7 +23,7 @@ jobs:
         host: ${{ env.AGENTS_EC2_HOST }}
         username: ${{ env.AGENTS_EC2_USER }}
         key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
-        passphrase: ${{ secrets.AGENTS_EC2_SSH_PASSPHRASE }}
+        passphrase: "hah%asf"
         script: |
           echo "Testing Agents EC2 connection..."
           whoami
