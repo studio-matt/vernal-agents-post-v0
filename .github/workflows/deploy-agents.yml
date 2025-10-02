@@ -28,15 +28,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd agents-backend
-        pip install -r requirements.txt
+        pip install -r agents-backend/requirements.txt
 
     - name: Create deployment package
       run: |
-        cd agents-backend
-        mkdir -p ../deployment
-        cp -r . ../deployment/
-        cd ..
+        mkdir -p deployment
+        cp -r agents-backend/* deployment/
         tar -czf agents-deployment.tar.gz -C deployment .
 
     - name: Copy to EC2
