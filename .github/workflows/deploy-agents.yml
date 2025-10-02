@@ -32,13 +32,17 @@ jobs:
         aws-secret-access-key: ${{ secrets.AGENTS_AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Prepare Agents Backend
+      run: |
+        # Create deployment package
+        tar -czf agents-deployment.tar.gz agents-backend/
+
     - name: Deploy Agents Backend to EC2
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ env.AGENTS_EC2_HOST }}
         username: ${{ env.AGENTS_EC2_USER }}
         key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
-        envs: GIT_TOKEN
         script: |
           # Create directory if it doesn't exist
           mkdir -p /home/ubuntu/vernal-agents-post-v0
@@ -46,29 +50,41 @@ jobs:
           # Navigate to the agents backend directory
           cd /home/ubuntu/vernal-agents-post-v0
           
-          # Configure Git (if needed)
-          git config --global user.email "deploy@vernalcontentum.com"
-          git config --global user.name "Deploy Bot"
+          # Stop the service
+          sudo systemctl stop agents-backend || true
           
-          # Set up git credentials
-          echo "https://$GIT_TOKEN@github.com" > ~/.git-credentials
-          git config --global credential.helper store
+          # Clean old files
+          rm -rf agents-backend
           
-          # Initialize git repo if it doesn't exist
-          if [ ! -d ".git" ]; then
-            git init
-            git remote add origin https://github.com/studio-matt/vernal-agents-post-v0.git
-            git fetch origin main
-            git checkout -b main origin/main
-          else
-            git remote set-url origin https://github.com/studio-matt/vernal-agents-post-v0.git
-            git fetch origin main
-            git reset --hard origin/main
-          fi
+          # Wait for file transfer
+          sleep 5
+
+    - name: Copy Agents Files to EC2
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ env.AGENTS_EC2_HOST }}
+        username: ${{ env.AGENTS_EC2_USER }}
+        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
+        source: "agents-deployment.tar.gz"
+        target: "/home/ubuntu/vernal-agents-post-v0/"
+
+    - name: Extract and Start Agents on EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ env.AGENTS_EC2_HOST }}
+        username: ${{ env.AGENTS_EC2_USER }}
+        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
+        script: |
+          cd /home/ubuntu/vernal-agents-post-v0
+          
+          # Extract files
+          tar -xzf agents-deployment.tar.gz
+          rm agents-deployment.tar.gz
           
           # Install Python dependencies
+          cd agents-backend
           pip install -r requirements.txt
           
-          # Restart the agents service
-          sudo systemctl restart agents-backend
+          # Start the agents service
+          sudo systemctl start agents-backend
           sudo systemctl status agents-backend
