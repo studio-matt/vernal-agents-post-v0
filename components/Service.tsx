@@ -339,7 +339,7 @@ export const deleteCampaignsById = async (campaign_id: string) => {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
     });
 
@@ -498,7 +498,7 @@ export const getScheduledPosts = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
     });
 
@@ -532,8 +532,8 @@ export const generateIdeas = async () => {
   try {
     const endpoint = "generate-ideas"
 
-    const dataRaw = localStorage.getItem("contentGenPayload") || "{}"
-    const textData = localStorage.getItem("text") || ""
+    const dataRaw = (typeof window !== 'undefined' ? localStorage.getItem("contentGenPayload") : null) || "{}"
+    const textData = (typeof window !== 'undefined' ? localStorage.getItem("text") : null) || ""
 
     const data = JSON.parse(dataRaw)
 
@@ -591,8 +591,8 @@ export const generateContentAPI = async () => {
 
     // Retrieve data from localStorage
     // let payloadData = localStorage.getItem("contentGenPayload");
-    const payloadData = localStorage.getItem("contentGenPayload")
-    const payloadTextData = localStorage.getItem("text")
+    const payloadData = typeof window !== 'undefined' ? localStorage.getItem("contentGenPayload") : null
+    const payloadTextData = typeof window !== 'undefined' ? localStorage.getItem("text") : null
 
     let newPayloadData
     let newPayloadTextData
@@ -730,7 +730,7 @@ export const generateImageMachineContent = async (payload: {
 
 export const storeClaudeKey = async (apiKey: string): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
@@ -779,7 +779,7 @@ export const storeClaudeKey = async (apiKey: string): Promise<any> => {
 // Function to fetch stored user credentials
 export const getUserCredentials = async (): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
     console.log("🔍 getUserCredentials: Token exists:", !!token)
 
     if (!token) {
@@ -823,7 +823,7 @@ export const getUserCredentials = async (): Promise<any> => {
 
 export const storeElevenLabsKey = async (apiKey: string): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
@@ -860,7 +860,7 @@ export const storeElevenLabsKey = async (apiKey: string): Promise<any> => {
 
 export const storeMidjourneyKey = async (apiKey: string): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
@@ -897,7 +897,7 @@ export const storeMidjourneyKey = async (apiKey: string): Promise<any> => {
 
 export const storeOpenAIKey = async (apiKey: string): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
@@ -1407,7 +1407,7 @@ export const getAllCampaigns = async () => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
     });
 
@@ -1448,7 +1448,7 @@ export const createCampaign = async (campaignData: any) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
       body: JSON.stringify(campaignData),
     });
@@ -1485,7 +1485,7 @@ export const updateCampaign = async (campaignId: string, campaignData: any) => {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
       body: JSON.stringify(campaignData),
     });
@@ -1522,7 +1522,7 @@ export const getCampaignsById = async (campaign_id: string) => {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
+        ...(typeof window !== 'undefined' && localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {}),
       },
     });
 
@@ -1557,7 +1557,7 @@ export const getCampaignsById = async (campaign_id: string) => {
  */
 export const linkedinConnect = async (): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
@@ -1583,7 +1583,7 @@ export const linkedinConnect = async (): Promise<any> => {
  */
 export const twitterConnect = async (): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
@@ -1613,7 +1613,7 @@ export const twitterConnect = async (): Promise<any> => {
 
 export const wordpressConnect = async (site_url: string, username: string, password: string): Promise<any> => {
   try {
-    const token = localStorage.getItem("token")
+    const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null
 
     if (!token) {
       console.error("No token found in localStorage.")
