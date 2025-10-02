@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
-from models import Base, Content, Agent, Task
+from models import Base, Content, Agent, Task, AuthorPersonality
 import os
 from datetime import datetime
 import pymysql
@@ -566,6 +566,135 @@ class DatabaseManager1:
         except SQLAlchemyError as e:
             logger.error(f"Error retrieving campaigns: {e}")
             raise Exception(f"Error retrieving campaigns: {str(e)}")
+        finally:
+            session.close()
+
+    def create_campaign(self, campaign_id: str, campaign_name: str, description: str, query: str, campaign_type: str, keywords_str: str, urls_str: str, trending_topics_str: str, topics_str: str, extraction_settings: dict, preprocessing_settings: dict, entity_settings: dict, modeling_settings: dict):
+        session = next(self.get_db_session())
+        try:
+            # Create new campaign
+            campaign = Campaign(
+                campaign_id=campaign_id,
+                campaign_name=campaign_name,
+                description=description,
+                query=query,
+                type=campaign_type,
+                keywords=keywords_str,
+                urls=urls_str,
+                trending_topics=trending_topics_str,
+                topics=topics_str,
+                extraction_settings=json.dumps(extraction_settings) if extraction_settings else None,
+                preprocessing_settings=json.dumps(preprocessing_settings) if preprocessing_settings else None,
+                entity_settings=json.dumps(entity_settings) if entity_settings else None,
+                modeling_settings=json.dumps(modeling_settings) if modeling_settings else None,
+                status="INCOMPLETE",
+                progress=0,
+                current_step="created",
+                progress_message="Campaign created successfully",
+                task_id=None,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            session.add(campaign)
+            session.commit()
+            logger.info(f"Created campaign {campaign_id}: {campaign_name}")
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Database error creating campaign: {e}")
+            raise Exception(f"Error creating campaign: {str(e)}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error creating campaign: {e}")
+            raise Exception(f"Error creating campaign: {str(e)}")
+        finally:
+            session.close()
+
+    def get_all_author_personalities(self):
+        session = next(self.get_db_session())
+        try:
+            personalities = session.query(AuthorPersonality).all()
+            result = []
+            for personality in personalities:
+                result.append({
+                    "id": personality.id,
+                    "name": personality.name,
+                    "description": personality.description,
+                    "created_at": personality.created_at.isoformat() if personality.created_at else None,
+                    "updated_at": personality.updated_at.isoformat() if personality.updated_at else None
+                })
+            logger.info(f"Retrieved {len(result)} author personalities")
+            return result
+        except SQLAlchemyError as e:
+            logger.error(f"Error retrieving author personalities: {e}")
+            raise Exception(f"Error retrieving author personalities: {str(e)}")
+        finally:
+            session.close()
+
+    def create_author_personality(self, personality_id: str, name: str, description: str):
+        session = next(self.get_db_session())
+        try:
+            personality = AuthorPersonality(
+                id=personality_id,
+                name=name,
+                description=description,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            session.add(personality)
+            session.commit()
+            logger.info(f"Created author personality {personality_id}: {name}")
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Database error creating author personality: {e}")
+            raise Exception(f"Error creating author personality: {str(e)}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error creating author personality: {e}")
+            raise Exception(f"Error creating author personality: {str(e)}")
+        finally:
+            session.close()
+
+    def update_author_personality(self, personality_id: str, name: str, description: str):
+        session = next(self.get_db_session())
+        try:
+            personality = session.query(AuthorPersonality).filter(AuthorPersonality.id == personality_id).first()
+            if not personality:
+                raise Exception(f"Author personality {personality_id} not found")
+            
+            personality.name = name
+            personality.description = description
+            personality.updated_at = datetime.now()
+            session.commit()
+            logger.info(f"Updated author personality {personality_id}: {name}")
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Database error updating author personality: {e}")
+            raise Exception(f"Error updating author personality: {str(e)}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error updating author personality: {e}")
+            raise Exception(f"Error updating author personality: {str(e)}")
+        finally:
+            session.close()
+
+    def delete_author_personality(self, personality_id: str):
+        session = next(self.get_db_session())
+        try:
+            personality = session.query(AuthorPersonality).filter(AuthorPersonality.id == personality_id).first()
+            if not personality:
+                raise Exception(f"Author personality {personality_id} not found")
+            
+            session.delete(personality)
+            session.commit()
+            logger.info(f"Deleted author personality {personality_id}")
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Database error deleting author personality: {e}")
+            raise Exception(f"Error deleting author personality: {str(e)}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error deleting author personality: {e}")
+            raise Exception(f"Error deleting author personality: {str(e)}")
         finally:
             session.close()
 
