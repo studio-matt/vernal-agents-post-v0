@@ -19,6 +19,6 @@ torch==2.2.2
 torchvision==0.17.2
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-# MCP Dependencies
-mcp>=1.0.0
+# MCP Dependencies (using mcp-python package)
+mcp-python>=1.0.0
 

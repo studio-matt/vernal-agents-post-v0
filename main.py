@@ -53,7 +53,7 @@ from tasks import create_prompt, analyze_text
 from typing import Dict, List
 import traceback
 import paramiko
-from mcp_api import mcp_router
+from simple_mcp_api import simple_mcp_router
 
 
 
@@ -92,8 +92,8 @@ app.add_middleware(
     allow_headers=["*"],  # Adjust this to specify allowed headers
 )
 
-# Include MCP API router
-app.include_router(mcp_router)
+# Include Simple MCP API router
+app.include_router(simple_mcp_router)
 
 # Progress tracking storage
 progress_storage: Dict[str, Dict[str, Any]] = {}
