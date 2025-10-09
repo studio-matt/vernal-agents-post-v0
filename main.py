@@ -92,9 +92,15 @@ app.add_middleware(
     allow_headers=["*"],  # Adjust this to specify allowed headers
 )
 
-# Include Ultra Simple API router
-from ultra_simple import router
-app.include_router(router)
+# Include Debug Import router
+try:
+    from debug_import import router
+    app.include_router(router)
+    print("DEBUG: debug_import router included successfully")
+except Exception as e:
+    print(f"DEBUG: ERROR importing debug_import: {e}")
+    import traceback
+    traceback.print_exc()
 
 # Progress tracking storage
 progress_storage: Dict[str, Dict[str, Any]] = {}
