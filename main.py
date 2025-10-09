@@ -92,9 +92,9 @@ app.add_middleware(
     allow_headers=["*"],  # Adjust this to specify allowed headers
 )
 
-# Include Direct MCP API router
-from mcp_direct import mcp_router
-app.include_router(mcp_router)
+# Include Minimal MCP API router
+from minimal_mcp import minimal_mcp_router
+app.include_router(minimal_mcp_router)
 
 # Progress tracking storage
 progress_storage: Dict[str, Dict[str, Any]] = {}
