@@ -1,27 +1,30 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+*.env
+.venv/
+venv/
 
-# dependencies
-/node_modules
+# Backup files
+*.bak*
+*.db
+*.lock
+=6
+database.py.*
+main.py.bak*
 
-# next.js
-/.next/
-/out/
+# Build / cache
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
 
-# production
-/build
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# Data/models
+data/
+models/
+checkpoints/
+artifacts/
+downloads/

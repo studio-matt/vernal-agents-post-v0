@@ -2263,7 +2263,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from langchain_openai import ChatOpenAI
-from browser_use import Agent, Controller, BrowserConfig, Browser
+from browser_compat import Agent, Controller, BrowserConfig, Browser
 from dotenv import load_dotenv
 from database import DatabaseManager1, engine, Base, Campaign, RawData, MachineContent
 from text_processing import Posts, ProcessedPosts, ProcessedPost, lemmatize_text, stem_text, remove_stopwords, extract_entities, extract_topics, extract_keywords
@@ -2465,8 +2465,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
                 "updated_at": datetime.now()
             })
             return
-<<<<<<< HEAD
-=======
 
         # Update progress: Web scraping setup
         progress_storage[task_id].update({
@@ -2475,7 +2473,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             "message": "Setting up web scraping...",
             "updated_at": datetime.now()
         })
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
 
         logger.info(
             f"Received request for campaign: {campaign_name} (ID: {campaign_id}), "
@@ -2551,7 +2548,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
                 "progress": 100,
                 "current_step": "completed",
                 "message": "No results found from scraping",
-<<<<<<< HEAD
                 "result": {
                     "status": "success",
                     "campaign_name": campaign_name,
@@ -2560,8 +2556,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
                     "result": "No results found.",
                     "topics": []
                 },
-=======
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
                 "updated_at": datetime.now()
             })
             return
@@ -2645,11 +2639,8 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             "topics": topics
         }
         if message:
-<<<<<<< HEAD
             response_data["message"] = message  
-=======
             response_data["message"] = message
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
 
         # Update progress: Completed
         progress_storage[task_id].update({
@@ -2660,28 +2651,21 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             "result": response_data,
             "updated_at": datetime.now()
         })
-<<<<<<< HEAD
 
-=======
         
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
         logger.info(f"Analysis completed for task {task_id}")
         
     except Exception as e:
         logger.error(f"Error in background analysis: {str(e)}")
         progress_storage[task_id].update({
             "status": "failed",
-<<<<<<< HEAD
             "error": f"Internal server error: {str(e)}",
-=======
             "error": str(e),
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
             "updated_at": datetime.now()
         })
 
 @app.get("/analyze/status/{task_id}")
 async def get_analysis_status(task_id: str):
-<<<<<<< HEAD
     """Get current progress of analysis task"""
     if task_id not in progress_storage:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -2698,13 +2682,11 @@ async def get_analysis_status(task_id: str):
         "result": status_data.get("result"),
         "error": status_data.get("error")
     }
-=======
     """Get the current status of an analysis task"""
     if task_id not in progress_storage:
         raise HTTPException(status_code=404, detail="Task not found")
     
     return progress_storage[task_id]
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
 
 class GenerateIdeasInput(BaseModel):
     topics: List[str]
@@ -4222,3 +4204,24 @@ if __name__ == "__main__":
     db_manager.create_tables()
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# --- health endpoint (lightweight, safe to append) ---
+try:
+    # if FastAPI was already imported above, this is harmless
+    from fastapi import FastAPI  # noqa: F401
+    # use existing global "app" that uvicorn loads as main:app
+    @app.get("/health", include_in_schema=False)
+    async def _health():
+        return {"ok": True}
+except Exception as _e:
+    # don't break app startup if something unexpected happens
+    pass
+
+# --- health endpoint (safe to append) ---
+try:
+    from fastapi import FastAPI  # noqa
+    @app.get("/health", include_in_schema=False)
+    async def _health():
+        return {"ok": True}
+except Exception:
+    pass
