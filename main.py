@@ -171,7 +171,7 @@ except Exception as e:
     traceback.print_exc()
 
 try:
-    from debug_import import test_router
+    from debug_import import router as test_router
     app.include_router(test_router)
     logger.info("✅ test_router included successfully")
 except Exception as e:
