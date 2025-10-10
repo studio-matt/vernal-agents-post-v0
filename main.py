@@ -71,6 +71,22 @@ async def test_router_ping():
 app.include_router(test_router)
 logger.info("✅ Test router included successfully")
 
+# Enhanced MCP router
+try:
+    from enhanced_mcp_api import enhanced_mcp_router
+    app.include_router(enhanced_mcp_router)
+    logger.info("✅ Enhanced MCP router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include enhanced MCP router: {str(e)}")
+
+# Simple MCP router (fallback)
+try:
+    from simple_mcp_api import simple_mcp_router
+    app.include_router(simple_mcp_router)
+    logger.info("✅ Simple MCP router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include simple MCP router: {str(e)}")
+
 # Debug endpoint to show all routes
 @app.get("/debug/routes")
 async def debug_routes():
