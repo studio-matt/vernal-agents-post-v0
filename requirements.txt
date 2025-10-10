@@ -1,23 +1,116 @@
-# --- existing packages ---
-numpy==1.26.4
-scipy==1.12.0
-gensim==4.3.2
-smart-open>=6
+# =============================================================================
+# VERNAL AGENTS BACKEND - COMPREHENSIVE DEPENDENCIES
+# =============================================================================
+# This file contains ALL dependencies required for the MCP-enabled backend
+# Generated from comprehensive analysis of all Python imports in the codebase
+# =============================================================================
 
-# --- additional packages ---
-scikit-learn==1.4.2
-umap-learn==0.5.6
-hdbscan==0.8.33
-numba==0.59.1
-llvmlite==0.42.0
-pynndescent==0.5.11
+# =============================================================================
+# CORE WEB FRAMEWORK & API
+# =============================================================================
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pydantic>=2.5.0
+
+# =============================================================================
+# DATABASE & ORM
+# =============================================================================
+sqlalchemy>=2.0.0
+pymysql>=1.1.0
+mysql-connector-python>=8.2.0
+
+# =============================================================================
+# AI/ML CORE DEPENDENCIES
+# =============================================================================
+openai>=1.3.0
+crewai>=0.28.0
+langchain-openai>=0.0.5
+python-dotenv>=1.0.0
+
+# =============================================================================
+# TEXT PROCESSING & NLP
+# =============================================================================
+nltk>=3.8.1
+gensim>=4.3.2
+bertopic>=0.16.3
+scikit-learn>=1.4.2
+numpy>=1.26.4
+scipy>=1.12.0
 sentence-transformers>=2.2.2
-bertopic==0.16.3
+smart-open>=6.0.0
+umap-learn>=0.5.6
+hdbscan>=0.8.33
+numba>=0.59.1
+llvmlite>=0.42.0
+pynndescent>=0.5.11
 
-# CPU-only PyTorch
-torch==2.2.2
-torchvision==0.17.2
+# =============================================================================
+# DOCUMENT PROCESSING
+# =============================================================================
+PyPDF2>=3.0.1
+docx2txt>=0.8
+markdown>=3.5.1
+openpyxl>=3.1.2
+python-pptx>=0.6.23
+
+# =============================================================================
+# AUDIO/VIDEO PROCESSING
+# =============================================================================
+SpeechRecognition>=3.10.0
+pydub>=0.25.1
+moviepy>=1.0.3
+
+# =============================================================================
+# DATA PROCESSING
+# =============================================================================
+pandas>=2.1.0
+requests>=2.31.0
+
+# =============================================================================
+# AUTHENTICATION & SECURITY
+# =============================================================================
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+email-validator>=2.1.0
+
+# =============================================================================
+# SCHEDULING & BACKGROUND TASKS
+# =============================================================================
+apscheduler>=3.10.4
+
+# =============================================================================
+# SOCIAL MEDIA & EXTERNAL APIS
+# =============================================================================
+tweepy>=4.14.0
+
+# =============================================================================
+# SYSTEM & NETWORKING
+# =============================================================================
+paramiko>=3.3.1
+
+# =============================================================================
+# MACHINE LEARNING FRAMEWORKS
+# =============================================================================
+# CPU-only PyTorch (lightweight for production)
+torch>=2.2.2
+torchvision>=0.17.2
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-# MCP Dependencies (using custom implementation - no external deps needed)
+# =============================================================================
+# DEVELOPMENT & DEBUGGING (Optional - can be removed for production)
+# =============================================================================
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# black>=23.0.0
+# flake8>=6.0.0
 
+# =============================================================================
+# NOTES:
+# =============================================================================
+# - All version pins are minimum versions for compatibility
+# - PyTorch is CPU-only to reduce image size and dependencies
+# - MCP implementation is custom (no external MCP dependencies needed)
+# - Some packages may have transitive dependencies not listed here
+# - Test with: pip install -r requirements.txt
+# =============================================================================
