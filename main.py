@@ -49,6 +49,16 @@ async def test_health():
 
 # Import and include routers with explicit error handling
 try:
+    logger.info("Attempting to import simple_test_router...")
+    from simple_test_router import test_router
+    app.include_router(test_router)
+    logger.info("✅ simple_test_router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include simple_test_router: {e}")
+    import traceback
+    traceback.print_exc()
+
+try:
     logger.info("Attempting to import simple_mcp_api...")
     from simple_mcp_api import simple_mcp_router
     app.include_router(simple_mcp_router, prefix="/mcp")
@@ -60,11 +70,11 @@ except Exception as e:
 
 try:
     logger.info("Attempting to import debug_import...")
-    from debug_import import router as test_router
-    app.include_router(test_router)
-    logger.info("✅ test_router included successfully")
+    from debug_import import router as debug_router
+    app.include_router(debug_router)
+    logger.info("✅ debug_router included successfully")
 except Exception as e:
-    logger.error(f"❌ Failed to include test_router: {e}")
+    logger.error(f"❌ Failed to include debug_router: {e}")
     import traceback
     traceback.print_exc()
 
