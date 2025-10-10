@@ -87,13 +87,13 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to include simple MCP router: {str(e)}")
 
-# Authentication router
+# Authentication router (minimal version for now)
 try:
-    from auth_api import auth_router
+    from auth_api_minimal import auth_router
     app.include_router(auth_router)
-    logger.info("✅ Authentication router included successfully")
+    logger.info("✅ Minimal authentication router included successfully")
 except Exception as e:
-    logger.error(f"❌ Failed to include authentication router: {str(e)}")
+    logger.error(f"❌ Failed to include minimal authentication router: {str(e)}")
 
 # Debug endpoint to show all routes
 @app.get("/debug/routes")
