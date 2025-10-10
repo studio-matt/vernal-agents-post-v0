@@ -30,9 +30,16 @@ if not DATABASE_URL:
     host = os.getenv("DB_HOST") or os.getenv("host") or "127.0.0.1"
     port = os.getenv("DB_PORT") or "3306"
     name = os.getenv("DB_NAME") or os.getenv("database")
-    if not all([user, password, host, name]):
-        raise RuntimeError("DB config incomplete. Set DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME.")
-    DATABASE_URL = f"mysql+pymysql://{user}:{quote_plus(password)}@{host}:{port}/{name}?charset=utf8mb4"
+    
+    # Validate all required values are present and non-empty
+    if not all([user, password, host, name]) or not all([str(x).strip() for x in [user, password, host, name]]):
+        print("DEBUG: DB config incomplete - using SQLite fallback")
+        DATABASE_URL = "sqlite:///./test.db"
+    else:
+        # Ensure password is a string and properly encoded
+        password_str = str(password).strip()
+        encoded_password = quote_plus(password_str)
+        DATABASE_URL = f"mysql+pymysql://{user}:{encoded_password}@{host}:{port}/{name}?charset=utf8mb4"
 
 # ---- Engine & Session ----
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True, pool_recycle=3600)

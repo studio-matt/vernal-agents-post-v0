@@ -102,6 +102,31 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# Include Simple MCP router
+try:
+    app.include_router(simple_mcp_router, prefix="/mcp")
+    print("DEBUG: simple_mcp_router included successfully")
+except Exception as e:
+    print(f"DEBUG: ERROR including simple_mcp_router: {e}")
+    import traceback
+    traceback.print_exc()
+
+# Add minimal test router directly to verify FastAPI works
+from fastapi import APIRouter
+test_router = APIRouter()
+
+@test_router.get("/test-health")
+def test_health():
+    return {"status": "test working", "message": "Direct router test successful"}
+
+app.include_router(test_router)
+print("DEBUG: test_router included successfully")
+
+# Add health endpoint immediately after router inclusion
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"ok": True}
+
 # Progress tracking storage
 progress_storage: Dict[str, Dict[str, Any]] = {}
 
@@ -4216,23 +4241,4 @@ if __name__ == "__main__":
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
-# --- health endpoint (lightweight, safe to append) ---
-try:
-    # if FastAPI was already imported above, this is harmless
-    from fastapi import FastAPI  # noqa: F401
-    # use existing global "app" that uvicorn loads as main:app
-    @app.get("/health", include_in_schema=False)
-    async def _health():
-        return {"ok": True}
-except Exception as _e:
-    # don't break app startup if something unexpected happens
-    pass
-
-# --- health endpoint (safe to append) ---
-try:
-    from fastapi import FastAPI  # noqa
-    @app.get("/health", include_in_schema=False)
-    async def _health():
-        return {"ok": True}
-except Exception:
-    pass
+# Health endpoint moved to proper location above
