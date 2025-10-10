@@ -1,0 +1,522 @@
+{
+  "timestamp": "2025-10-10T19:09:05.382Z",
+  "node_version": "v20.19.3",
+  "tests_passed": 5,
+  "total_tests": 5,
+  "status": "success",
+  "environment": "replit",
+  "summary": {
+    "tool_success_rate": "100.0",
+    "workflow_success_rate": "100.0",
+    "overall_success": 12,
+    "total_tests": 12
+  },
+  "tool_results": {
+    "script_research": {
+      "success": true,
+      "execution_time": 112,
+      "status": "completed",
+      "data": {
+        "tool": "script_research",
+        "description": "Analyze text content and extract themes for weekly content planning",
+        "input_schema": {
+          "text": "string",
+          "week": "integer",
+          "days_list": "array"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "script_research",
+        "handler": "simulated"
+      }
+    },
+    "quality_control": {
+      "success": true,
+      "execution_time": 100,
+      "status": "completed",
+      "data": {
+        "tool": "quality_control",
+        "description": "Review and validate content for quality standards and compliance",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "forbidden_words": "array"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "quality_control",
+        "handler": "simulated"
+      }
+    },
+    "regenerate_content": {
+      "success": true,
+      "execution_time": 101,
+      "status": "completed",
+      "data": {
+        "tool": "regenerate_content",
+        "description": "Regenerate weekly content with fresh perspective",
+        "input_schema": {
+          "content": "string",
+          "week": "integer"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "regenerate_content",
+        "handler": "simulated"
+      }
+    },
+    "linkedin_generation": {
+      "success": true,
+      "execution_time": 103,
+      "status": "completed",
+      "data": {
+        "tool": "linkedin_generation",
+        "description": "Generate LinkedIn-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "linkedin_generation",
+        "handler": "simulated"
+      }
+    },
+    "twitter_generation": {
+      "success": true,
+      "execution_time": 109,
+      "status": "completed",
+      "data": {
+        "tool": "twitter_generation",
+        "description": "Generate Twitter-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "twitter_generation",
+        "handler": "simulated"
+      }
+    },
+    "facebook_generation": {
+      "success": true,
+      "execution_time": 108,
+      "status": "completed",
+      "data": {
+        "tool": "facebook_generation",
+        "description": "Generate Facebook-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "facebook_generation",
+        "handler": "simulated"
+      }
+    },
+    "instagram_generation": {
+      "success": true,
+      "execution_time": 102,
+      "status": "completed",
+      "data": {
+        "tool": "instagram_generation",
+        "description": "Generate Instagram-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "instagram_generation",
+        "handler": "simulated"
+      }
+    },
+    "tiktok_generation": {
+      "success": true,
+      "execution_time": 102,
+      "status": "completed",
+      "data": {
+        "tool": "tiktok_generation",
+        "description": "Generate TikTok-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "tiktok_generation",
+        "handler": "simulated"
+      }
+    },
+    "youtube_generation": {
+      "success": true,
+      "execution_time": 101,
+      "status": "completed",
+      "data": {
+        "tool": "youtube_generation",
+        "description": "Generate YouTube-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "youtube_generation",
+        "handler": "simulated"
+      }
+    },
+    "wordpress_generation": {
+      "success": true,
+      "execution_time": 101,
+      "status": "completed",
+      "data": {
+        "tool": "wordpress_generation",
+        "description": "Generate WordPress-specific content optimized for the platform",
+        "input_schema": {
+          "content": "string",
+          "platform": "string",
+          "author_personality": "string"
+        },
+        "simulated": true
+      },
+      "metadata": {
+        "tool": "wordpress_generation",
+        "handler": "simulated"
+      }
+    }
+  },
+  "workflow_results": {
+    "content_generation": {
+      "workflow_name": "content_generation",
+      "status": "completed",
+      "steps": {
+        "script_research": {
+          "status": "completed",
+          "required": true,
+          "description": "Analyze content and extract themes",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "script_research"
+            },
+            "execution_time": 51
+          }
+        },
+        "quality_control": {
+          "status": "completed",
+          "required": true,
+          "description": "Review content for quality",
+          "execution_time": 57,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "quality_control"
+            },
+            "execution_time": 57
+          }
+        },
+        "linkedin_generation": {
+          "status": "completed",
+          "required": true,
+          "description": "Generate LinkedIn content",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "linkedin_generation"
+            },
+            "execution_time": 51
+          }
+        },
+        "twitter_generation": {
+          "status": "completed",
+          "required": true,
+          "description": "Generate Twitter content",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "twitter_generation"
+            },
+            "execution_time": 51
+          }
+        },
+        "facebook_generation": {
+          "status": "completed",
+          "required": true,
+          "description": "Generate Facebook content",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "facebook_generation"
+            },
+            "execution_time": 51
+          }
+        }
+      },
+      "data": {
+        "script_research": {
+          "simulated": true,
+          "tool": "script_research"
+        },
+        "quality_control": {
+          "simulated": true,
+          "tool": "quality_control"
+        },
+        "linkedin_generation": {
+          "simulated": true,
+          "tool": "linkedin_generation"
+        },
+        "twitter_generation": {
+          "simulated": true,
+          "tool": "twitter_generation"
+        },
+        "facebook_generation": {
+          "simulated": true,
+          "tool": "facebook_generation"
+        }
+      },
+      "errors": [],
+      "total_time": 261
+    },
+    "platform_content": {
+      "workflow_name": "platform_content",
+      "status": "completed",
+      "steps": {
+        "script_research": {
+          "status": "completed",
+          "required": true,
+          "description": "Analyze content",
+          "execution_time": 50,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "script_research"
+            },
+            "execution_time": 50
+          }
+        },
+        "quality_control": {
+          "status": "completed",
+          "required": true,
+          "description": "Quality check",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "quality_control"
+            },
+            "execution_time": 51
+          }
+        },
+        "linkedin_generation": {
+          "status": "completed",
+          "required": false,
+          "description": "LinkedIn content",
+          "execution_time": 50,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "linkedin_generation"
+            },
+            "execution_time": 50
+          }
+        },
+        "twitter_generation": {
+          "status": "completed",
+          "required": false,
+          "description": "Twitter content",
+          "execution_time": 50,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "twitter_generation"
+            },
+            "execution_time": 50
+          }
+        },
+        "instagram_generation": {
+          "status": "completed",
+          "required": false,
+          "description": "Instagram content",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "instagram_generation"
+            },
+            "execution_time": 51
+          }
+        },
+        "tiktok_generation": {
+          "status": "completed",
+          "required": false,
+          "description": "TikTok content",
+          "execution_time": 51,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "tiktok_generation"
+            },
+            "execution_time": 51
+          }
+        },
+        "youtube_generation": {
+          "status": "completed",
+          "required": false,
+          "description": "YouTube content",
+          "execution_time": 50,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "youtube_generation"
+            },
+            "execution_time": 50
+          }
+        },
+        "wordpress_generation": {
+          "status": "completed",
+          "required": false,
+          "description": "WordPress content",
+          "execution_time": 53,
+          "result": {
+            "success": true,
+            "data": {
+              "simulated": true,
+              "tool": "wordpress_generation"
+            },
+            "execution_time": 53
+          }
+        }
+      },
+      "data": {
+        "script_research": {
+          "simulated": true,
+          "tool": "script_research"
+        },
+        "quality_control": {
+          "simulated": true,
+          "tool": "quality_control"
+        },
+        "linkedin_generation": {
+          "simulated": true,
+          "tool": "linkedin_generation"
+        },
+        "twitter_generation": {
+          "simulated": true,
+          "tool": "twitter_generation"
+        },
+        "instagram_generation": {
+          "simulated": true,
+          "tool": "instagram_generation"
+        },
+        "tiktok_generation": {
+          "simulated": true,
+          "tool": "tiktok_generation"
+        },
+        "youtube_generation": {
+          "simulated": true,
+          "tool": "youtube_generation"
+        },
+        "wordpress_generation": {
+          "simulated": true,
+          "tool": "wordpress_generation"
+        }
+      },
+      "errors": [],
+      "total_time": 406
+    }
+  },
+  "api_endpoints": [
+    {
+      "path": "/mcp/enhanced/health",
+      "method": "GET",
+      "description": "Health check"
+    },
+    {
+      "path": "/mcp/enhanced/tools",
+      "method": "GET",
+      "description": "List tools"
+    },
+    {
+      "path": "/mcp/enhanced/workflows",
+      "method": "GET",
+      "description": "List workflows"
+    },
+    {
+      "path": "/mcp/enhanced/tools/execute",
+      "method": "POST",
+      "description": "Execute tool"
+    },
+    {
+      "path": "/mcp/enhanced/workflows/execute",
+      "method": "POST",
+      "description": "Execute workflow"
+    },
+    {
+      "path": "/mcp/enhanced/content/generate",
+      "method": "POST",
+      "description": "Generate content"
+    },
+    {
+      "path": "/mcp/enhanced/stats",
+      "method": "GET",
+      "description": "Get statistics"
+    },
+    {
+      "path": "/mcp/enhanced/test/tool",
+      "method": "POST",
+      "description": "Test tool"
+    },
+    {
+      "path": "/mcp/enhanced/test/workflow",
+      "method": "GET",
+      "description": "Test workflow"
+    }
+  ],
+  "error_handling": {
+    "invalid_tool": {
+      "success": true
+    },
+    "invalid_workflow": {
+      "success": true
+    },
+    "validation_error": {
+      "success": true,
+      "error_type": "validation",
+      "message": "Missing required fields: week, days_list"
+    }
+  },
+  "notes": "Simulation tests completed - full MCP requires Python/FastAPI dependencies"
+}

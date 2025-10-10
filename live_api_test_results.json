@@ -1,0 +1,259 @@
+{
+  "timestamp": "2025-10-10T19:12:32.046Z",
+  "backend_url": "https://themachine.vernalcontentum.com",
+  "frontend_url": "https://machine.vernalcontentum.com",
+  "total_tests": 21,
+  "successful_tests": 1,
+  "success_rate": "4.8",
+  "test_results": {
+    "health": {
+      "/health": {
+        "success": false,
+        "statusCode": 502,
+        "responseTime": 1760123551529,
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "headers": {
+          "server": "nginx/1.24.0 (Ubuntu)",
+          "date": "Fri, 10 Oct 2025 19:12:31 GMT",
+          "content-type": "text/html",
+          "content-length": "166",
+          "connection": "keep-alive"
+        }
+      },
+      "/mcp/mcp/health": {
+        "success": false,
+        "statusCode": 502,
+        "responseTime": 1760123551549,
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "headers": {
+          "server": "nginx/1.24.0 (Ubuntu)",
+          "date": "Fri, 10 Oct 2025 19:12:31 GMT",
+          "content-type": "text/html",
+          "content-length": "166",
+          "connection": "keep-alive"
+        }
+      },
+      "/mcp/enhanced/health": {
+        "success": false,
+        "statusCode": 502,
+        "responseTime": 1760123551571,
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "headers": {
+          "server": "nginx/1.24.0 (Ubuntu)",
+          "date": "Fri, 10 Oct 2025 19:12:31 GMT",
+          "content-type": "text/html",
+          "content-length": "166",
+          "connection": "keep-alive"
+        }
+      }
+    },
+    "mcp": {
+      "/mcp/mcp/health": {
+        "success": false,
+        "statusCode": 502,
+        "method": "GET",
+        "description": "Simple MCP Health",
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "responseTime": 1760123551593
+      },
+      "/mcp/enhanced/health": {
+        "success": false,
+        "statusCode": 502,
+        "method": "GET",
+        "description": "Enhanced MCP Health",
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "responseTime": 1760123551613
+      },
+      "/mcp/mcp/tools": {
+        "success": false,
+        "statusCode": 502,
+        "method": "GET",
+        "description": "List MCP Tools",
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "responseTime": 1760123551634
+      },
+      "/mcp/enhanced/tools": {
+        "success": false,
+        "statusCode": 502,
+        "method": "GET",
+        "description": "List Enhanced Tools",
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "responseTime": 1760123551654
+      },
+      "/mcp/enhanced/workflows": {
+        "success": false,
+        "statusCode": 502,
+        "method": "GET",
+        "description": "List Workflows",
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "responseTime": 1760123551674
+      },
+      "/mcp/enhanced/stats": {
+        "success": false,
+        "statusCode": 502,
+        "method": "GET",
+        "description": "Get Statistics",
+        "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
+        "responseTime": 1760123551695
+      }
+    },
+    "tools": {
+      "script_research_mcp": {
+        "success": false,
+        "statusCode": 502,
+        "tool": "script_research",
+        "endpoint": "/mcp/mcp/tools/script_research/execute",
+        "inputData": {
+          "text": "Digital marketing trends for 2024 including AI integration, social media automation, and content personalization strategies.",
+          "week": 1,
+          "days_list": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday"
+          ]
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "script_research_enhanced": {
+        "success": false,
+        "statusCode": 502,
+        "tool": "script_research",
+        "endpoint": "/mcp/enhanced/tools/script_research/execute",
+        "inputData": {
+          "text": "Digital marketing trends for 2024 including AI integration, social media automation, and content personalization strategies.",
+          "week": 1,
+          "days_list": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday"
+          ]
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "quality_control_mcp": {
+        "success": false,
+        "statusCode": 502,
+        "tool": "quality_control",
+        "endpoint": "/mcp/mcp/tools/quality_control/execute",
+        "inputData": {
+          "content": "Sample content for quality control testing with proper grammar and structure.",
+          "platform": "linkedin",
+          "forbidden_words": [
+            "spam",
+            "scam"
+          ]
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "quality_control_enhanced": {
+        "success": false,
+        "statusCode": 502,
+        "tool": "quality_control",
+        "endpoint": "/mcp/enhanced/tools/quality_control/execute",
+        "inputData": {
+          "content": "Sample content for quality control testing with proper grammar and structure.",
+          "platform": "linkedin",
+          "forbidden_words": [
+            "spam",
+            "scam"
+          ]
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "regenerate_content_mcp": {
+        "success": false,
+        "statusCode": 502,
+        "tool": "regenerate_content",
+        "endpoint": "/mcp/mcp/tools/regenerate_content/execute",
+        "inputData": {
+          "content": "Original content that needs regeneration with fresh perspective and updated information.",
+          "week": 1
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "regenerate_content_enhanced": {
+        "success": false,
+        "statusCode": 502,
+        "tool": "regenerate_content",
+        "endpoint": "/mcp/enhanced/tools/regenerate_content/execute",
+        "inputData": {
+          "content": "Original content that needs regeneration with fresh perspective and updated information.",
+          "week": 1
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      }
+    },
+    "workflows": {
+      "workflow_execution": {
+        "success": false,
+        "statusCode": 502,
+        "workflow": "content_generation",
+        "inputData": {
+          "text": "Comprehensive content about digital transformation and AI integration in modern businesses.",
+          "week": 1,
+          "days_list": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday"
+          ],
+          "content": "Sample content for workflow testing",
+          "platform": "linkedin",
+          "author_personality": "professional"
+        },
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      }
+    },
+    "frontend": {
+      "frontend": {
+        "success": true,
+        "statusCode": 200,
+        "url": "https://machine.vernalcontentum.com",
+        "contentType": "text/html; charset=utf-8",
+        "contentLength": 11442
+      }
+    },
+    "database": {
+      "/mcp/mcp/health": {
+        "success": false,
+        "statusCode": 502,
+        "description": "MCP Health (requires DB)",
+        "dbConnected": false,
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "/mcp/enhanced/health": {
+        "success": false,
+        "statusCode": 502,
+        "description": "Enhanced MCP Health (requires DB)",
+        "dbConnected": false,
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      },
+      "/mcp/enhanced/stats": {
+        "success": false,
+        "statusCode": 502,
+        "description": "Statistics (requires DB)",
+        "dbConnected": false,
+        "response": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n"
+      }
+    },
+    "security": {
+      "cors": {
+        "success": false,
+        "statusCode": 502,
+        "corsHeaders": {}
+      }
+    }
+  },
+  "summary": {
+    "backend_online": false,
+    "frontend_online": true,
+    "database_connected": false,
+    "mcp_functional": false,
+    "cors_configured": false
+  }
+}
