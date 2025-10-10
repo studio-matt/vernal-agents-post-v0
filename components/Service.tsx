@@ -89,29 +89,27 @@ export const signupUser = async ({
   contact: string
 }): Promise<any> => {
   try {
-    // TEMPORARY LOCAL SIGNUP - Since external APIs are down
-    console.log("[v0] Using local signup fallback")
+    console.log("[v0] Using real backend signup")
     
-    // Simple validation
-    if (!username || !email || !password) {
-      return {
-        status: "error",
-        message: "All fields are required",
-      }
-    }
+    const response = await Service("auth/signup", "POST", {
+      username,
+      email,
+      password,
+      contact,
+    })
     
-    // For now, always succeed
-    console.log("[v0] Local signup successful")
+    console.log("[v0] Signup response:", response)
     
     return {
-      status: "success",
-      message: "Account created successfully! You can now log in.",
+      status: response.status === "success" ? 200 : 400,
+      message: response.message || "Signup completed",
+      user: response.user
     }
   } catch (error: any) {
-    console.error("Error during local signup:", error)
+    console.error("Error during signup:", error)
     return {
       status: "error",
-      message: "Signup failed. Please try again.",
+      message: error.response?.data?.detail || "Signup failed. Please try again.",
     }
   }
 }
@@ -151,27 +149,24 @@ export const verifyEmail = async ({
   otp_code: string
 }): Promise<any> => {
   try {
-    const endpoint = "verify-email"
-
-    const payload = {
-      username: email,
+    console.log("[v0] Using real backend email verification")
+    
+    const response = await Service("auth/verify-email", "POST", {
+      email,
       otp_code,
-    }
-
-    const response = await Service(endpoint, "POST", payload)
-
+    })
+    
+    console.log("[v0] Email verification response:", response)
+    
     return {
-      status: response?.status || "success",
-      message: response?.message || "Email verified successfully",
+      status: response.status === "success" ? 200 : 400,
+      message: response.message || "Email verification completed"
     }
   } catch (error: any) {
     console.error("Error during email verification:", error)
-
-    const errorMessage = error?.response?.data?.detail || error?.message || "OTP verification failed. Please try again."
-
     return {
       status: "error",
-      message: errorMessage,
+      message: error.response?.data?.detail || "Email verification failed. Please try again.",
     }
   }
 }
@@ -294,37 +289,25 @@ export const loginUser = async ({
   password: string
 }): Promise<any> => {
   try {
-    // TEMPORARY LOCAL AUTH - Since external APIs are down
-    console.log("[v0] Using local authentication fallback")
+    console.log("[v0] Using real backend login")
     
-    // Simple validation
-    if (!username || !password) {
-      return {
-        status: "error",
-        message: "Username and password are required",
-      }
-    }
+    const response = await Service("auth/login", "POST", {
+      username,
+      password,
+    })
     
-    // For now, accept any non-empty credentials
-    if (username.length > 0 && password.length > 0) {
-      const mockToken = "local-auth-token-" + Date.now()
-      console.log("[v0] Local login successful")
-      
-      return {
-        status: "success",
-        token: mockToken,
-      }
-    }
+    console.log("[v0] Login response:", response)
     
     return {
-      status: "error",
-      message: "Invalid credentials",
+      status: response.status,
+      token: response.token,
+      user: response.user
     }
   } catch (error: any) {
-    console.error("[v0] Error during local login:", error)
+    console.error("[v0] Error during login:", error)
     return {
       status: "error",
-      message: "Login failed. Please try again.",
+      message: error.response?.data?.detail || "Login failed. Please try again.",
     }
   }
 }

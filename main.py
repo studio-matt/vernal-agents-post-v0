@@ -87,6 +87,14 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to include simple MCP router: {str(e)}")
 
+# Authentication router
+try:
+    from auth_api import auth_router
+    app.include_router(auth_router)
+    logger.info("✅ Authentication router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include authentication router: {str(e)}")
+
 # Debug endpoint to show all routes
 @app.get("/debug/routes")
 async def debug_routes():

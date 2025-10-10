@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-10-10T19:15:03.863Z",
+  "backend": {
+    "backendOnline": false,
+    "workingEndpoints": [],
+    "status": "DEPLOYING"
+  },
+  "frontend": {
+    "frontendOnline": true,
+    "status": "ONLINE"
+  },
+  "github": {
+    "status": "MANUAL_CHECK_REQUIRED",
+    "url": "https://github.com/studio-matt/vernal-agents-post-v0/actions"
+  },
+  "deployment_complete": false
+}

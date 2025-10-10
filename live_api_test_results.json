@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-10-10T19:12:32.046Z",
+  "timestamp": "2025-10-10T19:14:05.413Z",
   "backend_url": "https://themachine.vernalcontentum.com",
   "frontend_url": "https://machine.vernalcontentum.com",
   "total_tests": 21,
@@ -10,11 +10,11 @@
       "/health": {
         "success": false,
         "statusCode": 502,
-        "responseTime": 1760123551529,
+        "responseTime": 1760123644912,
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
         "headers": {
           "server": "nginx/1.24.0 (Ubuntu)",
-          "date": "Fri, 10 Oct 2025 19:12:31 GMT",
+          "date": "Fri, 10 Oct 2025 19:14:04 GMT",
           "content-type": "text/html",
           "content-length": "166",
           "connection": "keep-alive"
@@ -23,11 +23,11 @@
       "/mcp/mcp/health": {
         "success": false,
         "statusCode": 502,
-        "responseTime": 1760123551549,
+        "responseTime": 1760123644933,
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
         "headers": {
           "server": "nginx/1.24.0 (Ubuntu)",
-          "date": "Fri, 10 Oct 2025 19:12:31 GMT",
+          "date": "Fri, 10 Oct 2025 19:14:04 GMT",
           "content-type": "text/html",
           "content-length": "166",
           "connection": "keep-alive"
@@ -36,11 +36,11 @@
       "/mcp/enhanced/health": {
         "success": false,
         "statusCode": 502,
-        "responseTime": 1760123551571,
+        "responseTime": 1760123644953,
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
         "headers": {
           "server": "nginx/1.24.0 (Ubuntu)",
-          "date": "Fri, 10 Oct 2025 19:12:31 GMT",
+          "date": "Fri, 10 Oct 2025 19:14:04 GMT",
           "content-type": "text/html",
           "content-length": "166",
           "connection": "keep-alive"
@@ -54,7 +54,7 @@
         "method": "GET",
         "description": "Simple MCP Health",
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
-        "responseTime": 1760123551593
+        "responseTime": 1760123644974
       },
       "/mcp/enhanced/health": {
         "success": false,
@@ -62,7 +62,7 @@
         "method": "GET",
         "description": "Enhanced MCP Health",
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
-        "responseTime": 1760123551613
+        "responseTime": 1760123644994
       },
       "/mcp/mcp/tools": {
         "success": false,
@@ -70,7 +70,7 @@
         "method": "GET",
         "description": "List MCP Tools",
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
-        "responseTime": 1760123551634
+        "responseTime": 1760123645015
       },
       "/mcp/enhanced/tools": {
         "success": false,
@@ -78,7 +78,7 @@
         "method": "GET",
         "description": "List Enhanced Tools",
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
-        "responseTime": 1760123551654
+        "responseTime": 1760123645035
       },
       "/mcp/enhanced/workflows": {
         "success": false,
@@ -86,7 +86,7 @@
         "method": "GET",
         "description": "List Workflows",
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
-        "responseTime": 1760123551674
+        "responseTime": 1760123645056
       },
       "/mcp/enhanced/stats": {
         "success": false,
@@ -94,7 +94,7 @@
         "method": "GET",
         "description": "Get Statistics",
         "data": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx/1.24.0 (Ubuntu)</center>\r\n</body>\r\n</html>\r\n",
-        "responseTime": 1760123551695
+        "responseTime": 1760123645076
       }
     },
     "tools": {
