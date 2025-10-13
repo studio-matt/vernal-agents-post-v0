@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any
 from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from datetime import datetime
 
 try:
     from models import Base, Agent, Task
@@ -184,6 +186,40 @@ except Exception as e:
     logger.error(f"Failed to initialize DatabaseManager: {e}")
     raise
 
+# Additional models that were missing
+class Campaign(Base):
+    """Campaign model for content campaigns"""
+    __tablename__ = "campaigns"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, index=True)
+    description = Column(Text)
+    status = Column(String(50), default="draft")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    
+class RawData(Base):
+    """Raw data model for storing unprocessed content"""
+    __tablename__ = "raw_data"
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(Text)
+    source = Column(String(255))
+    platform = Column(String(100))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"))
+    
+class MachineContent(Base):
+    """Machine-generated content model"""
+    __tablename__ = "machine_content"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(500))
+    content = Column(Text)
+    platform = Column(String(100))
+    status = Column(String(50), default="generated")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    campaign_id = Column(Integer, ForeignKey("campaigns.id"))
+    raw_data_id = Column(Integer, ForeignKey("raw_data.id"))
+
 DatabaseManager1 = DatabaseManager
-__all__ = ["engine", "SessionLocal", "Base", "DatabaseManager", "DatabaseManager1", "Agent", "Task", "db_manager"]
+__all__ = ["engine", "SessionLocal", "Base", "DatabaseManager", "DatabaseManager1", "Agent", "Task", "Campaign", "RawData", "MachineContent", "db_manager"]
 logger.info("Database module loaded")
