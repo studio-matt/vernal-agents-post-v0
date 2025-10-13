@@ -97,6 +97,12 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# Campaigns endpoint
+@app.get("/campaigns")
+async def get_campaigns():
+    logger.info("Campaigns endpoint requested")
+    return {"campaigns": [], "message": "Campaigns endpoint working", "version": "2.0.0"}
+
 # Debug endpoint to show all routes
 @app.get("/debug/routes")
 async def debug_routes():
