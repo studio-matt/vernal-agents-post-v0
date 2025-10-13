@@ -45,6 +45,10 @@ except Exception as e:
     db_manager = MockDBManager()
     logger.warning("Using mock database manager")
 
+def get_agent_data(agent_name: str, default_role: str, default_goal: str, default_backstory: str) -> Tuple[str, str, str]:
+    """Get agent data with comprehensive error handling (alias for safe_get_agent_data)"""
+    return safe_get_agent_data(agent_name, default_role, default_goal, default_backstory)
+
 def safe_get_agent_data(agent_name: str, default_role: str, default_goal: str, default_backstory: str) -> Tuple[str, str, str]:
     """Safely get agent data with comprehensive error handling"""
     try:
