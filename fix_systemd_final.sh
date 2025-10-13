@@ -1,9 +1,12 @@
 #!/bin/bash
-# Final fix for systemd service configuration
+# Final fix for systemd service - force correct configuration
 
 echo "Fixing systemd service configuration..."
 
-# Update the service file with the correct configuration
+# Stop the service
+sudo systemctl stop vernal-agents
+
+# Create the correct service file
 sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'SERVICE_EOF'
 [Unit]
 Description=Vernal Agents Backend
@@ -22,17 +25,13 @@ RestartSec=10
 WantedBy=multi-user.target
 SERVICE_EOF
 
-# Reload systemd and restart the service
+# Reload systemd and start service
 sudo systemctl daemon-reload
-sudo systemctl restart vernal-agents
+sudo systemctl start vernal-agents
 
-echo "✅ Fixed systemd service configuration"
-echo "✅ Service should now use correct directory and Python interpreter"
+echo "✅ Systemd service fixed and started"
 
 # Wait and test
-sleep 5
-echo "Checking service status..."
-sudo systemctl status vernal-agents --no-pager
-
+sleep 15
 echo "Testing campaigns endpoint..."
 curl http://localhost:8000/campaigns
