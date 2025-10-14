@@ -30,6 +30,13 @@
 - **ExecStart:** `/home/ubuntu/vernal-agents-post-v0/venv/bin/python main.py`
 - **Database:** Connected and working (MySQL @ 50.6.198.220:3306)
 - **Status:** Backend running, database connected, some methods missing
+- **GitHub Actions Deployment:**
+  - **Workflow:** `.github/workflows/agents-deploy-workflow.yml`
+  - **Strategy:** Direct SSH deployment (pulls code, restarts service)
+  - **GitHub Secrets Required:**
+    - `EC2_HOST` = `18.235.104.132`
+    - `EC2_USER` = `ubuntu`
+    - `EC2_PRIVATE_KEY` = SSH private key for backend server
 - **Known Issues:** 
   - Missing `get_all_campaigns` method in DatabaseManager
   - Missing auth endpoints (`/auth/signup`, `/auth/login`)
