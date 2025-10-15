@@ -60,18 +60,18 @@ jobs:
           sudo systemctl stop vernal-agents || true
           
           # Backup current deployment
-          if [ -d "vernal-agents" ]; then
-            mv vernal-agents vernal-agents-backup-$(date +%s)
+          if [ -d "vernal-agents-post-v0" ]; then
+            mv vernal-agents-post-v0 vernal-agents-post-v0-backup-$(date +%s)
           fi
           
           # Create new directory
-          mkdir -p vernal-agents
+          mkdir -p vernal-agents-post-v0
           
           # Extract new deployment
-          tar -xzf agents-deployment.tar.gz -C vernal-agents/
+          tar -xzf agents-deployment.tar.gz -C vernal-agents-post-v0/
           
           # Install Python dependencies
-          cd vernal-agents
+          cd vernal-agents-post-v0
           pip3 install -r requirements.txt
           
           # Create systemd service
@@ -83,11 +83,11 @@ jobs:
           [Service]
           Type=simple
           User=ubuntu
-          WorkingDirectory=/home/ubuntu/vernal-agents
-          ExecStart=/usr/bin/python3 main.py
+          WorkingDirectory=/home/ubuntu/vernal-agents-post-v0
+          ExecStart=/usr/bin/python3 /home/ubuntu/vernal-agents-post-v0/main.py
           Restart=always
           RestartSec=10
-          Environment=PYTHONPATH=/home/ubuntu/vernal-agents
+          Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
           
           [Install]
           WantedBy=multi-user.target
