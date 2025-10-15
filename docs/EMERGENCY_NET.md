@@ -47,7 +47,13 @@
 
 ## 🚨 SINGLE SOURCE OF TRUTH - USE THESE EXACT COMMANDS 🚨
 ```bash
-# THE ONLY systemd service configuration that works:
+# FIRST: Create virtual environment and install dependencies
+cd /home/ubuntu/vernal-agents-post-v0
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# THEN: THE ONLY systemd service configuration that works:
 sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'EOF'
 [Unit]
 Description=Vernal Agents Backend
@@ -69,6 +75,22 @@ EOF
 # Apply and start
 sudo systemctl daemon-reload
 sudo systemctl restart vernal-agents
+```
+
+## 🧹 CLEANUP COMMANDS - USE WHEN PORT 8000 IS BLOCKED
+```bash
+# Kill ALL competing processes on port 8000
+sudo pkill -f "python.*main.py"
+sudo pkill -f "uvicorn"
+sudo kill -9 $(sudo lsof -t -i:8000) 2>/dev/null || true
+
+# Verify port 8000 is free
+sudo lsof -i :8000
+
+# Start ONLY the systemd service
+sudo systemctl start vernal-agents
+sudo systemctl status vernal-agents
+curl http://localhost:8000/health
 ```
 
 ## Quick Recovery Commands
