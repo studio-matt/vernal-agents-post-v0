@@ -34,7 +34,6 @@ export const Service = async (
 
   try {
     const headers: Record<string, string> = {
-      "ngrok-skip-browser-warning": "true",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }
 

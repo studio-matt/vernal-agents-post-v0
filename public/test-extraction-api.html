@@ -156,7 +156,6 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'ngrok-skip-browser-warning': 'true',
                     },
                     body: JSON.stringify(campaign)
                 });
@@ -182,7 +181,6 @@
                     try {
                         const statusResponse = await fetch(`https://themachine.vernalcontentum.com/analyze/status/${taskId}`, {
                             headers: {
-                                'ngrok-skip-browser-warning': 'true',
                             }
                         });
                         
@@ -319,7 +317,6 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'ngrok-skip-browser-warning': 'true',
                     },
                     body: JSON.stringify(payload)
                 });
@@ -345,7 +342,6 @@
                     try {
                         const statusResponse = await fetch(`https://themachine.vernalcontentum.com/analyze/status/${taskId}`, {
                             headers: {
-                                'ngrok-skip-browser-warning': 'true',
                             }
                         });
                         
