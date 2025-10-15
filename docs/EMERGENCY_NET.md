@@ -6,18 +6,19 @@
 - **Live dir:** `/home/ubuntu/vernal-agents-post-v0`
 - **Repo:** https://github.com/studio-matt/vernal-agents-post-v0.git
 - **DB:** MySQL (remote @ `50.6.198.220:3306`)
-- **Service:** `vernal-agents.service` (systemd) ← **CURRENT WORKING SERVICE**
+- **Service:** `vernal-agents.service` (systemd) ← **ONLY SERVICE - NO OTHERS**
 - **Health:**  
   - Local:  `curl -s http://127.0.0.1:8000/config/test` → `{"detail":"Agent or Task not found"}` (DB connected)
   - Public: `curl -s https://themachine.vernalcontentum.com/config/test` → `{"detail":"Agent or Task not found"}` (DB connected)
 
 ---
 
-## Key Paths
+## ⚠️ CRITICAL CONFIGURATION - NEVER CHANGE THESE ⚠️
 - **Project:** `/home/ubuntu/vernal-agents-post-v0`
 - **Virtualenv:** `/home/ubuntu/vernal-agents-post-v0/venv/`
-- **Systemd unit:** `/etc/systemd/system/vernal-agents.service` ← **CURRENT WORKING**
-  - Logs: `sudo journalctl -u vernal-agents.service -n 120 --no-pager`
+- **Systemd unit:** `/etc/systemd/system/vernal-agents.service` ← **ONLY SERVICE**
+- **ExecStart:** `/home/ubuntu/vernal-agents-post-v0/venv/bin/python main.py` ← **MUST USE VENV**
+- **WorkingDirectory:** `/home/ubuntu/vernal-agents-post-v0` ← **MUST BE THIS PATH**
 - **nginx site:** `/etc/nginx/sites-enabled/themachine`  
   - Proxies → `http://127.0.0.1:8000`
   - TLS → `/etc/letsencrypt/live/themachine.vernalcontentum.com/`
@@ -43,6 +44,32 @@
   - `db_manager.create_tables()` commented out (method doesn't exist)
 
 ---
+
+## 🚨 SINGLE SOURCE OF TRUTH - USE THESE EXACT COMMANDS 🚨
+```bash
+# THE ONLY systemd service configuration that works:
+sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'EOF'
+[Unit]
+Description=Vernal Agents Backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/vernal-agents-post-v0
+ExecStart=/home/ubuntu/vernal-agents-post-v0/venv/bin/python main.py
+Restart=always
+RestartSec=10
+Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Apply and start
+sudo systemctl daemon-reload
+sudo systemctl restart vernal-agents
+```
 
 ## Quick Recovery Commands
 ```bash
