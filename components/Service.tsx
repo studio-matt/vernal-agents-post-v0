@@ -1819,3 +1819,4 @@ export const getAnalysisStatus = async (taskId: string): Promise<any> => {
     }
   }
 }
+// Force rebuild - ngrok headers removed Wed Oct 15 04:50:29 PM UTC 2025
