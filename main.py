@@ -26,7 +26,7 @@ app.add_middleware(
     allow_origins=["https://machine.vernalcontentum.com", "http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["content-type", "authorization", "accept", "ngrok-skip-browser-warning"],
     expose_headers=["*"],
 )
 
@@ -87,7 +87,7 @@ async def version():
             "version": "2.0.0",
             "status": "debug",
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v14"  # Added manual CORS handler
+            "deployment": "bulletproof-v15"  # Fixed CORS with explicit headers
         }
     except Exception as e:
         logger.error(f"Error getting version info: {e}")
@@ -99,7 +99,7 @@ async def version():
             "status": "debug",
             "error": str(e),
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v14"  # Added manual CORS handler
+            "deployment": "bulletproof-v15"  # Fixed CORS with explicit headers
         }
 
 
