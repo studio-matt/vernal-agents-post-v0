@@ -14,14 +14,17 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     def __init__(self):
+        port = int(os.getenv("MAIL_PORT", "587"))
+        use_ssl = port == 465  # SSL for port 465, TLS for port 587
+        
         self.mail_config = ConnectionConfig(
             MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
             MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
             MAIL_FROM=os.getenv("MAIL_FROM", "noreply@vernalcontentum.com"),
-            MAIL_PORT=int(os.getenv("MAIL_PORT", "587")),
+            MAIL_PORT=port,
             MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
-            MAIL_STARTTLS=True,
-            MAIL_SSL_TLS=False,
+            MAIL_STARTTLS=not use_ssl,  # TLS for port 587
+            MAIL_SSL_TLS=use_ssl,       # SSL for port 465
             USE_CREDENTIALS=True,
             VALIDATE_CERTS=True
         )
