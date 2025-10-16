@@ -1,6 +1,6 @@
 import os
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 # Configure logging
@@ -29,6 +29,17 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Manual CORS handler for OPTIONS requests
+@app.options("/{path:path}")
+async def options_handler(path: str, response: Response):
+    """Handle OPTIONS requests manually to ensure CORS headers are set"""
+    response.headers["Access-Control-Allow-Origin"] = "https://machine.vernalcontentum.com"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Max-Age"] = "600"
+    return response
 
 # Health endpoint
 @app.get("/health")
@@ -76,7 +87,7 @@ async def version():
             "version": "2.0.0",
             "status": "debug",
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v13"  # Fixed CORS allow_headers wildcard
+            "deployment": "bulletproof-v14"  # Added manual CORS handler
         }
     except Exception as e:
         logger.error(f"Error getting version info: {e}")
@@ -88,7 +99,7 @@ async def version():
             "status": "debug",
             "error": str(e),
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v13"  # Fixed CORS allow_headers wildcard
+            "deployment": "bulletproof-v14"  # Added manual CORS handler
         }
 
 
