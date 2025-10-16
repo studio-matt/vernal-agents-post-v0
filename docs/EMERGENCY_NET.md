@@ -46,9 +46,45 @@
   - Auth endpoints (`/auth/signup`, `/auth/login`) - **WORKING** with CORS fixes
   - `db_manager.create_tables()` commented out (method doesn't exist)
 - **CORS Configuration:**
+  - **CRITICAL:** nginx must NOT handle CORS - let FastAPI handle it
+  - **nginx config:** `/etc/nginx/sites-enabled/themachine` - NO `add_header` CORS directives
+  - **FastAPI handles:** All CORS headers including `Access-Control-Allow-Headers`
   - **Fixed:** `content-type` header issue with explicit `allow_headers` list
   - **Manual handler:** Added `@app.options("/{path:path}")` as backup
   - **Headers allowed:** `["content-type", "authorization", "accept", "ngrok-skip-browser-warning"]`
+
+---
+
+## 🚨 CORS TROUBLESHOOTING - CRITICAL LESSONS LEARNED 🚨
+
+### The Multi-Day CORS Nightmare (RESOLVED)
+**Problem:** `Request header field content-type is not allowed by Access-Control-Allow-Headers in preflight response`
+
+**Root Cause:** nginx was intercepting OPTIONS requests and returning incomplete CORS headers, preventing FastAPI from handling CORS properly.
+
+**Solution:** 
+1. **Remove ALL nginx CORS handling** - no `add_header` directives for CORS
+2. **Let FastAPI handle ALL CORS** - proxy everything including OPTIONS requests
+3. **nginx config must be clean proxy only:**
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # NO CORS HEADERS HERE - let FastAPI handle it!
+}
+```
+
+**Test CORS fix:**
+```bash
+curl -i -X OPTIONS https://themachine.vernalcontentum.com/auth/signup
+# Should return FastAPI CORS headers including Access-Control-Allow-Headers
+```
+
+**NEVER AGAIN:** Don't let nginx handle CORS - always proxy to FastAPI!
 
 ---
 
