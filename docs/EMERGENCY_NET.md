@@ -432,8 +432,8 @@ sudo systemctl restart vernal-agents
 sudo journalctl -u vernal-agents -n 20 --no-pager
 
 # Test database connectivity
-curl http://localhost:8000/config/test
-curl https://themachine.vernalcontentum.com/config/test
+curl http://localhost:8000/mcp/enhanced/health
+curl https://themachine.vernalcontentum.com/mcp/enhanced/health
 
 # Check deployment history
 tail -10 ~/vernal_agents_deploy.log
