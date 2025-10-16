@@ -167,10 +167,12 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         logger.error(f"Signup error: {str(e)}")
+        import traceback
+        logger.error(f"Signup traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Signup failed. Please try again."
+            detail=f"Signup failed: {str(e)}"
         )
 
 @auth_router.post("/login", response_model=LoginResponse)
