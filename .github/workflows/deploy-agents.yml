@@ -104,6 +104,12 @@ jobs:
           echo "⏳ Waiting for service startup..."
           sleep 5
 
+          # Check service status and logs
+          echo "🔍 Checking service status..."
+          sudo systemctl status vernal-agents --no-pager
+          echo "🔍 Checking service logs..."
+          sudo journalctl -u vernal-agents -n 20 --no-pager
+
           # 8. Automated post-deploy validation (MANDATORY)
           echo "✅ Running post-deploy validation..."
 
