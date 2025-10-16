@@ -488,3 +488,18 @@ async def debug_database():
             "message": f"Database connection failed: {str(e)}",
             "error_type": type(e).__name__
         }
+
+@auth_router.get("/debug/env")
+async def debug_environment():
+    """Debug environment variables"""
+    import os
+    return {
+        "MAIL_USERNAME": os.getenv("MAIL_USERNAME", "NOT_SET"),
+        "MAIL_PASSWORD": "***" if os.getenv("MAIL_PASSWORD") else "NOT_SET",
+        "MAIL_FROM": os.getenv("MAIL_FROM", "NOT_SET"),
+        "MAIL_SERVER": os.getenv("MAIL_SERVER", "NOT_SET"),
+        "MAIL_PORT": os.getenv("MAIL_PORT", "NOT_SET"),
+        "DB_HOST": os.getenv("DB_HOST", "NOT_SET"),
+        "DB_USER": os.getenv("DB_USER", "NOT_SET"),
+        "DB_NAME": os.getenv("DB_NAME", "NOT_SET")
+    }
