@@ -156,15 +156,23 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to include simple MCP router: {str(e)}")
 
-# Authentication router (ultra minimal version for now)
+# Authentication router (real database version - debugging)
 try:
-    from auth_ultra_minimal import auth_router
+    from auth_api import auth_router
     app.include_router(auth_router)
-    logger.info("✅ Ultra minimal authentication router included successfully")
+    logger.info("✅ Real database authentication router included successfully")
 except Exception as e:
-    logger.error(f"❌ Failed to include ultra minimal authentication router: {str(e)}")
+    logger.error(f"❌ Failed to include real database authentication router: {str(e)}")
     import traceback
     traceback.print_exc()
+    
+    # Fallback to ultra minimal if database auth fails
+    try:
+        from auth_ultra_minimal import auth_router
+        app.include_router(auth_router)
+        logger.info("✅ Fallback to ultra minimal authentication router")
+    except Exception as e2:
+        logger.error(f"❌ Fallback also failed: {str(e2)}")
 
 # Campaigns endpoint
 @app.get("/campaigns")
