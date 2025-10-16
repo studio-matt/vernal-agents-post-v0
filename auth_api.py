@@ -12,7 +12,9 @@ import logging
 from database import db_manager
 from models import User
 from utils import hash_password, verify_password, create_access_token, verify_token
+from email_service import get_email_service
 from sqlalchemy.orm import Session
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +282,23 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
                 detail="User not found"
             )
         
-        # Mock OTP sending (always succeed)
+        # Generate OTP code
+        otp_code = str(secrets.randbelow(900000) + 100000)  # 6-digit code
+        
+        # Send OTP email
+        email_service = get_email_service()
+        email_sent = await email_service.send_otp_email(
+            email=request.email,
+            otp_code=otp_code,
+            user_name=user.username
+        )
+        
+        if not email_sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send OTP email. Please try again."
+            )
+        
         logger.info(f"OTP sent successfully to: {request.email}")
         
         return {
@@ -312,12 +330,28 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
                 detail="User not found"
             )
         
-        # Mock password reset OTP sending
+        # Generate OTP code
+        otp_code = str(secrets.randbelow(900000) + 100000)  # 6-digit code
+        
+        # Send password reset email
+        email_service = get_email_service()
+        email_sent = await email_service.send_password_reset_email(
+            email=request.email,
+            otp_code=otp_code,
+            user_name=user.username
+        )
+        
+        if not email_sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send password reset email. Please try again."
+            )
+        
         logger.info(f"Password reset OTP sent successfully to: {request.email}")
         
         return {
             "status": "success",
-            "message": "OTP sent for password reset."
+            "message": "Password reset OTP sent successfully to your email."
         }
         
     except HTTPException:
