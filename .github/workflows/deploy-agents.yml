@@ -16,10 +16,10 @@ jobs:
     - name: Deploy on Agents Server
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.AGENTS_EC2_HOST }}
+        host: ${{ secrets.EC2_HOST }}
         username: ubuntu
-        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
-        passphrase: ${{ secrets.AGENTS_SSH_PASSPHRASE }}
+        key: ${{ secrets.EC2_PRIVATE_KEY }}
+        passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
         script: |
           set -e
           echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
