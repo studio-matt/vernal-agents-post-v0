@@ -95,6 +95,15 @@ curl http://localhost:8000/health
 
 ## 🔒 BULLETPROOF DEPLOYMENT PROCESS
 
+### CRITICAL CODE VALIDATION
+```bash
+# Verify main.py exists and defines FastAPI app
+test -f main.py || { echo "ERROR: main.py not found!"; exit 1; }
+grep -q "app = FastAPI" main.py || { echo "ERROR: main.py must define app = FastAPI()!"; exit 1; }
+grep -q "from fastapi import FastAPI" main.py || { echo "ERROR: main.py must import FastAPI!"; exit 1; }
+echo "✅ main.py validation passed"
+```
+
 ### PRE-DEPLOYMENT VALIDATION CHECKS
 ```bash
 # Verify correct repo and path
@@ -178,6 +187,17 @@ sudo journalctl -u vernal-agents -n 20 --no-pager | tail -10
 
 # Verify no competing processes on port 8000
 sudo lsof -i :8000 | grep -v systemd && echo "WARNING: Non-systemd process on port 8000" || echo "✅ Only systemd on port 8000"
+
+# CRITICAL: If port 8000 is not open, check systemd logs for errors
+if ! sudo lsof -i :8000 >/dev/null 2>&1; then
+    echo "❌ Port 8000 is not listening!"
+    echo "🔍 Checking systemd logs for errors..."
+    sudo journalctl -u vernal-agents -n 50 --no-pager
+    echo "🔍 Verifying main.py defines app = FastAPI()..."
+    grep -q "app = FastAPI" main.py || echo "❌ main.py does not define app = FastAPI()!"
+    echo "🔍 Common causes: code bug, missing dependency, or main.py does not define app = FastAPI()"
+    exit 1
+fi
 ```
 
 ## 🚀 BULLETPROOF DEPLOYMENT SCRIPT (BACKEND)
@@ -420,6 +440,20 @@ tail -10 ~/vernal_agents_deploy.log
 
 # Check current version info
 curl -s http://localhost:8000/version | jq .
+
+# CRITICAL: If backend is not listening, check these:
+echo "🔍 Checking if port 8000 is listening..."
+sudo lsof -i :8000 || echo "❌ Nothing listening on port 8000"
+
+echo "🔍 Checking main.py defines FastAPI app..."
+grep -q "app = FastAPI" main.py && echo "✅ main.py defines app = FastAPI()" || echo "❌ main.py missing app = FastAPI()"
+
+echo "🔍 Common causes if backend not listening:"
+echo "  - Code bug in main.py"
+echo "  - Missing dependency (check pip install -r requirements.txt)"
+echo "  - main.py does not define app = FastAPI()"
+echo "  - Environment variables missing"
+echo "  - Database connection issues"
 ```
 
 ---
