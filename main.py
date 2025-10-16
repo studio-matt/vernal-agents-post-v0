@@ -41,6 +41,17 @@ async def options_handler(path: str, response: Response):
     response.headers["Access-Control-Max-Age"] = "600"
     return response
 
+# Specific handler for auth endpoints
+@app.options("/auth/{path:path}")
+async def auth_options_handler(path: str, response: Response):
+    """Handle OPTIONS requests for auth endpoints specifically"""
+    response.headers["Access-Control-Allow-Origin"] = "https://machine.vernalcontentum.com"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Max-Age"] = "600"
+    return response
+
 # Health endpoint
 @app.get("/health")
 async def health_check():
@@ -87,7 +98,7 @@ async def version():
             "version": "2.0.0",
             "status": "debug",
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v20"  # Removed all process killing to avoid SSH termination
+            "deployment": "bulletproof-v21"  # Added specific auth CORS handler
         }
     except Exception as e:
         logger.error(f"Error getting version info: {e}")
@@ -99,7 +110,7 @@ async def version():
             "status": "debug",
             "error": str(e),
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v20"  # Removed all process killing to avoid SSH termination
+            "deployment": "bulletproof-v21"  # Added specific auth CORS handler
         }
 
 
