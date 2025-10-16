@@ -102,7 +102,7 @@ jobs:
 
           # 7. Wait for startup
           echo "⏳ Waiting for service startup..."
-          sleep 5
+          sleep 10
 
           # Check service status and logs
           echo "🔍 Checking service status..."
@@ -113,9 +113,22 @@ jobs:
           # 8. Automated post-deploy validation (MANDATORY)
           echo "✅ Running post-deploy validation..."
 
-          # Health check
+          # Health check with retry
           echo "🔍 Testing health endpoint..."
-          curl -f http://localhost:8000/health || { echo "❌ Health check failed!"; exit 1; }
+          for i in {1..5}; do
+            echo "Attempt $i/5..."
+            if curl -f http://localhost:8000/health; then
+              echo "✅ Health check passed on attempt $i"
+              break
+            else
+              echo "❌ Health check failed on attempt $i, waiting 3 seconds..."
+              sleep 3
+              if [ $i -eq 5 ]; then
+                echo "❌ Health check failed after 5 attempts!"
+                exit 1
+              fi
+            fi
+          done
           echo "✅ Health check passed"
 
           # Version check
