@@ -25,32 +25,40 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://machine.vernalcontentum.com", "http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["content-type", "authorization", "accept", "ngrok-skip-browser-warning"],
     expose_headers=["*"],
 )
 
 # Manual CORS handler for OPTIONS requests
 @app.options("/{path:path}")
-async def options_handler(path: str, response: Response):
+async def options_handler(path: str):
     """Handle OPTIONS requests manually to ensure CORS headers are set"""
-    response.headers["Access-Control-Allow-Origin"] = "https://machine.vernalcontentum.com"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Max-Age"] = "600"
-    return response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://machine.vernalcontentum.com",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600"
+        }
+    )
 
 # Specific handler for auth endpoints
 @app.options("/auth/{path:path}")
-async def auth_options_handler(path: str, response: Response):
+async def auth_options_handler(path: str):
     """Handle OPTIONS requests for auth endpoints specifically"""
-    response.headers["Access-Control-Allow-Origin"] = "https://machine.vernalcontentum.com"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Max-Age"] = "600"
-    return response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://machine.vernalcontentum.com",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "600"
+        }
+    )
 
 # Health endpoint
 @app.get("/health")
@@ -98,7 +106,7 @@ async def version():
             "version": "2.0.0",
             "status": "debug",
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v21"  # Added specific auth CORS handler
+            "deployment": "bulletproof-v22"  # Fixed CORS with proper Response objects
         }
     except Exception as e:
         logger.error(f"Error getting version info: {e}")
@@ -110,7 +118,7 @@ async def version():
             "status": "debug",
             "error": str(e),
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v21"  # Added specific auth CORS handler
+            "deployment": "bulletproof-v22"  # Fixed CORS with proper Response objects
         }
 
 
