@@ -238,13 +238,8 @@ echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
 echo "🧹 Nuking old code..."
 sudo systemctl stop vernal-agents || true
 
-# Kill specific Python processes before removal (avoid killing SSH session)
-echo "🔪 Killing specific Python processes..."
-sudo pkill -f "uvicorn.*main:app" || true
-sudo pkill -f "python.*main.py" || true
-sudo pkill -f "gunicorn" || true
-# Kill any processes using the venv directory
-sudo fuser -k /home/ubuntu/vernal-agents-post-v0/venv 2>/dev/null || true
+# Let systemd handle process management - don't kill processes manually
+echo "⏳ Allowing systemd to manage processes..."
 sleep 2
 
 # More aggressive cleanup for stubborn files
