@@ -30,6 +30,11 @@ jobs:
           # 1. Nuke old code completely
           echo "🧹 Nuking old code..."
           sudo systemctl stop vernal-agents || true
+          
+          # More aggressive cleanup for stubborn files
+          echo "🧹 Force removing stubborn files..."
+          sudo find /home/ubuntu/vernal-agents-post-v0 -type f -exec rm -f {} + 2>/dev/null || true
+          sudo find /home/ubuntu/vernal-agents-post-v0 -type d -exec rmdir {} + 2>/dev/null || true
           sudo rm -rf /home/ubuntu/vernal-agents-post-v0
 
           # Clean up old backup directories
