@@ -24,9 +24,10 @@ app = FastAPI(title="Vernal Agents API DEBUG", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    expose_headers=["*"],
 )
 
 # Health endpoint
@@ -75,7 +76,7 @@ async def version():
             "version": "2.0.0",
             "status": "debug",
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v11"  # Fixed database test endpoint
+            "deployment": "bulletproof-v12"  # Fixed CORS headers issue
         }
     except Exception as e:
         logger.error(f"Error getting version info: {e}")
@@ -87,7 +88,7 @@ async def version():
             "status": "debug",
             "error": str(e),
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v11"  # Fixed database test endpoint
+            "deployment": "bulletproof-v12"  # Fixed CORS headers issue
         }
 
 
