@@ -8,8 +8,11 @@
 - **DB:** MySQL (remote @ `50.6.198.220:3306`)
 - **Service:** `vernal-agents.service` (systemd) ← **ONLY SERVICE - NO OTHERS**
 - **Health:**  
-  - Local:  `curl -s http://127.0.0.1:8000/config/test` → `{"detail":"Agent or Task not found"}` (DB connected)
-  - Public: `curl -s https://themachine.vernalcontentum.com/config/test` → `{"detail":"Agent or Task not found"}` (DB connected)
+  - Local:  `curl -s http://127.0.0.1:8000/health` → `{"ok":true,"version":"2.0.0","status":"debug"}` (Service running)
+  - Public: `curl -s https://themachine.vernalcontentum.com/health` → `{"ok":true,"version":"2.0.0","status":"debug"}` (Service running)
+- **Database:**  
+  - Local:  `curl -s http://127.0.0.1:8000/mcp/enhanced/health` → Database connectivity test
+  - Public: `curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health` → Database connectivity test
 
 ---
 
@@ -40,8 +43,12 @@
     - `EC2_PRIVATE_KEY` = SSH private key for backend server
 - **Known Issues:** 
   - Missing `get_all_campaigns` method in DatabaseManager
-  - Missing auth endpoints (`/auth/signup`, `/auth/login`)
+  - Auth endpoints (`/auth/signup`, `/auth/login`) - **WORKING** with CORS fixes
   - `db_manager.create_tables()` commented out (method doesn't exist)
+- **CORS Configuration:**
+  - **Fixed:** `content-type` header issue with explicit `allow_headers` list
+  - **Manual handler:** Added `@app.options("/{path:path}")` as backup
+  - **Headers allowed:** `["content-type", "authorization", "accept", "ngrok-skip-browser-warning"]`
 
 ---
 
@@ -230,12 +237,17 @@ echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
 # 1. Nuke old code completely
 echo "🧹 Nuking old code..."
 sudo systemctl stop vernal-agents || true
-rm -rf /home/ubuntu/vernal-agents-post-v0
+
+# More aggressive cleanup for stubborn files
+echo "🧹 Force removing stubborn files..."
+sudo find /home/ubuntu/vernal-agents-post-v0 -type f -exec rm -f {} + 2>/dev/null || true
+sudo find /home/ubuntu/vernal-agents-post-v0 -type d -exec rmdir {} + 2>/dev/null || true
+sudo rm -rf /home/ubuntu/vernal-agents-post-v0
 
 # Clean up old backup directories
 echo "🧹 Cleaning up old backup directories..."
-find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec rm -rf {} + 2>/dev/null || true
-find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec rm -rf {} + 2>/dev/null || true
+find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
+find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
 echo "✅ Backup directories cleaned up"
 
 # 2. Clone fresh from GitHub
@@ -320,7 +332,7 @@ echo "✅ Version check passed"
 
 # Database test
 echo "🔍 Testing database connectivity..."
-curl -f http://localhost:8000/config/test || { echo "❌ Database test failed!"; exit 1; }
+curl -f http://localhost:8000/mcp/enhanced/health || { echo "❌ Database test failed!"; exit 1; }
 echo "✅ Database test passed"
 
 # Systemd status
@@ -337,6 +349,7 @@ echo "✅ Port 8000 is listening"
 echo "🔍 Testing external access..."
 curl -f https://themachine.vernalcontentum.com/health || { echo "❌ External health check failed!"; exit 1; }
 curl -f https://themachine.vernalcontentum.com/version || { echo "❌ External version check failed!"; exit 1; }
+curl -f https://themachine.vernalcontentum.com/mcp/enhanced/health || { echo "❌ External database test failed!"; exit 1; }
 echo "✅ External access working"
 
 # 9. Log successful deployment
@@ -454,6 +467,13 @@ echo "  - Missing dependency (check pip install -r requirements.txt)"
 echo "  - main.py does not define app = FastAPI()"
 echo "  - Environment variables missing"
 echo "  - Database connection issues"
+
+# CORS troubleshooting
+echo "🔍 CORS troubleshooting:"
+echo "  - Check if content-type header is allowed in CORS config"
+echo "  - Verify allow_headers includes 'content-type' explicitly"
+echo "  - Test preflight OPTIONS request manually"
+echo "  - Check browser console for CORS errors"
 ```
 
 ---
