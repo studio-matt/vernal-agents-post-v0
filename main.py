@@ -26,7 +26,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*", "ngrok-skip-browser-warning"],
+    allow_headers=["*"],
 )
 
 # Health endpoint
@@ -47,11 +47,49 @@ async def test_health():
     logger.info("Test health endpoint requested - DEBUG VERSION")
     return {"status": "test_ok", "message": "Test endpoint is working - DEBUG VERSION", "version": "2.0.0"}
 
-# Version endpoint
+# Version endpoint with git commit and build time
 @app.get("/version")
 async def version():
-    logger.info("Version endpoint requested")
-    return {"version": "2.0.0", "status": "debug", "message": "This is the debug version"}
+    import subprocess
+    import datetime
+    import os
+
+    try:
+        # Get git commit hash (more robust)
+        result = subprocess.run(['git', 'rev-parse', 'HEAD'],
+                              capture_output=True, text=True, cwd=os.getcwd())
+        commit = result.stdout.strip() if result.returncode == 0 else "unknown"
+
+        # Get git branch
+        result = subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                              capture_output=True, text=True, cwd=os.getcwd())
+        branch = result.stdout.strip() if result.returncode == 0 else "unknown"
+
+        # Get build time (when this process started)
+        build_time = datetime.datetime.utcnow().isoformat()
+
+        return {
+            "commit": commit,
+            "branch": branch,
+            "build_time": build_time,
+            "version": "2.0.0",
+            "status": "debug",
+            "working_dir": os.getcwd(),
+            "deployment": "bulletproof"  # Added to test deployment
+        }
+    except Exception as e:
+        logger.error(f"Error getting version info: {e}")
+        return {
+            "commit": "unknown",
+            "branch": "unknown",
+            "build_time": datetime.datetime.utcnow().isoformat(),
+            "version": "2.0.0",
+            "status": "debug",
+            "error": str(e),
+            "working_dir": os.getcwd(),
+            "deployment": "bulletproof"  # Added to test deployment
+        }
+
 
 # Simple test router
 from fastapi import APIRouter

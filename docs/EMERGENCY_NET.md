@@ -17,7 +17,7 @@
 - **Project:** `/home/ubuntu/vernal-agents-post-v0`
 - **Virtualenv:** `/home/ubuntu/vernal-agents-post-v0/venv/`
 - **Systemd unit:** `/etc/systemd/system/vernal-agents.service` ← **ONLY SERVICE**
-- **ExecStart:** `/home/ubuntu/vernal-agents-post-v0/venv/bin/python main.py` ← **MUST USE VENV**
+- **ExecStart:** `/home/ubuntu/vernal-agents-post-v0/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000` ← **MUST USE VENV + UVICORN**
 - **WorkingDirectory:** `/home/ubuntu/vernal-agents-post-v0` ← **MUST BE THIS PATH**
 - **nginx site:** `/etc/nginx/sites-enabled/themachine`  
   - Proxies → `http://127.0.0.1:8000`
@@ -28,7 +28,7 @@
 
 ## Current Working Configuration (MCP Migration State)
 - **Service:** `vernal-agents.service` (NOT `fastapi.service`)
-- **ExecStart:** `/home/ubuntu/vernal-agents-post-v0/venv/bin/python main.py`
+- **ExecStart:** `/home/ubuntu/vernal-agents-post-v0/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000`
 - **Database:** Connected and working (MySQL @ 50.6.198.220:3306)
 - **Status:** Backend running, database connected, some methods missing
 - **GitHub Actions Deployment:**
@@ -63,7 +63,7 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/vernal-agents-post-v0
-ExecStart=/home/ubuntu/vernal-agents-post-v0/venv/bin/python main.py
+ExecStart=/home/ubuntu/vernal-agents-post-v0/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
 Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
@@ -93,6 +93,313 @@ sudo systemctl status vernal-agents
 curl http://localhost:8000/health
 ```
 
+## 🔒 BULLETPROOF DEPLOYMENT PROCESS
+
+### PRE-DEPLOYMENT VALIDATION CHECKS
+```bash
+# Verify correct repo and path
+if [ "$PWD" != "/home/ubuntu/vernal-agents-post-v0" ]; then
+    echo "ERROR: Wrong working directory! Expected: /home/ubuntu/vernal-agents-post-v0"
+    exit 1
+fi
+
+# Check git status
+git remote -v | grep "vernal-agents-post-v0"
+git status --porcelain | wc -l | xargs -I {} test {} -eq 0 || echo "WARNING: Uncommitted changes"
+
+# Verify Python environment
+source venv/bin/activate
+python --version | grep "3.12" || echo "WARNING: Wrong Python version"
+
+# Check for conflicting processes
+sudo lsof -i :8000 && echo "WARNING: Port 8000 in use" || echo "Port 8000 free"
+
+# Verify systemd service exists
+sudo systemctl list-unit-files | grep vernal-agents || echo "ERROR: Service not found"
+
+# Verify .env file exists and has required keys
+test -f .env || { echo "ERROR: .env file not found!"; exit 1; }
+grep DB_HOST .env || echo "WARNING: DB_HOST not set in .env"
+grep OPENAI_API_KEY .env || echo "WARNING: OPENAI_API_KEY not set in .env"
+
+# Check critical environment variables
+echo "🔍 Checking critical environment variables..."
+test -n "$DB_HOST" && echo "✅ DB_HOST set" || echo "WARNING: DB_HOST not set"
+test -n "$DB_USER" && echo "✅ DB_USER set" || echo "WARNING: DB_USER not set"
+test -n "$DB_PASSWORD" && echo "✅ DB_PASSWORD set" || echo "WARNING: DB_PASSWORD not set"
+test -n "$DB_NAME" && echo "✅ DB_NAME set" || echo "WARNING: DB_NAME not set"
+test -n "$OPENAI_API_KEY" && echo "✅ OPENAI_API_KEY set" || echo "WARNING: OPENAI_API_KEY not set"
+
+# Disable any competing services
+sudo systemctl disable fastapi.service 2>/dev/null || true
+sudo systemctl stop fastapi.service 2>/dev/null || true
+```
+
+### AUTOMATIC KILL & CLEANUP (BACKEND ONLY)
+```bash
+# Kill ALL backend processes before deployment
+sudo pkill -f "python.*main.py"
+sudo pkill -f "uvicorn"
+sudo kill -9 $(sudo lsof -t -i:8000) 2>/dev/null || true
+
+# Verify port 8000 is completely free
+sudo lsof -i :8000 || echo "Port 8000 is free"
+
+# Stop systemd service
+sudo systemctl stop vernal-agents
+```
+
+### POST-DEPLOYMENT VALIDATION
+```bash
+# Start service
+sudo systemctl start vernal-agents
+sudo systemctl status vernal-agents
+
+# Health checks (MANDATORY - deployment not complete until these pass)
+curl -f http://localhost:8000/health || { echo "ERROR: Health check failed!"; exit 1; }
+
+# Test version endpoint and validate response
+echo "🔍 Testing version endpoint..."
+VERSION_RESPONSE=$(curl -s http://localhost:8000/version)
+echo "$VERSION_RESPONSE" | jq . || { echo "ERROR: Version endpoint returned invalid JSON!"; exit 1; }
+
+# Validate version endpoint contains required fields
+echo "$VERSION_RESPONSE" | jq -e '.commit' || { echo "ERROR: Version endpoint missing commit!"; exit 1; }
+echo "$VERSION_RESPONSE" | jq -e '.build_time' || { echo "ERROR: Version endpoint missing build_time!"; exit 1; }
+echo "$VERSION_RESPONSE" | jq -e '.version' || { echo "ERROR: Version endpoint missing version!"; exit 1; }
+
+# Verify external access
+curl -f https://themachine.vernalcontentum.com/health || { echo "ERROR: External health check failed!"; exit 1; }
+curl -f https://themachine.vernalcontentum.com/version || { echo "ERROR: External version check failed!"; exit 1; }
+
+# Log monitoring
+echo "📋 Recent logs:"
+sudo journalctl -u vernal-agents -n 20 --no-pager | tail -10
+
+# Verify no competing processes on port 8000
+sudo lsof -i :8000 | grep -v systemd && echo "WARNING: Non-systemd process on port 8000" || echo "✅ Only systemd on port 8000"
+```
+
+## 🚀 BULLETPROOF DEPLOYMENT SCRIPT (BACKEND)
+
+**Script Location:** `scripts/bulletproof_deploy_backend.sh` (in repository)
+
+**Usage:**
+```bash
+# Download and run the bulletproof deployment
+curl -s https://raw.githubusercontent.com/studio-matt/vernal-agents-post-v0/main/scripts/bulletproof_deploy_backend.sh | bash
+```
+
+**Or run locally:**
+```bash
+cd /home/ubuntu
+wget https://raw.githubusercontent.com/studio-matt/vernal-agents-post-v0/main/scripts/bulletproof_deploy_backend.sh
+chmod +x bulletproof_deploy_backend.sh
+./bulletproof_deploy_backend.sh
+```
+
+**Script Contents:**
+```bash
+#!/bin/bash
+# bulletproof_deploy_backend.sh - Complete nuke-and-replace deployment
+
+set -e
+
+echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
+
+# 1. Nuke old code completely
+echo "🧹 Nuking old code..."
+sudo systemctl stop vernal-agents || true
+rm -rf /home/ubuntu/vernal-agents-post-v0
+
+# Clean up old backup directories
+echo "🧹 Cleaning up old backup directories..."
+find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec rm -rf {} + 2>/dev/null || true
+find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec rm -rf {} + 2>/dev/null || true
+echo "✅ Backup directories cleaned up"
+
+# 2. Clone fresh from GitHub
+echo "📦 Cloning fresh from GitHub..."
+git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
+cd /home/ubuntu/vernal-agents-post-v0
+
+# 3. Setup venv from scratch
+echo "🐍 Setting up virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 4. Copy and validate environment variables
+echo "🔐 Setting up environment..."
+sudo cp /etc/environment .env
+sudo chown ubuntu:ubuntu .env
+chmod 600 .env
+
+# Validate critical environment variables
+echo "🔍 Validating environment variables..."
+REQUIRED_VARS=("DB_HOST" "DB_USER" "DB_PASSWORD" "DB_NAME" "OPENAI_API_KEY")
+MISSING_VARS=()
+
+for var in "${REQUIRED_VARS[@]}"; do
+    if ! grep -q "^${var}=" .env; then
+        MISSING_VARS+=("$var")
+    fi
+done
+
+if [ ${#MISSING_VARS[@]} -ne 0 ]; then
+    echo "❌ Missing required environment variables:"
+    printf '%s\n' "${MISSING_VARS[@]}"
+    echo "Please update /etc/environment or provide a complete .env file"
+    exit 1
+fi
+
+echo "✅ All required environment variables present"
+
+# 5. Overwrite systemd unit (always)
+echo "⚙️ Configuring systemd service..."
+sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'SERVICE_EOF'
+[Unit]
+Description=Vernal Agents Backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/vernal-agents-post-v0
+ExecStart=/home/ubuntu/vernal-agents-post-v0/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+# 6. Reload and start service
+echo "🔄 Starting service..."
+sudo systemctl daemon-reload
+sudo systemctl start vernal-agents
+
+# 7. Wait for startup
+echo "⏳ Waiting for service startup..."
+sleep 5
+
+# 8. Automated post-deploy validation (MANDATORY)
+echo "✅ Running post-deploy validation..."
+
+# Health check
+echo "🔍 Testing health endpoint..."
+curl -f http://localhost:8000/health || { echo "❌ Health check failed!"; exit 1; }
+echo "✅ Health check passed"
+
+# Version check
+echo "🔍 Testing version endpoint..."
+VERSION_RESPONSE=$(curl -s http://localhost:8000/version)
+echo "$VERSION_RESPONSE" | jq . || { echo "❌ Version endpoint returned invalid JSON!"; exit 1; }
+echo "✅ Version check passed"
+
+# Database test
+echo "🔍 Testing database connectivity..."
+curl -f http://localhost:8000/config/test || { echo "❌ Database test failed!"; exit 1; }
+echo "✅ Database test passed"
+
+# Systemd status
+echo "🔍 Checking systemd status..."
+sudo systemctl status vernal-agents --no-pager || { echo "❌ Service not running!"; exit 1; }
+echo "✅ Service is running"
+
+# Port check
+echo "🔍 Checking port 8000..."
+sudo lsof -i :8000 || { echo "❌ Nothing listening on port 8000!"; exit 1; }
+echo "✅ Port 8000 is listening"
+
+# External access test
+echo "🔍 Testing external access..."
+curl -f https://themachine.vernalcontentum.com/health || { echo "❌ External health check failed!"; exit 1; }
+curl -f https://themachine.vernalcontentum.com/version || { echo "❌ External version check failed!"; exit 1; }
+echo "✅ External access working"
+
+# 9. Log successful deployment
+COMMIT_HASH=$(git rev-parse HEAD)
+PYTHON_VERSION=$(python --version)
+echo "$(date) - BULLETPROOF Backend deployed successfully, commit: $COMMIT_HASH, Python: $PYTHON_VERSION" >> ~/vernal_agents_deploy.log
+
+echo "🎉 BULLETPROOF BACKEND DEPLOYMENT SUCCESSFUL!"
+echo "📝 Deployment logged to ~/vernal_agents_deploy.log"
+```
+
+## 🚀 AUTOMATED RECOVERY SCRIPT (BACKEND) - LEGACY
+```bash
+#!/bin/bash
+# deploy_backend.sh - Bulletproof backend deployment
+
+set -e
+
+echo "🔒 BACKEND DEPLOYMENT STARTING..."
+
+# Pre-deployment validation
+echo "📋 Running pre-deployment checks..."
+if [ "$PWD" != "/home/ubuntu/vernal-agents-post-v0" ]; then
+    echo "ERROR: Wrong working directory! Expected: /home/ubuntu/vernal-agents-post-v0"
+    exit 1
+fi
+
+git remote -v | grep "vernal-agents-post-v0" || { echo "ERROR: Wrong repo!"; exit 1; }
+source venv/bin/activate
+python --version | grep "3.12" || { echo "ERROR: Wrong Python version!"; exit 1; }
+
+# Kill all competing processes
+echo "🧹 Cleaning up competing processes..."
+sudo pkill -f "python.*main.py" 2>/dev/null || true
+sudo pkill -f "uvicorn" 2>/dev/null || true
+sudo kill -9 $(sudo lsof -t -i:8000) 2>/dev/null || true
+
+# Verify port is free
+sudo lsof -i :8000 && { echo "ERROR: Port 8000 still in use!"; exit 1; } || echo "✅ Port 8000 is free"
+
+# Deploy
+echo "📦 Deploying backend..."
+git pull origin main
+pip install -r requirements.txt
+
+# Restart service
+echo "🔄 Restarting service..."
+sudo systemctl stop vernal-agents
+sudo systemctl start vernal-agents
+sudo systemctl status vernal-agents
+
+# Post-deployment validation
+echo "✅ Running post-deployment checks..."
+curl -f http://localhost:8000/health || { echo "ERROR: Health check failed!"; exit 1; }
+curl -f http://localhost:8000/version || { echo "ERROR: Version check failed!"; exit 1; }
+curl -f https://themachine.vernalcontentum.com/health || { echo "ERROR: External health check failed!"; exit 1; }
+curl -f https://themachine.vernalcontentum.com/version || { echo "ERROR: External version check failed!"; exit 1; }
+
+# Show recent logs
+echo "📋 Recent logs:"
+sudo journalctl -u vernal-agents -n 10 --no-pager | tail -5
+
+# Verify no competing processes
+sudo lsof -i :8000 | grep -v systemd && echo "WARNING: Non-systemd process on port 8000" || echo "✅ Only systemd on port 8000"
+
+# Log successful deployment (consistent format with frontend)
+COMMIT_HASH=$(git rev-parse HEAD)
+PYTHON_VERSION=$(python --version)
+echo "$(date) - Backend deployed successfully, commit: $COMMIT_HASH, Python: $PYTHON_VERSION" >> ~/vernal_agents_deploy.log
+echo "📝 Deployment logged to ~/vernal_agents_deploy.log"
+
+echo "🎉 BACKEND DEPLOYMENT SUCCESSFUL!"
+```
+
+## 🔄 ROLLBACK PROCEDURE
+```bash
+# If deployment fails, rollback to last known working commit
+git log --oneline -10  # Find last working commit
+git reset --hard <last-working-commit-hash>
+sudo systemctl restart vernal-agents
+curl -f http://localhost:8000/health || echo "Rollback failed - manual intervention needed"
+```
+
 ## Quick Recovery Commands
 ```bash
 # Check service status
@@ -107,6 +414,12 @@ sudo journalctl -u vernal-agents -n 20 --no-pager
 # Test database connectivity
 curl http://localhost:8000/config/test
 curl https://themachine.vernalcontentum.com/config/test
+
+# Check deployment history
+tail -10 ~/vernal_agents_deploy.log
+
+# Check current version info
+curl -s http://localhost:8000/version | jq .
 ```
 
 ---
@@ -140,6 +453,21 @@ PRE MCP STATUS END
 - **Reason:** MCP migration required direct Python execution instead of uvicorn
 - **Change:** Switched from `fastapi.service` to `vernal-agents.service`
 - **Database:** Same MySQL connection, different service configuration
+
+## System Requirements
+- **OS:** Ubuntu 24.04 LTS
+- **Python:** 3.12+ with venv support
+- **Required packages:** `python3-venv`, `python3-pip`, `git`
+- **Database client:** `mysqlclient` (via pip)
+- **Memory:** Minimum 2GB RAM (4GB recommended)
+- **Storage:** 8GB+ free space for dependencies
+
+## Security Notes
+- **NEVER** commit `.env` files to version control
+- **NEVER** commit database credentials or API keys
+- **NEVER** commit SSH private keys
+- **ALWAYS** use environment variables for sensitive data
+- **VERIFY** `.env` file permissions: `chmod 600 .env`
 
 ---
 
