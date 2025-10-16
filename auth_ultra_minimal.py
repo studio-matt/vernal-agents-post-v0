@@ -235,6 +235,86 @@ async def resend_otp(request: dict):
             detail="Failed to resend OTP. Please try again."
         )
 
+@auth_router.post("/forget-password")
+async def forget_password(request: dict):
+    """Send password reset OTP (mock implementation)"""
+    try:
+        email = request.get("email")
+        logger.info(f"Forget password request for: {email}")
+        
+        # Find user by email
+        user = None
+        for u in users_db.values():
+            if u["email"] == email:
+                user = u
+                break
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Mock OTP sending (always succeed)
+        logger.info(f"Password reset OTP sent successfully to: {email}")
+        
+        return {
+            "status": "success",
+            "message": "Password reset OTP sent successfully to your email."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Forget password error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send password reset OTP. Please try again."
+        )
+
+@auth_router.post("/reset-password")
+async def reset_password(request: dict):
+    """Reset password with OTP (mock implementation)"""
+    try:
+        email = request.get("email")
+        otp_code = request.get("otp_code")
+        new_password = request.get("new_password")
+        
+        logger.info(f"Password reset attempt for: {email}")
+        
+        # Find user by email
+        user = None
+        for u in users_db.values():
+            if u["email"] == email:
+                user = u
+                break
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Mock OTP verification (always succeed)
+        logger.info(f"Password reset successful for: {email}")
+        
+        # Update password in memory (mock)
+        user["password"] = new_password
+        
+        return {
+            "status": "success",
+            "message": "Password reset successfully! You can now log in with your new password."
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password. Please try again."
+        )
+
 @auth_router.get("/health")
 async def auth_health():
     """Authentication service health check"""
@@ -243,6 +323,6 @@ async def auth_health():
         "service": "authentication",
         "users_count": len(users_db),
         "endpoints": [
-            "signup", "login", "verify-email", "resend-otp"
+            "signup", "login", "verify-email", "resend-otp", "forget-password", "reset-password"
         ]
     }
