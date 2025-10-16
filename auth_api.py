@@ -10,10 +10,11 @@ from typing import Optional
 from datetime import datetime, timedelta
 import logging
 from database import db_manager
-from models import User
+from models import User, OTP
 from utils import hash_password, verify_password, create_access_token, verify_token
 from email_service import get_email_service
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
 import secrets
 
 logger = logging.getLogger(__name__)
@@ -240,23 +241,31 @@ async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db
                 detail="User not found"
             )
         
-        # Mock OTP verification (accept any 6-digit code)
-        if len(request.otp_code) == 6 and request.otp_code.isdigit():
-            user.is_verified = True
-            user.updated_at = datetime.utcnow()
-            db.commit()
-            
-            logger.info(f"Email verified successfully for user: {user.id}")
-            
-            return {
-                "status": "success",
-                "message": "Email verified successfully!"
-            }
-        else:
+        # Find valid OTP for user
+        otp_record = db.query(OTP).filter(
+            OTP.user_id == user.id,
+            OTP.otp_code == request.otp_code,
+            OTP.expires_at > datetime.utcnow()
+        ).first()
+        
+        if not otp_record:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid OTP code"
+                detail="Invalid or expired OTP code"
             )
+        
+        # Update user verification status
+        user.is_verified = True
+        user.updated_at = datetime.utcnow()
+        db.delete(otp_record)  # Remove used OTP
+        db.commit()
+        
+        logger.info(f"Email verified successfully for user: {user.id}")
+        
+        return {
+            "status": "success",
+            "message": "Email verified successfully!"
+        }
         
     except HTTPException:
         raise
@@ -284,6 +293,16 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
         
         # Generate OTP code
         otp_code = str(secrets.randbelow(900000) + 100000)  # 6-digit code
+        expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 minutes expiry
+        
+        # Store OTP in database
+        otp_record = OTP(
+            user_id=user.id,
+            otp_code=otp_code,
+            expires_at=expires_at
+        )
+        db.add(otp_record)
+        db.commit()
         
         # Send OTP email
         email_service = get_email_service()
@@ -332,6 +351,16 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
         
         # Generate OTP code
         otp_code = str(secrets.randbelow(900000) + 100000)  # 6-digit code
+        expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 minutes expiry
+        
+        # Store OTP in database
+        otp_record = OTP(
+            user_id=user.id,
+            otp_code=otp_code,
+            expires_at=expires_at
+        )
+        db.add(otp_record)
+        db.commit()
         
         # Send password reset email
         email_service = get_email_service()
@@ -379,11 +408,19 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
             )
         
         # Mock OTP verification (accept any 6-digit code)
-        if len(request.otp_code) == 6 and request.otp_code.isdigit():
+        # Find valid OTP for user
+        otp_record = db.query(OTP).filter(
+            OTP.user_id == user.id,
+            OTP.otp_code == request.otp_code,
+            OTP.expires_at > datetime.utcnow()
+        ).first()
+        
+        if otp_record:
             # Hash new password
             hashed_password = hash_password(request.new_password)
             user.password = hashed_password
             user.updated_at = datetime.utcnow()
+            db.delete(otp_record)  # Remove used OTP
             db.commit()
             
             logger.info(f"Password reset successfully for user: {user.id}")
@@ -395,7 +432,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid OTP code"
+                detail="Invalid or expired OTP code"
             )
         
     except HTTPException:
