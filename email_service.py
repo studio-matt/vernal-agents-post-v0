@@ -49,7 +49,13 @@ class EmailService:
                 subject=subject,
                 recipients=[email],
                 body=body,
-                subtype="html"
+                subtype="html",
+                headers={
+                    "X-Mailer": "Vernal Contentum Auth System",
+                    "X-Priority": "3",
+                    "X-MSMail-Priority": "Normal",
+                    "Importance": "Normal"
+                }
             )
             
             await self.fastmail.send_message(message)
@@ -85,7 +91,13 @@ class EmailService:
                 subject=subject,
                 recipients=[email],
                 body=body,
-                subtype="html"
+                subtype="html",
+                headers={
+                    "X-Mailer": "Vernal Contentum Auth System",
+                    "X-Priority": "3",
+                    "X-MSMail-Priority": "Normal",
+                    "Importance": "Normal"
+                }
             )
             
             await self.fastmail.send_message(message)
