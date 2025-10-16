@@ -49,6 +49,8 @@ async def signup_user(user_data: UserSignup):
     """Register a new user"""
     try:
         logger.info(f"Signup attempt for username: {user_data.username}")
+        logger.info(f"Password length: {len(user_data.password)}")
+        logger.info(f"Password value: {user_data.password}")
         
         # Check if user already exists
         for user in users_db.values():
