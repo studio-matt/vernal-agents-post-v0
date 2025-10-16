@@ -30,12 +30,12 @@ jobs:
           # 1. Nuke old code completely
           echo "🧹 Nuking old code..."
           sudo systemctl stop vernal-agents || true
-          rm -rf /home/ubuntu/vernal-agents-post-v0
+          sudo rm -rf /home/ubuntu/vernal-agents-post-v0
 
           # Clean up old backup directories
           echo "🧹 Cleaning up old backup directories..."
-          find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec rm -rf {} + 2>/dev/null || true
-          find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec rm -rf {} + 2>/dev/null || true
+          find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
+          find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
           echo "✅ Backup directories cleaned up"
 
           # 2. Clone fresh from GitHub
