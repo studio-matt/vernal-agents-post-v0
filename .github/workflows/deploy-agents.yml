@@ -31,12 +31,13 @@ jobs:
           echo "🧹 Nuking old code..."
           sudo systemctl stop vernal-agents || true
           
-          # Kill ALL Python and uvicorn processes before removal
-          echo "🔪 Killing all Python processes..."
-          sudo pkill -u ubuntu -f "python" || true
-          sudo pkill -u ubuntu -f "uvicorn" || true
-          sudo pkill -u ubuntu -f "gunicorn" || true
-          sudo fuser -k /home/ubuntu/vernal-agents-post-v0/venv/lib/python3.12/site-packages/sympy 2>/dev/null || true
+          # Kill specific Python processes before removal (avoid killing SSH session)
+          echo "🔪 Killing specific Python processes..."
+          sudo pkill -f "uvicorn.*main:app" || true
+          sudo pkill -f "python.*main.py" || true
+          sudo pkill -f "gunicorn" || true
+          # Kill any processes using the venv directory
+          sudo fuser -k /home/ubuntu/vernal-agents-post-v0/venv 2>/dev/null || true
           sleep 2
           
           # More aggressive cleanup for stubborn files
