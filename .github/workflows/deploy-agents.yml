@@ -31,11 +31,36 @@ jobs:
           echo "🧹 Nuking old code..."
           sudo systemctl stop vernal-agents || true
           
+          # Kill ALL Python and uvicorn processes before removal
+          echo "🔪 Killing all Python processes..."
+          sudo pkill -u ubuntu -f "python" || true
+          sudo pkill -u ubuntu -f "uvicorn" || true
+          sudo pkill -u ubuntu -f "gunicorn" || true
+          sudo fuser -k /home/ubuntu/vernal-agents-post-v0/venv/lib/python3.12/site-packages/sympy 2>/dev/null || true
+          sleep 2
+          
           # More aggressive cleanup for stubborn files
           echo "🧹 Force removing stubborn files..."
           sudo find /home/ubuntu/vernal-agents-post-v0 -type f -exec rm -f {} + 2>/dev/null || true
           sudo find /home/ubuntu/vernal-agents-post-v0 -type d -exec rmdir {} + 2>/dev/null || true
           sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+          
+          # Try harder removal loop for stuck files
+          echo "🔄 Trying harder to remove directory..."
+          for i in {1..3}; do
+            if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
+              echo "❌ Directory still exists, trying harder to remove it (attempt $i)..."
+              sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+              sleep 2
+            fi
+          done
+          
+          # Log remaining files if still stuck
+          if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
+            echo "❌ Directory could not be fully deleted. Showing contents:"
+            sudo find /home/ubuntu/vernal-agents-post-v0
+            exit 1
+          fi
 
           # Clean up old backup directories
           echo "🧹 Cleaning up old backup directories..."
