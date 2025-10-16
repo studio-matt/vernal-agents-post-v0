@@ -1,8 +1,10 @@
 name: Deploy Agents Backend
 
 on:
-  push:
-    branches: [ "main", "mcp-conversion" ]
+  # DISABLED - Manual deployments only
+  # push:
+  #   branches: [ "main", "mcp-conversion" ]
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
   deploy:
