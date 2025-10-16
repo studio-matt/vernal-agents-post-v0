@@ -75,7 +75,7 @@ async def version():
             "version": "2.0.0",
             "status": "debug",
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v2"  # Testing deployment fix
+            "deployment": "bulletproof-v3"  # Testing with fixed secrets
         }
     except Exception as e:
         logger.error(f"Error getting version info: {e}")
@@ -87,7 +87,7 @@ async def version():
             "status": "debug",
             "error": str(e),
             "working_dir": os.getcwd(),
-            "deployment": "bulletproof-v2"  # Testing deployment fix
+            "deployment": "bulletproof-v3"  # Testing with fixed secrets
         }
 
 
