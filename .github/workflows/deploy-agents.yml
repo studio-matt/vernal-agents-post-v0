@@ -18,7 +18,7 @@ jobs:
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
-        key: ${{ secrets.EC2_PRIVATE_KEY }}
+        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
         passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
         script: |
           set -e
