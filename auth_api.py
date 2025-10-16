@@ -467,3 +467,22 @@ async def auth_health():
             "forget-password", "reset-password", "me"
         ]
     }
+
+@auth_router.get("/debug/db")
+async def debug_database():
+    """Debug database connection"""
+    try:
+        db = get_db()
+        # Try a simple query
+        result = db.query(User).limit(1).all()
+        return {
+            "status": "success",
+            "message": "Database connection working",
+            "user_count": len(result)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Database connection failed: {str(e)}",
+            "error_type": type(e).__name__
+        }
