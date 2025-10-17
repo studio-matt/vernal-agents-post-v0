@@ -34,7 +34,7 @@ class EmailService:
         """Send OTP verification email"""
         try:
             subject = "Verify Your Email - Vernal Contentum"
-            verification_url = f"https://machine.vernalcontentum.com/verify-otp?email={email}"
+            verification_url = f"https://machine.vernalcontentum.com/login?email={email}&verify=true"
             body = f"""
             <html>
             <body>
