@@ -34,6 +34,7 @@ class EmailService:
         """Send OTP verification email"""
         try:
             subject = "Verify Your Email - Vernal Contentum"
+            verification_url = f"https://machine.vernalcontentum.com/verify-otp?email={email}"
             body = f"""
             <html>
             <body>
@@ -41,6 +42,9 @@ class EmailService:
                 <p>Hello {user_name or 'User'},</p>
                 <p>Your verification code is: <strong>{otp_code}</strong></p>
                 <p>This code will expire in 10 minutes.</p>
+                <p><strong>Click here to verify your email:</strong></p>
+                <p><a href="{verification_url}" style="background-color: #3d545f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Verify Email</a></p>
+                <p>Or copy and paste this link: {verification_url}</p>
                 <p>If you didn't request this, please ignore this email.</p>
                 <br>
                 <p>Best regards,<br>Vernal Contentum Team</p>
@@ -76,6 +80,7 @@ class EmailService:
         """Send password reset OTP email"""
         try:
             subject = "Password Reset - Vernal Contentum"
+            reset_url = f"https://machine.vernalcontentum.com/verify-otp?email={email}"
             body = f"""
             <html>
             <body>
@@ -83,6 +88,9 @@ class EmailService:
                 <p>Hello {user_name or 'User'},</p>
                 <p>You requested to reset your password. Your reset code is: <strong>{otp_code}</strong></p>
                 <p>This code will expire in 10 minutes.</p>
+                <p><strong>Click here to reset your password:</strong></p>
+                <p><a href="{reset_url}" style="background-color: #3d545f; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a></p>
+                <p>Or copy and paste this link: {reset_url}</p>
                 <p>If you didn't request this, please ignore this email.</p>
                 <br>
                 <p>Best regards,<br>Vernal Contentum Team</p>
