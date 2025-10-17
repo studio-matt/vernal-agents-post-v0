@@ -151,9 +151,53 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         
         logger.info(f"User created successfully: {new_user.id}")
         
+        # Generate and send OTP
+        otp_code = str(secrets.randbelow(900000) + 100000) # 6-digit OTP
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
+        new_otp = OTP(user_id=new_user.id, otp_code=otp_code, expires_at=expires_at)
+        db.add(new_otp)
+        db.commit()
+        
+        try:
+            email_service = get_email_service()
+            email_sent = await email_service.send_otp_email(
+                email=new_user.email,
+                otp_code=otp_code,
+                user_name=new_user.username
+            )
+            if not email_sent:
+                logger.warning(f"Failed to send OTP email to {new_user.email}, but OTP generated: {otp_code}")
+                # Optionally, return OTP in response for debugging if email fails
+                return SignupResponse(
+                    status="success",
+                    message=f"Account created. OTP: {otp_code} (email failed, check server logs)",
+                    user=UserResponse(
+                        id=new_user.id,
+                        username=new_user.username,
+                        email=new_user.email,
+                        contact=new_user.contact,
+                        is_verified=new_user.is_verified,
+                        created_at=new_user.created_at
+                    )
+                )
+        except Exception as email_err:
+            logger.error(f"Email service error during signup: {email_err}")
+            return SignupResponse(
+                status="success",
+                message=f"Account created. OTP: {otp_code} (email service unavailable)",
+                user=UserResponse(
+                    id=new_user.id,
+                    username=new_user.username,
+                    email=new_user.email,
+                    contact=new_user.contact,
+                    is_verified=new_user.is_verified,
+                    created_at=new_user.created_at
+                )
+            )
+        
         return SignupResponse(
             status="success",
-            message="Account created successfully! You can now log in.",
+            message="Account created successfully! Please check your email for OTP verification.",
             user=UserResponse(
                 id=new_user.id,
                 username=new_user.username,
