@@ -366,3 +366,11 @@ async def auth_health():
             "signup", "login", "verify-email", "resend-otp", "forget-password", "reset-password"
         ]
     }
+
+@auth_router.get("/debug/users")
+async def debug_users():
+    """Debug endpoint to see users in memory"""
+    return {
+        "users_count": len(users_db),
+        "users": list(users_db.values())
+    }
