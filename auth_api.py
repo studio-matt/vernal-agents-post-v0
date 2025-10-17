@@ -130,6 +130,8 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
                 )
         
         # Hash password (utils.py handles bcrypt length limit)
+        logger.info(f"Password length before hashing: {len(user_data.password)}")
+        logger.info(f"Password bytes before hashing: {len(user_data.password.encode('utf-8'))}")
         hashed_password = hash_password(user_data.password)
         
         # Create new user
