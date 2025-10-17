@@ -129,9 +129,8 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
                     detail="Email already exists"
                 )
         
-        # Hash password (truncate to 72 bytes for bcrypt compatibility)
-        password_to_hash = user_data.password[:72] if len(user_data.password) > 72 else user_data.password
-        hashed_password = hash_password(password_to_hash)
+        # Hash password (utils.py handles bcrypt length limit)
+        hashed_password = hash_password(user_data.password)
         
         # Create new user
         new_user = User(
@@ -419,9 +418,8 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         ).first()
         
         if otp_record:
-            # Hash new password (truncate to 72 bytes for bcrypt compatibility)
-            password_to_hash = request.new_password[:72] if len(request.new_password) > 72 else request.new_password
-            hashed_password = hash_password(password_to_hash)
+            # Hash new password (utils.py handles bcrypt length limit)
+            hashed_password = hash_password(request.new_password)
             user.password = hashed_password
             user.updated_at = datetime.utcnow()
             db.delete(otp_record)  # Remove used OTP
