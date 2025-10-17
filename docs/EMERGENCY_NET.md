@@ -27,6 +27,51 @@
   - TLS → `/etc/letsencrypt/live/themachine.vernalcontentum.com/`
 - **Environment:** `.env` file in project root with DB credentials
 
+## 🚨 CRITICAL ARCHITECTURE REQUIREMENTS - NEVER DEVIATE 🚨
+- **100% DATABASE DEPENDENCY:** ALL persistent data MUST be stored in MySQL database
+- **NO IN-MEMORY STORAGE:** Never use Python dictionaries, lists, or variables for persistent data
+- **MULTI-TENANT ARCHITECTURE:** All data MUST be scoped to user accounts
+- **PRODUCTION-READY:** No "temporary" or "mock" solutions that violate core requirements
+- **AUTHENTICATION:** MUST use `auth_api.py` (database-backed), NEVER `auth_ultra_minimal.py`
+- **USER DATA:** User accounts, OTPs, sessions MUST be in database tables
+- **MCP INTEGRATION:** All MCP tools MUST be database-aware and user-scoped
+
+### ⚠️ ARCHITECTURE VALIDATION CHECKLIST ⚠️
+Before implementing ANY solution, ask:
+1. **Does this store data in the database?** (Not in memory)
+2. **Is this user-scoped/multi-tenant?** (Not global/shared)
+3. **Is this production-ready?** (Not temporary/mock)
+4. **Does this align with 100% DB dependency?** (No shortcuts)
+5. **Will this persist across server restarts?** (Database only)
+
+### 🚫 FORBIDDEN PATTERNS 🚫
+- ❌ `users_db = {}` (in-memory dictionaries)
+- ❌ `global_variable = []` (in-memory lists)
+- ❌ Mock/temporary authentication systems
+- ❌ "Just to get it working" solutions that violate architecture
+- ❌ Any data storage outside the database
+
+## 🔐 AUTHENTICATION SYSTEM - CRITICAL RULES 🔐
+- **ONLY USE:** `auth_api.py` (database-backed authentication)
+- **NEVER USE:** `auth_ultra_minimal.py` (in-memory storage)
+- **USER STORAGE:** MySQL `user` table only
+- **OTP STORAGE:** MySQL `otp` table only
+- **SESSIONS:** JWT tokens with database user validation
+- **EMAIL SERVICE:** Real SMTP integration, not mock
+
+### Authentication Validation:
+- ✅ All user data in database
+- ✅ All OTPs in database with expiration
+- ✅ Real email sending for verification
+- ✅ Multi-tenant user scoping
+- ✅ Production-ready security
+
+### If Authentication Issues Arise:
+1. **Check database connectivity first**
+2. **Verify `auth_api.py` is loaded** (not ultra minimal)
+3. **Check email service configuration**
+4. **NEVER fall back to in-memory storage**
+
 ---
 
 ## Current Working Configuration (MCP Migration State)
