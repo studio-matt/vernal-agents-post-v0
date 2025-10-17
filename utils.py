@@ -1,22 +1,29 @@
 import smtplib
 from email.mime.text import MIMEText
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta
 
-# Password hashing setup
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    # Let passlib handle the 72-byte limit internally
-    # Passlib should handle this automatically
-    return pwd_context.hash(password)
+    """Hash a password using raw bcrypt."""
+    # Use raw bcrypt to avoid passlib issues
+    password_bytes = password.encode('utf-8')
+    # Truncate to 72 bytes if needed
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        password_bytes = plain_password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
 # JWT token setup
 SECRET_KEY = "your-secret-key"  # Replace with a secure key
