@@ -10,10 +10,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt."""
-    # Truncate password to 72 bytes for bcrypt compatibility
-    password_bytes = password.encode('utf-8')[:72]
-    password_to_hash = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.hash(password_to_hash)
+    # Let passlib handle the 72-byte limit internally
+    # Passlib should handle this automatically
+    return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password."""
