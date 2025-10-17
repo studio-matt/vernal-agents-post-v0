@@ -94,7 +94,7 @@ export const signupUser = async ({
       username,
       email,
       password,
-      contact,
+      contact: contact || null, // Convert empty string to null for optional field
     })
     
     console.log("[v0] Signup response:", response)
@@ -249,7 +249,7 @@ export const resendotp = async ({
   email: string
 }): Promise<any> => {
   try {
-    const endpoint = "resend-otp"
+    const endpoint = "auth/resend-otp"
 
     const payload = {
       email,
