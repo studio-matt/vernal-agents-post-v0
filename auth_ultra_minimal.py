@@ -176,20 +176,30 @@ async def verify_email(request: dict):
                 detail="User not found"
             )
         
-        # Mock OTP verification (accept any 6-digit code)
-        if len(otp_code) == 6 and otp_code.isdigit():
-            user["is_verified"] = True
-            logger.info(f"Email verified successfully for user: {user['id']}")
-            
-            return {
-                "status": "success",
-                "message": "Email verified successfully!"
-            }
-        else:
+        # Verify OTP code
+        if "otp" not in user or user["otp"] != otp_code:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid OTP code"
             )
+        
+        # Check if OTP is expired
+        if "otp_expires" in user and user["otp_expires"] < datetime.now():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OTP code has expired"
+            )
+        
+        # Mark user as verified and clear OTP
+        user["is_verified"] = True
+        user.pop("otp", None)
+        user.pop("otp_expires", None)
+        logger.info(f"Email verified successfully for user: {user['id']}")
+        
+        return {
+            "status": "success",
+            "message": "Email verified successfully!"
+        }
         
     except HTTPException:
         raise
@@ -220,13 +230,41 @@ async def resend_otp(request: dict):
                 detail="User not found"
             )
         
-        # Mock OTP sending (always succeed)
-        logger.info(f"OTP sent successfully to: {email}")
+        # Generate and store OTP
+        import secrets
+        otp_code = str(secrets.randbelow(900000) + 100000)  # 6-digit OTP
+        user["otp"] = otp_code
+        user["otp_expires"] = datetime.now() + timedelta(minutes=10)
         
-        return {
-            "status": "success",
-            "message": "OTP sent successfully to your email."
-        }
+        # Try to send real email
+        try:
+            from email_service import get_email_service
+            email_service = get_email_service()
+            email_sent = await email_service.send_otp_email(
+                email=email,
+                otp_code=otp_code,
+                user_name=user["username"]
+            )
+            
+            if email_sent:
+                logger.info(f"OTP sent successfully to: {email}")
+                return {
+                    "status": "success",
+                    "message": "OTP sent successfully to your email."
+                }
+            else:
+                logger.warning(f"Failed to send email to: {email}, but OTP generated: {otp_code}")
+                return {
+                    "status": "success",
+                    "message": f"OTP generated: {otp_code} (email failed, check server logs)"
+                }
+        except Exception as e:
+            logger.error(f"Email service error: {e}")
+            logger.info(f"OTP generated: {otp_code}")
+            return {
+                "status": "success",
+                "message": f"OTP generated: {otp_code} (email service unavailable)"
+            }
         
     except HTTPException:
         raise
