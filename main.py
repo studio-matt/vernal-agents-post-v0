@@ -1,7 +1,9 @@
 import os
 import logging
-from fastapi import FastAPI, Response
+from datetime import datetime
+from fastapi import FastAPI, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -10,6 +12,11 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
+
+# Import database and models
+from database import DatabaseManager, get_db
+from models import User, Campaign
+from auth_api import get_current_user
 
 # Set OpenAI API key
 os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "your-api-key-here")
@@ -176,9 +183,110 @@ except Exception as e:
 
 # Campaigns endpoint
 @app.get("/campaigns")
-async def get_campaigns():
-    logger.info("Campaigns endpoint requested")
-    return {"campaigns": [], "message": "Campaigns endpoint working", "version": "2.0.0"}
+async def get_campaigns(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get campaigns for the authenticated user"""
+    logger.info(f"Campaigns endpoint requested by user {current_user.id}")
+    
+    try:
+        # Get campaigns for this user from database
+        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+        
+        # Convert to response format
+        campaign_list = []
+        for campaign in campaigns:
+            campaign_list.append({
+                "id": campaign.campaign_id,
+                "name": campaign.campaign_name,
+                "description": campaign.description,
+                "type": campaign.type,
+                "keywords": campaign.keywords.split(',') if campaign.keywords else [],
+                "urls": campaign.urls.split(',') if campaign.urls else [],
+                "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+                "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+            })
+        
+        return {
+            "status": "success",
+            "campaigns": campaign_list,
+            "message": f"Found {len(campaign_list)} campaigns for user {current_user.id}",
+            "version": "2.0.0"
+        }
+    except Exception as e:
+        logger.error(f"Error fetching campaigns: {str(e)}")
+        return {
+            "status": "error",
+            "campaigns": [],
+            "message": f"Error fetching campaigns: {str(e)}",
+            "version": "2.0.0"
+        }
+
+# Create campaign endpoint
+@app.post("/campaigns", response_class=JSONResponse)
+async def create_campaign(campaign_data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Create a new campaign for the authenticated user"""
+    try:
+        # Extract campaign data
+        campaign_name = campaign_data.get("name", "").strip()
+        description = campaign_data.get("description", "")
+        query = campaign_data.get("query", "").strip()
+        campaign_type = campaign_data.get("type", "keyword")
+        keywords = campaign_data.get("keywords", [])
+        urls = campaign_data.get("urls", [])
+        trending_topics = campaign_data.get("trendingTopics", [])
+        topics = campaign_data.get("topics", [])
+        
+        # Validate required fields
+        if not campaign_name:
+            return JSONResponse(content={"error": "Campaign name is required"}, status_code=400)
+        
+        # Generate campaign ID
+        campaign_id = f"campaign-{int(datetime.now().timestamp() * 1000)}"
+        
+        # Convert lists to comma-separated strings for database storage
+        keywords_str = ','.join(keywords) if keywords else ""
+        urls_str = ','.join(urls) if urls else ""
+        trending_topics_str = ','.join(trending_topics) if trending_topics else ""
+        topics_str = ','.join(topics) if topics else ""
+        
+        # Create campaign in database with user_id
+        campaign = Campaign(
+            campaign_id=campaign_id,
+            campaign_name=campaign_name,
+            description=description,
+            query=query,
+            type=campaign_type,
+            keywords=keywords_str,
+            urls=urls_str,
+            trending_topics=trending_topics_str,
+            topics=topics_str,
+            user_id=current_user.id,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+        
+        db.add(campaign)
+        db.commit()
+        db.refresh(campaign)
+        
+        logger.info(f"Created campaign {campaign_id} for user {current_user.id}")
+        
+        return JSONResponse(content={
+            "status": "success",
+            "message": {
+                "id": campaign_id,
+                "name": campaign_name,
+                "description": description,
+                "type": campaign_type,
+                "keywords": keywords,
+                "urls": urls,
+                "created_at": campaign.created_at.isoformat(),
+                "updated_at": campaign.updated_at.isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating campaign: {str(e)}")
+        return JSONResponse(content={"error": f"Error creating campaign: {str(e)}"}, status_code=500)
 
 # Debug endpoint to show all routes
 @app.get("/debug/routes")
