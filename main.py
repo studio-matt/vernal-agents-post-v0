@@ -2,6 +2,7 @@ import os
 import logging
 from datetime import datetime
 from fastapi import FastAPI, Response, Depends
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
