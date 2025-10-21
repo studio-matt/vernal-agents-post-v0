@@ -221,6 +221,42 @@ async def get_campaigns(current_user: User = Depends(get_current_user), db: Sess
             "version": "2.0.0"
         }
 
+# Get individual campaign endpoint
+@app.get("/campaigns/{campaign_id}")
+async def get_campaign(campaign_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get a specific campaign by ID for the authenticated user"""
+    try:
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            return JSONResponse(
+                content={"error": "Campaign not found"}, 
+                status_code=404
+            )
+        
+        return {
+            "status": "success",
+            "campaign": {
+                "id": campaign.campaign_id,
+                "name": campaign.campaign_name,
+                "description": campaign.description,
+                "type": campaign.type,
+                "keywords": campaign.keywords.split(',') if campaign.keywords else [],
+                "urls": campaign.urls.split(',') if campaign.urls else [],
+                "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+                "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching campaign {campaign_id}: {str(e)}")
+        return JSONResponse(
+            content={"error": f"Error fetching campaign: {str(e)}"}, 
+            status_code=500
+        )
+
 # Create campaign endpoint
 @app.post("/campaigns", response_class=JSONResponse)
 async def create_campaign(campaign_data: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
