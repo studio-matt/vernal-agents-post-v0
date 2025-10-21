@@ -39,13 +39,13 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 def verify_token(token: str):
-    """Verify a JWT token and return the user ID if valid."""
+    """Verify a JWT token and return the payload if valid."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return user_id
+        return payload  # Return the full payload, not just user_id
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
