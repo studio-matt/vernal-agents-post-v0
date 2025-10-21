@@ -187,17 +187,6 @@ except Exception as e:
     raise
 
 # Additional models that were missing
-class Campaign(Base):
-    """Campaign model for content campaigns"""
-    __tablename__ = "campaigns"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), unique=True, index=True)
-    description = Column(Text)
-    status = Column(String(50), default="draft")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    
 class RawData(Base):
     """Raw data model for storing unprocessed content"""
     __tablename__ = "raw_data"
@@ -220,6 +209,15 @@ class MachineContent(Base):
     campaign_id = Column(Integer, ForeignKey("campaigns.id"))
     raw_data_id = Column(Integer, ForeignKey("raw_data.id"))
 
+# FastAPI dependency function for database sessions
+def get_db() -> Session:
+    """FastAPI dependency to get database session"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 DatabaseManager1 = DatabaseManager
-__all__ = ["engine", "SessionLocal", "Base", "DatabaseManager", "DatabaseManager1", "Agent", "Task", "Campaign", "RawData", "MachineContent", "db_manager"]
+__all__ = ["engine", "SessionLocal", "Base", "DatabaseManager", "DatabaseManager1", "Agent", "Task", "RawData", "MachineContent", "db_manager", "get_db"]
 logger.info("Database module loaded")

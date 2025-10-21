@@ -171,3 +171,23 @@ class AuthorPersonality(Base):
     
     def __repr__(self):
         return f"<AuthorPersonality(id={self.id}, name={self.name})>"
+
+class Campaign(Base):
+    """Campaign model for content campaigns"""
+    __tablename__ = "campaigns"
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(String(255), unique=True, index=True)
+    campaign_name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    query = Column(Text, nullable=True)
+    type = Column(String(50), default="keyword")
+    keywords = Column(Text, nullable=True)  # Comma-separated keywords
+    urls = Column(Text, nullable=True)  # Comma-separated URLs
+    trending_topics = Column(Text, nullable=True)  # Comma-separated topics
+    topics = Column(Text, nullable=True)  # Comma-separated topics
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    def __repr__(self):
+        return f"<Campaign(id={self.id}, campaign_id={self.campaign_id}, name={self.campaign_name})>"
