@@ -26,7 +26,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 # JWT token setup
-SECRET_KEY = "your-secret-key"  # Replace with a secure key
+import os
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-please-change-in-production")  # Use env var or fallback
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 86400  # 60 minutes
 
@@ -44,9 +45,12 @@ def verify_token(token: str):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
+            print(f"JWT Debug: No 'sub' in payload: {payload}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        print(f"JWT Debug: Token verified successfully for user_id: {user_id}")
         return payload  # Return the full payload, not just user_id
-    except JWTError:
+    except JWTError as e:
+        print(f"JWT Debug: JWT verification failed: {e}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 def send_email(to_email: str, subject: str, body: str):
