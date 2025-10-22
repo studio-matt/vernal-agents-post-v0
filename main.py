@@ -31,7 +31,7 @@ app = FastAPI(title="Vernal Agents API DEBUG", version="2.0.0")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://machine.vernalcontentum.com", "http://localhost:3000", "http://localhost:3001", "https://*.replit.dev", "https://*.replit.com"],
+    allow_origins=["https://machine.vernalcontentum.com", "http://localhost:3000", "http://localhost:3001", "https://*.replit.dev", "https://*.replit.com", "https://*.janeway.replit.dev"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["content-type", "authorization", "accept", "ngrok-skip-browser-warning"],
