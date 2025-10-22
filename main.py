@@ -31,7 +31,7 @@ app = FastAPI(title="Vernal Agents API DEBUG", version="2.0.0")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://machine.vernalcontentum.com", "http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["https://machine.vernalcontentum.com", "http://localhost:3000", "http://localhost:3001", "https://*.replit.dev", "https://*.replit.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["content-type", "authorization", "accept", "ngrok-skip-browser-warning"],
@@ -45,7 +45,7 @@ async def options_handler(path: str):
     return Response(
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "https://machine.vernalcontentum.com",
+            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
             "Access-Control-Allow-Credentials": "true",
@@ -60,7 +60,7 @@ async def auth_options_handler(path: str):
     return Response(
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "https://machine.vernalcontentum.com",
+            "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
             "Access-Control-Allow-Credentials": "true",
