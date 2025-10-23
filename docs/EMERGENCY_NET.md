@@ -2,9 +2,11 @@
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
+- **Server:** `18.235.104.132` (Back End Server)
 - **Domain:** https://themachine.vernalcontentum.com → nginx → 127.0.0.1:8000
 - **Live directory:** `/home/ubuntu/vernal-agents-post-v0` (systemd cwd)
 - **Repo checkout:** `/home/ubuntu/vernal-agents-post-v0`
+- **Git repo:** `https://github.com/studio-matt/vernal-agents-post-v0.git`
 - **Deploy flow:** Pull from repo → activate venv → restart systemd service
 - **Verify:** Health endpoints, database connectivity, CORS, and auth flows.
 
@@ -356,6 +358,20 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 6. **Restart service:** `sudo systemctl restart vernal-agents`
 7. **Run health check:** `./full_health_check.sh` (see script below)
 8. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
+
+---
+
+## 🖥️ Server and Repository Addresses
+
+- **Back End Server**
+  - Hostname/IP: `18.235.104.132`
+  - Git repo: `https://github.com/studio-matt/vernal-agents-post-v0.git`
+  - Reference as: "back end"
+
+- **Front End Server**
+  - Hostname/IP: `98.87.57.133`
+  - Git repo: `https://github.com/studio-matt/vernal-post-v0.git`
+  - Reference as: "front end"
 
 **See also:** [Vernal Machine Frontend — Emergency Net (v3)](../frontend/docs/EMERGENCY_NET.md)
 
