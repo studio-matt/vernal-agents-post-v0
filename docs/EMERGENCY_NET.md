@@ -247,6 +247,9 @@ SET FOREIGN_KEY_CHECKS = 1;
 ---
 
 ## 🛡️ PRE-DEPLOYMENT CHECKS
+- **Test all imports** (`python -c "import main; print('✅ All imports successful')"`)
+- **Verify no missing dependencies** (`python -c "from database import db_manager; print('✅ Database import successful')"`)
+
 - Confirm repo is up-to-date and clean (`git status`)
 - Verify Python version (`python3 --version`)
 - Check virtual environment is activated (`which python`)
