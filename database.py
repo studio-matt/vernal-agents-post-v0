@@ -15,10 +15,10 @@ from sqlalchemy.orm import Session
 load_dotenv()
 
 db_config = {
-    "host": os.getenv('host'),
-    "user": os.getenv('user'),
-    "password": os.getenv('password'),
-    "database": os.getenv('database'),
+    "host": os.getenv('DB_HOST'),
+    "user": os.getenv('DB_USER'),
+    "password": os.getenv('DB_PASSWORD'),
+    "database": os.getenv('DB_NAME'),
 }
 
 encoded_password = quote_plus(str(db_config["password"]))
@@ -280,13 +280,18 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Database configuration
+# Database configuration - NO FALLBACKS TO PREVENT CREDENTIALS WORMHOLE
 db_config = {
-    "host": os.getenv('host', 'localhost'),
-    "user": os.getenv('user', 'myuser'),
-    "password": os.getenv('password', 'mypassword'),
-    "database": os.getenv('database', 'mydatabase'),
+    "host": os.getenv('DB_HOST'),
+    "user": os.getenv('DB_USER'),
+    "password": os.getenv('DB_PASSWORD'),
+    "database": os.getenv('DB_NAME'),
 }
+
+# Fail-fast validation to prevent database credentials wormhole
+if not all([db_config["host"], db_config["user"], db_config["password"], db_config["database"]]):
+    missing_vars = [k for k, v in db_config.items() if not v]
+    raise ValueError(f"Missing required database environment variables: {missing_vars}. Check your .env file!")
 
 encoded_password = quote_plus(str(db_config["password"]))
 DATABASE_URL = f"mysql+pymysql://{db_config['user']}:{encoded_password}@{db_config['host']}/{db_config['database']}?charset=utf8mb4"
