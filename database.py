@@ -21,7 +21,7 @@ db_config = {
     "database": os.getenv('database'),
 }
 
-encoded_password = quote_plus(db_config["password"])
+encoded_password = quote_plus(str(db_config["password"]))
 DATABASE_URL = f"mysql+pymysql://{db_config['user']}:{encoded_password}@{db_config['host']}/{db_config['database']}?charset=utf8mb4"
 
 engine = create_engine(DATABASE_URL, echo=True, pool_pre_ping=True)
@@ -288,7 +288,7 @@ db_config = {
     "database": os.getenv('database', 'mydatabase'),
 }
 
-encoded_password = quote_plus(db_config["password"])
+encoded_password = quote_plus(str(db_config["password"]))
 DATABASE_URL = f"mysql+pymysql://{db_config['user']}:{encoded_password}@{db_config['host']}/{db_config['database']}?charset=utf8mb4"
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

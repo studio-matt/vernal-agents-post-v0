@@ -2465,8 +2465,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
                 "updated_at": datetime.now()
             })
             return
-<<<<<<< HEAD
-=======
 
         # Update progress: Web scraping setup
         progress_storage[task_id].update({
@@ -2475,7 +2473,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             "message": "Setting up web scraping...",
             "updated_at": datetime.now()
         })
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
 
         logger.info(
             f"Received request for campaign: {campaign_name} (ID: {campaign_id}), "
@@ -2551,17 +2548,6 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
                 "progress": 100,
                 "current_step": "completed",
                 "message": "No results found from scraping",
-<<<<<<< HEAD
-                "result": {
-                    "status": "success",
-                    "campaign_name": campaign_name,
-                    "campaign_id": campaign_id,
-                    "task": task,
-                    "result": "No results found.",
-                    "topics": []
-                },
-=======
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
                 "updated_at": datetime.now()
             })
             return
@@ -2645,11 +2631,7 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             "topics": topics
         }
         if message:
-<<<<<<< HEAD
-            response_data["message"] = message  
-=======
             response_data["message"] = message
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
 
         # Update progress: Completed
         progress_storage[task_id].update({
@@ -2660,51 +2642,24 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             "result": response_data,
             "updated_at": datetime.now()
         })
-<<<<<<< HEAD
-
-=======
         
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
         logger.info(f"Analysis completed for task {task_id}")
         
     except Exception as e:
         logger.error(f"Error in background analysis: {str(e)}")
         progress_storage[task_id].update({
             "status": "failed",
-<<<<<<< HEAD
-            "error": f"Internal server error: {str(e)}",
-=======
             "error": str(e),
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
             "updated_at": datetime.now()
         })
 
 @app.get("/analyze/status/{task_id}")
 async def get_analysis_status(task_id: str):
-<<<<<<< HEAD
-    """Get current progress of analysis task"""
-    if task_id not in progress_storage:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    status_data = progress_storage[task_id]
-    return {
-        "task_id": task_id,
-        "status": status_data["status"],
-        "progress": status_data["progress"],
-        "current_step": status_data["current_step"],
-        "message": status_data["message"],
-        "created_at": status_data["created_at"].isoformat(),
-        "updated_at": status_data["updated_at"].isoformat(),
-        "result": status_data.get("result"),
-        "error": status_data.get("error")
-    }
-=======
     """Get the current status of an analysis task"""
     if task_id not in progress_storage:
         raise HTTPException(status_code=404, detail="Task not found")
     
     return progress_storage[task_id]
->>>>>>> 1187493e0b98ea90c78d367c6913882d49afffc5
 
 class GenerateIdeasInput(BaseModel):
     topics: List[str]
