@@ -73,8 +73,15 @@ def health():
 # In-memory storage for progress tracking
 progress_storage: Dict[str, Dict[str, Any]] = {}
 
-# Initialize database manager
-db_manager = DatabaseManager()
+# Initialize database manager (lazy loading to prevent startup failures)
+db_manager = None
+
+def get_db_manager():
+    """Get database manager instance, creating it if needed"""
+    global db_manager
+    if db_manager is None:
+        db_manager = DatabaseManager()
+    return db_manager
 
 # Initialize scheduler
 scheduler = BackgroundScheduler()
@@ -1704,7 +1711,7 @@ class UpdateScheduleTime(BaseModel):
 @app.patch("/content/schedule-time")
 async def update_schedule_time_by_content(content: str, update_data: UpdateScheduleTime):
     # Get a database session
-    session = next(db_manager.get_db_session())
+    session = next(get_db_manager().get_db_session())
     try:
         # Find the content by its full text
         db_content = session.query(Content).filter(Content.content == content).first()
@@ -1750,7 +1757,7 @@ class DuplicateScheduleTimeRequest(BaseModel):
 # API endpoint to duplicate schedule times
 @app.post("/duplicate-schedule-times")
 async def duplicate_schedule_times(request: DuplicateScheduleTimeRequest):
-    session = next(db_manager.get_db_session())
+    session = next(get_db_manager().get_db_session())
     try:
         # Normalize input
         source_week = request.source_week
@@ -1810,7 +1817,7 @@ async def duplicate_schedule_times(request: DuplicateScheduleTimeRequest):
 
 
 @app.put("/regenerate_script_v1")
-async def regenerate_script(content: str, query: str, platform: str, db: Session = Depends(db_manager.get_db_session)):
+async def regenerate_script(content: str, query: str, platform: str, db: Session = Depends(lambda: get_db_manager().get_db_session())):
     """
     Regenerate a script by its content using the script writer agent, guided by a provided query and target platform.
 
@@ -1826,7 +1833,7 @@ async def regenerate_script(content: str, query: str, platform: str, db: Session
     Raises:
         HTTPException: If the content is not found, the platform is invalid, or regeneration fails.
     """
-    session = next(db_manager.get_db_session())
+    session = next(get_db_manager().get_db_session())
     
     try:
         # Retrieve the existing content from the database
@@ -1917,7 +1924,7 @@ async def regenerate_script(content: str, query: str, platform: str, db: Session
 # app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # @app.post("/generate_image")
-# async def generate_image_endpoint(content: str, query: str, db: Session = Depends(db_manager.get_db_session)):
+# async def generate_image_endpoint(content: str, query: str, db: Session = Depends(lambda: get_db_manager().get_db_session())):
 #     """
 #     Generate an image based on provided content and a query string, store it in FTP, and save the permanent URL.
 
@@ -1932,7 +1939,7 @@ async def regenerate_script(content: str, query: str, platform: str, db: Session
 #     Raises:
 #         HTTPException: If content is not found or image generation fails.
 #     """
-#     session = next(db_manager.get_db_session())
+#     session = next(get_db_manager().get_db_session())
 #     try:
 #         # Retrieve the content from the database
 #         existing_content = session.query(Content).filter(Content.content == content).first()
@@ -1984,7 +1991,7 @@ async def regenerate_script(content: str, query: str, platform: str, db: Session
 
 
 @app.post("/generate_image")
-async def generate_image_endpoint(content: str, query: str, db: Session = Depends(db_manager.get_db_session)):
+async def generate_image_endpoint(content: str, query: str, db: Session = Depends(lambda: get_db_manager().get_db_session())):
     """
     Generate an image based on provided content and a query string, store it in SFTP, and save the permanent URL.
 
@@ -1999,7 +2006,7 @@ async def generate_image_endpoint(content: str, query: str, db: Session = Depend
     Raises:
         HTTPException: If content is not found or image generation fails.
     """
-    session = next(db_manager.get_db_session())
+    session = next(get_db_manager().get_db_session())
     try:
         # Retrieve the content from the database
         existing_content = session.query(Content).filter(Content.content == content).first()
@@ -2620,7 +2627,7 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
-            db_manager.store_raw_texts,
+            get_db_manager().store_raw_texts,
             query,
             ','.join(urls) if urls else '',
             processed_posts,
@@ -3254,7 +3261,7 @@ async def search_tweets(
             
             if campaign_id:
                 db_manager = DatabaseManager1()
-                session = next(db_manager.get_db_session())
+                session = next(get_db_manager().get_db_session())
                 try:
                     campaign_exists = db_manager.check_campaign_exists(campaign_id)
                     db_type = "twitter"  # Use "twitter" for database storage
@@ -3605,7 +3612,7 @@ async def generate_image_machine_content_endpoint(
 
 
 @app.put("/regenerate_script_machine_content")
-async def regenerate_script_machine_content_endpoint(id: int, query: str, platform: str, db: Session = Depends(db_manager.get_db_session)):
+async def regenerate_script_machine_content_endpoint(id: int, query: str, platform: str, db: Session = Depends(lambda: get_db_manager().get_db_session())):
     """
     Regenerate a script by its ID in the machine_content table using the script writer agent, guided by a provided query and target platform.
 
@@ -3621,7 +3628,7 @@ async def regenerate_script_machine_content_endpoint(id: int, query: str, platfo
     Raises:
         HTTPException: If the record is not found, the platform is invalid, or regeneration fails.
     """
-    session = next(db_manager.get_db_session())
+    session = next(get_db_manager().get_db_session())
     
     try:
         # Validate input
