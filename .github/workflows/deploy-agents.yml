@@ -125,6 +125,7 @@ jobs:
           Restart=always
           RestartSec=10
           Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
+          EnvironmentFile=/home/ubuntu/vernal-agents-post-v0/.env
 
           [Install]
           WantedBy=multi-user.target
