@@ -43,7 +43,6 @@ from ftplib import FTP
 import io
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 import pdfplumber
 import os
@@ -2275,7 +2274,7 @@ import os
 import subprocess
 import sys
 import logging
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -4193,6 +4192,6 @@ async def delete_author_personality(personality_id: str):
 if __name__ == "__main__":
     import uvicorn
     # Create tables on startup
-    db_manager.create_tables()
+    get_db_manager().create_tables()
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
