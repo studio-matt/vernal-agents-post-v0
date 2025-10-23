@@ -249,9 +249,21 @@ SET FOREIGN_KEY_CHECKS = 1;
 ---
 
 ## 🛡️ PRE-DEPLOYMENT CHECKS
-- **Test all imports** (`python -c "import main; print('✅ All imports successful')"`)
-- **Verify no missing dependencies** (`python -c "from database import db_manager; print('✅ Database import successful')"`)
 
+### **Environment Variables Validation (CRITICAL - PREVENTS DATABASE WORMHOLE)**
+- **Verify .env file exists** (`ls -la .env`)
+- **Check for real database credentials** (`grep -E "DB_HOST|DB_USER|DB_PASSWORD|DB_NAME" .env`)
+- **Validate NO default/placeholder values** (`grep -v "myuser\|localhost\|dummy\|mypassword" .env`)
+- **Test environment loading** (`python3 -c "from dotenv import load_dotenv; load_dotenv(); import os; print('DB_HOST:', os.getenv('DB_HOST')); print('DB_USER:', os.getenv('DB_USER')); print('DB_NAME:', os.getenv('DB_NAME'))"`)
+- **Verify database connectivity** (`python3 -c "from database import DatabaseManager; db = DatabaseManager(); print('✅ Database connection successful')"`)
+
+### **Python/Backend Dependency Validation (CRITICAL)**
+- **Test all critical imports** (`python3 -c "import main; print('✅ All imports successful')"`)
+- **Verify no missing dependencies** (`python3 -c "from database import db_manager; print('✅ Database import successful')"`)
+- **Check virtual environment** (`which python3` should show `/home/ubuntu/vernal-agents-post-v0/venv/bin/python3`)
+- **Verify all packages installed** (`pip list | grep -E "fastapi|uvicorn|sqlalchemy|pymysql"`)
+
+### **Standard Pre-Deployment Checks**
 - Confirm repo is up-to-date and clean (`git status`)
 - Verify Python version (`python3 --version`)
 - Check virtual environment is activated (`which python`)
@@ -293,7 +305,10 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | CORS errors             | nginx handling CORS  | Remove nginx CORS headers, let FastAPI handle |
 | 422 on auth endpoints   | Invalid payload      | Check request format, required fields |
 | 500 on auth endpoints   | Server error         | Check systemd logs, database connectivity |
-| Database connection failed | DB credentials/network | Check `.env`, test DB connectivity |
+| **Database connection failed** | **DB credentials/network** | **Check `.env`, test DB connectivity** |
+| **Access denied for user 'myuser'** | **Wrong DB credentials** | **Fix .env with real credentials** |
+| **ModuleNotFoundError: No module named 'browser_use'** | **Missing dependencies** | **pip install browser-use** |
+| **SyntaxError: invalid syntax** | **Code syntax error** | **Check database.py line 928 for missing newline** |
 | Email not sending       | SMTP configuration   | Check `.env` SMTP settings |
 | Service won't start     | Port conflict        | Kill processes on port 8000 |
 | **JWT creation error**  | **expires_delta param** | **Remove expires_delta from create_access_token** |
@@ -372,6 +387,55 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
   - Hostname/IP: `98.87.57.133`
   - Git repo: `https://github.com/studio-matt/vernal-post-v0.git`
   - Reference as: "front end"
+
+---
+
+## 🚨 CRITICAL: Environment Restoration (PREVENTS DATABASE WORMHOLE)
+
+### **MANDATORY First Steps After Git Clone**
+```bash
+# 1. Navigate to backend directory
+cd /home/ubuntu/vernal-agents-post-v0
+
+# 2. VERIFY .env file exists (CRITICAL)
+ls -la .env
+# If missing: STOP - DO NOT PROCEED
+
+# 3. CHECK for real database credentials (CRITICAL)
+grep -E "DB_HOST|DB_USER|DB_PASSWORD|DB_NAME" .env
+# Must show: DB_HOST=50.6.198.220, DB_USER=vernalcontentum_vernaluse, etc.
+# If shows: myuser, localhost, dummy, mypassword - STOP - DO NOT PROCEED
+
+# 4. VALIDATE no placeholder values (CRITICAL)
+grep -v "myuser\|localhost\|dummy\|mypassword" .env
+# Should show only real credentials
+
+# 5. TEST environment loading (CRITICAL)
+python3 -c "
+from dotenv import load_dotenv
+load_dotenv()
+import os
+print('DB_HOST:', os.getenv('DB_HOST'))
+print('DB_USER:', os.getenv('DB_USER'))
+print('DB_NAME:', os.getenv('DB_NAME'))
+"
+# Must show real values, not None or placeholders
+
+# 6. TEST database connection (CRITICAL)
+python3 -c "
+from database import DatabaseManager
+db = DatabaseManager()
+print('✅ Database connection successful')
+"
+# Must succeed without errors
+```
+
+### **Why This Prevents the Wormhole**
+- **Forces env restoration** as the FIRST steps after git clone
+- **Requires explicit checking** for real DB credentials before any build or run
+- **App will fail-fast** with a clear error if env is missing or defaults are used
+- **No fallback to 'myuser'** or 'localhost' is possible
+- **Ensures .env is actually loaded**, even under systemd or PM2
 
 **See also:** [Vernal Machine Frontend — Emergency Net (v3)](../frontend/docs/EMERGENCY_NET.md)
 
