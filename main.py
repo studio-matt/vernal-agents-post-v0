@@ -82,10 +82,17 @@ def get_db_manager():
         db_manager = DatabaseManager()
     return db_manager
 
-# Initialize scheduler
-scheduler = BackgroundScheduler()
-scheduler.start()
-logger.info("BackgroundScheduler started")
+# Initialize scheduler (lazy loading to prevent startup failures)
+scheduler = None
+
+def get_scheduler():
+    """Get scheduler instance, creating it if needed"""
+    global scheduler
+    if scheduler is None:
+        scheduler = BackgroundScheduler()
+        scheduler.start()
+        logger.info("BackgroundScheduler started")
+    return scheduler
 
 def get_db():
     session = SessionLocal()
@@ -121,13 +128,16 @@ class ProgressStatus(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
 
-# Ensure the uploads directory exists
+# Directory configuration
 UPLOAD_DIR = './uploads'
 OUTPUT_DIR = './outputs'
 static_dir = './static'
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(static_dir, exist_ok=True)
+
+def ensure_directories():
+    """Ensure required directories exist"""
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(static_dir, exist_ok=True)
 
 class ContentResponse(BaseModel):
     week_day: str
