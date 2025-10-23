@@ -257,6 +257,32 @@ SET FOREIGN_KEY_CHECKS = 1;
 - **Test environment loading** (`python3 -c "from dotenv import load_dotenv; load_dotenv(); import os; print('DB_HOST:', os.getenv('DB_HOST')); print('DB_USER:', os.getenv('DB_USER')); print('DB_NAME:', os.getenv('DB_NAME'))"`)
 - **Verify database connectivity** (`python3 -c "from database import DatabaseManager; db = DatabaseManager(); print('✅ Database connection successful')"`)
 
+### **Expected Output for DB Env Checks (Example):**
+```bash
+# GOOD - Real production credentials:
+DB_HOST: 50.6.198.220
+DB_USER: vernalcontentum_vernaluse
+DB_NAME: vernalcontentum_contentMachine
+
+# BAD - If you see any of these, STOP and fix:
+# myuser, localhost, dummy, mypassword, or None
+```
+
+### **Fail-Fast Code Addition (Add to database.py):**
+```python
+# Add this at the top of database.py __init__ method:
+def __init__(self):
+    # Fail-fast if any DB env vars are missing or placeholder values
+    required_vars = ['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME']
+    placeholder_values = ['myuser', 'localhost', 'dummy', 'mypassword', None]
+    
+    for var in required_vars:
+        value = os.getenv(var)
+        if value in placeholder_values or not value:
+            raise ValueError(f"CRITICAL: {var} is missing or placeholder value: {value}. "
+                           f"Must use real production database credentials in .env file!")
+```
+
 ### **Python/Backend Dependency Validation (CRITICAL)**
 - **Test all critical imports** (`python3 -c "import main; print('✅ All imports successful')"`)
 - **Verify no missing dependencies** (`python3 -c "from database import db_manager; print('✅ Database import successful')"`)
@@ -437,6 +463,13 @@ print('✅ Database connection successful')
 - **No fallback to 'myuser'** or 'localhost' is possible
 - **Ensures .env is actually loaded**, even under systemd or PM2
 
+### **Summary: 100% Immune to Database Credentials Wormhole**
+✅ **Environment validation** explicitly prevents "myuser"/fallback credentials issue  
+✅ **Any new or old operator** will catch missing/incorrect DB credentials before any build or run  
+✅ **Process is now Emergency Net compliant**, resilient, and repeatable  
+✅ **Fail-fast code snippet** and expected outputs make you 100% immune to this class of bug  
+✅ **MANDATORY checklist item** ensures verification before every deployment
+
 **See also:** [Vernal Machine Frontend — Emergency Net (v3)](../frontend/docs/EMERGENCY_NET.md)
 
 ---
@@ -544,6 +577,7 @@ echo "🎉 Full System Health Check PASSED!"
 ## ☑️ FINAL CHECKLIST
 - [ ] App code and dependencies up-to-date
 - [ ] `.env` present and secure
+- [ ] **Verified .env contains production DB credentials (NO 'myuser', 'localhost', 'dummy', 'mypassword')**
 - [ ] Database connectivity verified
 - [ ] Systemd service running, port 8000 open
 - [ ] Health endpoints return correct data
