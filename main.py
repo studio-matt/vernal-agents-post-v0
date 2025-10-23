@@ -64,6 +64,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# Health check endpoint
+@app.get("/health")
+def health():
+    """Health check endpoint for monitoring and load balancers"""
+    return {"status": "ok", "message": "Backend is running", "timestamp": datetime.now().isoformat()}
+
 # In-memory storage for progress tracking
 progress_storage: Dict[str, Dict[str, Any]] = {}
 
