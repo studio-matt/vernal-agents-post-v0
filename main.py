@@ -113,6 +113,18 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# Startup event handler to create database tables
+@app.on_event("startup")
+async def startup_event():
+    """Create database tables on startup"""
+    try:
+        db_mgr = get_db_manager()
+        db_mgr.create_tables()
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        # Don't fail startup, but log the error
+
 # Health check endpoint
 @app.get("/health")
 def health():
@@ -4249,9 +4261,7 @@ async def delete_author_personality(personality_id: str):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-if __name__ == "__main__":
-    import uvicorn
-    # Create tables on startup
-    get_db_manager().create_tables()
-
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Note: This file is designed to be run by uvicorn via systemd
+# The app = FastAPI() instance is defined at module level (line 114)
+# All endpoints are attached to this app instance
+# No if __name__ == "__main__" block needed for production deployment
