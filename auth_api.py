@@ -9,8 +9,18 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime, timedelta
 import logging
-from database import db_manager
+# Lazy database import - will be initialized in startup event
 from models import User, OTP
+
+# Lazy database access function
+def get_db_session():
+    """Get database session using lazy initialization"""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 from utils import hash_password, verify_password, create_access_token, verify_token
 from email_service import get_email_service
 from sqlalchemy.orm import Session
@@ -71,8 +81,8 @@ class ResetPasswordRequest(BaseModel):
 
 # Helper functions
 def get_db():
-    """Get database session"""
-    return db_manager.get_db()
+    """Get database session using lazy initialization"""
+    return get_db_session()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     """Get current authenticated user"""
