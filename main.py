@@ -53,6 +53,32 @@ def database_health():
     """Database health endpoint for deployment validation"""
     return {"status": "ok", "message": "Database health check", "database_connected": True}
 
+# Auth endpoints (minimal implementations)
+@app.post("/auth/login")
+def login():
+    """Login endpoint - minimal implementation"""
+    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
+
+@app.post("/auth/signup")
+def signup():
+    """Signup endpoint - minimal implementation"""
+    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
+
+@app.post("/auth/verify-email")
+def verify_email():
+    """Email verification endpoint - minimal implementation"""
+    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
+
+@app.get("/campaigns")
+def get_campaigns():
+    """Get campaigns endpoint - minimal implementation"""
+    return {"status": "error", "message": "Campaign system not yet implemented - use minimal app for testing"}
+
+@app.post("/campaigns")
+def create_campaign():
+    """Create campaign endpoint - minimal implementation"""
+    return {"status": "error", "message": "Campaign system not yet implemented - use minimal app for testing"}
+
 # Root endpoint
 @app.get("/")
 def root():
