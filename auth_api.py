@@ -22,7 +22,7 @@ def get_db_session():
     finally:
         db.close()
 from utils import hash_password, verify_password, create_access_token, verify_token
-from email_service import get_email_service
+# Lazy email service import
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import secrets
@@ -169,7 +169,9 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         db.commit()
         
         try:
-            email_service = get_email_service()
+            from email_service import get_email_service
+            from email_service import get_email_service
+        email_service = get_email_service()
             email_sent = await email_service.send_otp_email(
                 email=new_user.email,
                 otp_code=otp_code,
@@ -362,6 +364,7 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
         db.commit()
         
         # Send OTP email
+        from email_service import get_email_service
         email_service = get_email_service()
         email_sent = await email_service.send_otp_email(
             email=request.email,
@@ -420,6 +423,7 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
         db.commit()
         
         # Send password reset email
+        from email_service import get_email_service
         email_service = get_email_service()
         email_sent = await email_service.send_password_reset_email(
             email=request.email,
