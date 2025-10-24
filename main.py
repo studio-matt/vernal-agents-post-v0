@@ -179,6 +179,18 @@ def store_midjourney_key():
     """Store Midjourney API key endpoint - minimal implementation"""
     return {"status": "error", "message": "API key storage not yet implemented - use minimal app for testing"}
 
+# WordPress auth endpoint
+@app.post("/wordpress/auth-v2")
+def wordpress_auth():
+    """WordPress auth endpoint - minimal implementation"""
+    return {"status": "error", "message": "WordPress auth not yet implemented - use minimal app for testing"}
+
+# Analysis status endpoint
+@app.get("/analyze/status/{task_id}")
+def get_analysis_status(task_id: str):
+    """Get analysis status endpoint - minimal implementation"""
+    return {"status": "error", "message": "Analysis status not yet implemented - use minimal app for testing"}
+
 # Root endpoint
 @app.get("/")
 def root():
