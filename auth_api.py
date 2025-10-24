@@ -21,7 +21,7 @@ def get_db_session():
         yield db
     finally:
         db.close()
-from utils import hash_password, verify_password, create_access_token, verify_token
+# Lazy utils import
 # Lazy email service import
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -88,6 +88,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     """Get current authenticated user"""
     try:
         token = credentials.credentials
+        from utils import verify_token
         payload = verify_token(token)
         user_id = payload.get("sub")
         
@@ -142,6 +143,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         # Hash password (utils.py handles bcrypt length limit)
         logger.info(f"Password length before hashing: {len(user_data.password)}")
         logger.info(f"Password bytes before hashing: {len(user_data.password.encode('utf-8'))}")
+        from utils import hash_password
         hashed_password = hash_password(user_data.password)
         
         # Create new user
@@ -250,6 +252,7 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
             )
         
         # Verify password
+        from utils import verify_password
         if not verify_password(user_data.password, user.password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -257,6 +260,7 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
             )
         
         # Create access token
+        from utils import create_access_token
         access_token = create_access_token(
             data={"sub": str(user.id)}
         )
@@ -478,6 +482,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         
         if otp_record:
             # Hash new password (utils.py handles bcrypt length limit)
+            from utils import hash_password
             hashed_password = hash_password(request.new_password)
             user.password = hashed_password
             user.updated_at = datetime.utcnow()
