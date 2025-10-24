@@ -1,3 +1,53 @@
+# =============================================================================
+# FOOLPROOF STARTUP VALIDATION - FAIL FAST ON MISSING MODULES
+# =============================================================================
+import sys
+import traceback
+
+def validate_critical_imports():
+    """Validate all critical imports at startup - fail fast if any are missing"""
+    critical_modules = [
+        'fastapi',
+        'agents', 
+        'tasks',
+        'tools',
+        'database',
+        'models',
+        'utils',
+        'crewai',
+        'sqlalchemy',
+        'pydantic',
+        'tweepy',
+        'requests',
+        'paramiko'
+    ]
+    
+    missing_modules = []
+    for module in critical_modules:
+        try:
+            __import__(module)
+        except ImportError as e:
+            missing_modules.append(f"{module}: {e}")
+    
+    if missing_modules:
+        print("=" * 80)
+        print("FATAL ERROR: CRITICAL MODULES MISSING!")
+        print("=" * 80)
+        for module_error in missing_modules:
+            print(f"❌ {module_error}")
+        print("=" * 80)
+        print("Backend cannot start - fix missing dependencies first!")
+        print("=" * 80)
+        sys.exit(1)
+    
+    print("✅ All critical imports validated successfully")
+
+# Run validation immediately
+validate_critical_imports()
+
+# =============================================================================
+# STANDARD IMPORTS (now safe to proceed)
+# =============================================================================
 import os
 from fastapi import FastAPI, UploadFile, File, HTTPException , Query, Form, Depends, Body, status
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
