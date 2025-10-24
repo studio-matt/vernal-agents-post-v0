@@ -2351,7 +2351,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from langchain_openai import ChatOpenAI
-from browser_use import Agent, Controller, BrowserConfig, Browser
+from browser_use import Agent, Controller, BrowserProfile, Browser
 from dotenv import load_dotenv
 from database import DatabaseManager1, engine, Base, Campaign, RawData, MachineContent
 from text_processing import Posts, ProcessedPosts, ProcessedPost, lemmatize_text, stem_text, remove_stopwords, extract_entities, extract_topics, extract_keywords
@@ -2597,7 +2597,7 @@ async def process_analysis_background(task_id: str, input_data: AnalyzeInput):
             model="gpt-4o",
             api_key=os.getenv("OPENAI_API_KEY")
         )
-        config = BrowserConfig(headless=True, disable_security=True)
+        config = BrowserProfile(headless=True, disable_security=True)
         browser = Browser(config=config)
         controller = Controller(output_model=Posts)
         agent = Agent(
@@ -2944,7 +2944,7 @@ async def update_campaign(campaign_id: str, input_data: AnalyzeInput):
             model="gpt-4o",
             api_key=os.getenv("OPENAI_API_KEY")
         )
-        config = BrowserConfig(headless=True, disable_security=True)
+        config = BrowserProfile(headless=True, disable_security=True)
         browser = Browser(config=config)
         controller = Controller(output_model=Posts)
         agent = Agent(
