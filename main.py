@@ -1,37 +1,128 @@
 #!/usr/bin/env python3
 """
-Minimal FastAPI app for testing - no blocking imports
+Vernal Agents Backend - Production Ready
+Real authentication with database backend
 """
 
 import os
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from datetime import datetime
+import sys
 import logging
+import traceback
+from typing import Optional
+from datetime import datetime
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
-# Add CORS Middleware
+logger.info("Starting Vernal Agents Backend - Production Version")
+
+# Import FastAPI and core dependencies
+try:
+    from fastapi import FastAPI, HTTPException, Depends, status
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+    from sqlalchemy.orm import Session
+    logger.info("FastAPI imports successful")
+except Exception as e:
+    logger.error(f"Failed to import FastAPI: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+# Import database with error handling
+try:
+    from database import DatabaseManager, SessionLocal
+    logger.info("Database imports successful")
+except Exception as e:
+    logger.error(f"Failed to import database: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+# Import models with error handling
+try:
+    from models import User, OTP, Content, PlatformConnection
+    logger.info("Models imported successfully")
+except Exception as e:
+    logger.error(f"Failed to import models: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+# Import utils with error handling
+try:
+    from utils import hash_password, verify_password, create_access_token, verify_token
+    logger.info("Utils imported successfully")
+except Exception as e:
+    logger.error(f"Failed to import utils: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+# Create FastAPI app
+app = FastAPI(
+    title="Vernal Agents Backend API",
+    description="Production backend for Vernal Agents content management system",
+    version="2.0.0"
+)
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Health check endpoint
+# Global variables for lazy initialization
+db_manager = None
+scheduler = None
+
+def get_db():
+    """Get database session"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_db_manager():
+    """Lazy database manager initialization"""
+    global db_manager
+    if db_manager is None:
+        db_manager = DatabaseManager()
+    return db_manager
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup - NOT at import time"""
+    global db_manager, scheduler
+    try:
+        # Initialize database
+        db_manager = get_db_manager()
+        logger.info("Database manager initialized")
+        
+        # Initialize scheduler
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler()
+        scheduler.start()
+        logger.info("Scheduler started")
+        
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+        traceback.print_exc()
+
+# REQUIRED ENDPOINTS FOR DEPLOYMENT
 @app.get("/health")
 def health():
     """Health check endpoint for monitoring and load balancers"""
     return {"status": "ok", "message": "Backend is running", "timestamp": datetime.now().isoformat()}
 
-# Version endpoint
 @app.get("/version")
 def version():
     """Version endpoint for deployment verification"""
@@ -41,162 +132,51 @@ def version():
         "timestamp": datetime.now().isoformat()
     }
 
-# Test endpoint
-@app.get("/test")
-def test():
-    """Test endpoint to verify the app is working"""
-    return {"message": "FastAPI app is working!", "timestamp": datetime.now().isoformat()}
-
-# Database health endpoint (for deployment script)
 @app.get("/mcp/enhanced/health")
 def database_health():
     """Database health endpoint for deployment validation"""
-    return {"status": "ok", "message": "Database health check", "database_connected": True}
+    try:
+        # Test database connection
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        return {"status": "ok", "message": "Database health check", "database_connected": True}
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        return {"status": "error", "message": "Database connection failed", "database_connected": False}
 
-# Auth endpoints (minimal implementations)
-@app.post("/auth/login")
-def login():
-    """Login endpoint - minimal implementation"""
-    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
+# Import and include authentication router
+try:
+    from auth_api import auth_router
+    app.include_router(auth_router)
+    logger.info("✅ Authentication router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include authentication router: {e}")
+    traceback.print_exc()
 
-@app.post("/auth/signup")
-def signup():
-    """Signup endpoint - minimal implementation"""
-    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
+# Import and include campaign router if available
+try:
+    from campaign_api import campaign_router
+    app.include_router(campaign_router)
+    logger.info("✅ Campaign router included successfully")
+except Exception as e:
+    logger.warning(f"Campaign router not available: {e}")
 
-@app.post("/auth/verify-email")
-def verify_email():
-    """Email verification endpoint - minimal implementation"""
-    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
-
-@app.get("/campaigns")
-def get_campaigns():
-    """Get campaigns endpoint - minimal implementation"""
-    return {"status": "error", "message": "Campaign system not yet implemented - use minimal app for testing"}
-
-@app.post("/campaigns")
-def create_campaign():
-    """Create campaign endpoint - minimal implementation"""
-    return {"status": "error", "message": "Campaign system not yet implemented - use minimal app for testing"}
-
-@app.get("/campaigns/{campaign_id}")
-def get_campaign_by_id(campaign_id: str):
-    """Get campaign by ID endpoint - minimal implementation"""
-    return {"status": "error", "message": "Campaign system not yet implemented - use minimal app for testing"}
-
-@app.delete("/campaigns/{campaign_id}")
-def delete_campaign(campaign_id: str):
-    """Delete campaign endpoint - minimal implementation"""
-    return {"status": "error", "message": "Campaign system not yet implemented - use minimal app for testing"}
-
-# Additional auth endpoints
-@app.post("/auth/forget-password")
-def forget_password():
-    """Forget password endpoint - minimal implementation"""
-    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
-
-@app.post("/auth/reset-password")
-def reset_password():
-    """Reset password endpoint - minimal implementation"""
-    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
-
-@app.post("/auth/resend-otp")
-def resend_otp():
-    """Resend OTP endpoint - minimal implementation"""
-    return {"status": "error", "message": "Auth system not yet implemented - use minimal app for testing"}
-
-# Content generation endpoints
-@app.post("/analyze")
-def analyze():
-    """Analyze endpoint - minimal implementation"""
-    return {"status": "error", "message": "Content analysis not yet implemented - use minimal app for testing"}
-
-@app.post("/generate-ideas")
-def generate_ideas():
-    """Generate ideas endpoint - minimal implementation"""
-    return {"status": "error", "message": "Content generation not yet implemented - use minimal app for testing"}
-
-@app.post("/generate_content")
-def generate_content():
-    """Generate content endpoint - minimal implementation"""
-    return {"status": "error", "message": "Content generation not yet implemented - use minimal app for testing"}
-
-@app.post("/extract_content")
-def extract_content():
-    """Extract content endpoint - minimal implementation"""
-    return {"status": "error", "message": "Content extraction not yet implemented - use minimal app for testing"}
-
-@app.post("/generate_custom_scripts_v2")
-def generate_custom_scripts():
-    """Generate custom scripts endpoint - minimal implementation"""
-    return {"status": "error", "message": "Script generation not yet implemented - use minimal app for testing"}
-
-@app.post("/regenerate_script_v1")
-def regenerate_script():
-    """Regenerate script endpoint - minimal implementation"""
-    return {"status": "error", "message": "Script regeneration not yet implemented - use minimal app for testing"}
-
-@app.post("/regenerate_content")
-def regenerate_content():
-    """Regenerate content endpoint - minimal implementation"""
-    return {"status": "error", "message": "Content regeneration not yet implemented - use minimal app for testing"}
-
-@app.post("/regenerate_subcontent")
-def regenerate_subcontent():
-    """Regenerate subcontent endpoint - minimal implementation"""
-    return {"status": "error", "message": "Subcontent regeneration not yet implemented - use minimal app for testing"}
-
-@app.post("/generate_image")
-def generate_image():
-    """Generate image endpoint - minimal implementation"""
-    return {"status": "error", "message": "Image generation not yet implemented - use minimal app for testing"}
-
-# Scheduling endpoints
-@app.get("/scheduled-posts")
-def get_scheduled_posts():
-    """Get scheduled posts endpoint - minimal implementation"""
-    return {"status": "error", "message": "Scheduling system not yet implemented - use minimal app for testing"}
-
-# Platform auth endpoints
-@app.get("/linkedin/auth-v2")
-def linkedin_auth():
-    """LinkedIn auth endpoint - minimal implementation"""
-    return {"status": "error", "message": "Platform auth not yet implemented - use minimal app for testing"}
-
-@app.get("/twitter/auth-v2")
-def twitter_auth():
-    """Twitter auth endpoint - minimal implementation"""
-    return {"status": "error", "message": "Platform auth not yet implemented - use minimal app for testing"}
-
-# API key storage endpoints
-@app.post("/store_elevenlabs_key")
-def store_elevenlabs_key():
-    """Store ElevenLabs API key endpoint - minimal implementation"""
-    return {"status": "error", "message": "API key storage not yet implemented - use minimal app for testing"}
-
-@app.post("/store_midjourney_key")
-def store_midjourney_key():
-    """Store Midjourney API key endpoint - minimal implementation"""
-    return {"status": "error", "message": "API key storage not yet implemented - use minimal app for testing"}
-
-# WordPress auth endpoint
-@app.post("/wordpress/auth-v2")
-def wordpress_auth():
-    """WordPress auth endpoint - minimal implementation"""
-    return {"status": "error", "message": "WordPress auth not yet implemented - use minimal app for testing"}
-
-# Analysis status endpoint
-@app.get("/analyze/status/{task_id}")
-def get_analysis_status(task_id: str):
-    """Get analysis status endpoint - minimal implementation"""
-    return {"status": "error", "message": "Analysis status not yet implemented - use minimal app for testing"}
+# Import and include content generation router if available
+try:
+    from content_api import content_router
+    app.include_router(content_router)
+    logger.info("✅ Content router included successfully")
+except Exception as e:
+    logger.warning(f"Content router not available: {e}")
 
 # Root endpoint
 @app.get("/")
 def root():
     """Root endpoint"""
-    return {"message": "Vernal Agents Backend API", "status": "running"}
+    return {"message": "Vernal Agents Backend API", "status": "running", "version": "2.0.0"}
 
 if __name__ == "__main__":
     import uvicorn
+    logger.info("Starting server with uvicorn")
     uvicorn.run(app, host="0.0.0.0", port=8000)
