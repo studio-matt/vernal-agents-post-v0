@@ -153,6 +153,37 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to include authentication router: {e}")
     traceback.print_exc()
+    # Add basic auth endpoints as fallback
+    from fastapi import HTTPException, Depends, status
+    from pydantic import BaseModel
+    from typing import Optional
+    
+    class UserLogin(BaseModel):
+        username: str
+        password: str
+    
+    class UserSignup(BaseModel):
+        username: str
+        email: str
+        password: str
+        contact: Optional[str] = None
+    
+    @app.post("/auth/login")
+    def basic_login(user_data: UserLogin):
+        """Basic login endpoint - fallback"""
+        return {"status": "error", "message": "Authentication system temporarily unavailable"}
+    
+    @app.post("/auth/signup")
+    def basic_signup(user_data: UserSignup):
+        """Basic signup endpoint - fallback"""
+        return {"status": "error", "message": "Authentication system temporarily unavailable"}
+    
+    @app.post("/auth/verify-email")
+    def basic_verify_email():
+        """Basic verify email endpoint - fallback"""
+        return {"status": "error", "message": "Authentication system temporarily unavailable"}
+    
+    logger.info("✅ Basic auth endpoints added as fallback")
 
 # Import and include campaign router if available
 try:
