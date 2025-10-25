@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import logging
 # Lazy database import - will be initialized in startup event
 # Lazy models import
+from models import User
 
 # Lazy database access function
 def get_db_session():
