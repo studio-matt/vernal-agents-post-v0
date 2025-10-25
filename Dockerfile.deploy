@@ -17,15 +17,12 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements files
-COPY requirements-core.txt .
-COPY requirements-ai.txt .
-COPY requirements-remaining.txt .
+COPY requirements.in .
+COPY requirements-locked.txt .
 
-# Install dependencies in chunks to reduce memory pressure
+# Install locked dependencies (faster and more reliable)
 RUN pip install --upgrade pip && \
-    pip install -r requirements-core.txt --no-cache-dir && \
-    pip install -r requirements-ai.txt --no-cache-dir && \
-    pip install -r requirements-remaining.txt --no-cache-dir && \
+    pip install -r requirements-locked.txt --no-cache-dir && \
     pip cache purge
 
 # Copy application code

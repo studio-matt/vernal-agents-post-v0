@@ -13,6 +13,18 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       
+    - name: Generate locked requirements
+      run: |
+        # Install pip-tools
+        pip install pip-tools
+        
+        # Generate locked requirements
+        pip-compile requirements.in --output-file requirements-locked.txt
+        
+        # Show what was generated
+        echo "📋 Generated requirements-locked.txt:"
+        head -20 requirements-locked.txt
+        
     - name: Build Docker image
       run: |
         docker build -f Dockerfile.deploy -t vernal-agents:latest .
