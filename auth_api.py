@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 import logging
 # Lazy database import - will be initialized in startup event
 # Lazy models import
-from models import User
 
 # Lazy database access function
 def get_db_session():
@@ -527,7 +526,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         )
 
 @auth_router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
+async def get_current_user_info(current_user = Depends(get_current_user)):
     """Get current user information"""
     return UserResponse(
         id=current_user.id,

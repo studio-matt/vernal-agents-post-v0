@@ -28,14 +28,32 @@ app.add_middleware(
 
 # --- ROUTER INCLUDES MUST BE HERE ---
 # This is REQUIRED for FastAPI to properly register endpoints
-from auth_api import auth_router
-app.include_router(auth_router)
+# Using lazy imports to prevent blocking at startup
+def include_routers():
+    """Lazy router inclusion to prevent blocking imports"""
+    try:
+        from auth_api import auth_router
+        app.include_router(auth_router)
+        logger.info("✅ Authentication router included successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to include authentication router: {e}")
+    
+    try:
+        from enhanced_mcp_api import enhanced_mcp_router
+        app.include_router(enhanced_mcp_router)
+        logger.info("✅ Enhanced MCP router included successfully")
+    except Exception as e:
+        logger.warning(f"Enhanced MCP router not available: {e}")
+    
+    try:
+        from simple_mcp_api import simple_mcp_router
+        app.include_router(simple_mcp_router)
+        logger.info("✅ Simple MCP router included successfully")
+    except Exception as e:
+        logger.warning(f"Simple MCP router not available: {e}")
 
-from enhanced_mcp_api import enhanced_mcp_router
-app.include_router(enhanced_mcp_router)
-
-from simple_mcp_api import simple_mcp_router
-app.include_router(simple_mcp_router)
+# Include routers immediately but with error handling
+include_routers()
 
 # Global variables for lazy initialization
 db_manager = None
