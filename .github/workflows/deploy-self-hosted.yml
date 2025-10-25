@@ -1,0 +1,219 @@
+name: Deploy Agents (Self-Hosted Runner)
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  deploy:
+    name: Deploy Agents (High Memory)
+    runs-on: [self-hosted, linux, x64]  # Self-hosted runner with more RAM
+    timeout-minutes: 120  # 2 hours for heavy installs
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Deploy on Agents Server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
+        passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
+        script: |
+          set -e
+          echo "🚀 SELF-HOSTED HIGH-MEMORY DEPLOYMENT STARTING..."
+          
+          # 0. Ensure jq is installed for JSON validation
+          sudo apt-get update && sudo apt-get install -y jq
+          
+          # 1. BULLETPROOF NUKING - Remove entire directory in one command
+          echo "🧹 Nuking old code..."
+          sudo systemctl stop vernal-agents || true
+          
+          # Kill any stuck Python processes
+          sudo pkill -9 -f python || true
+          sudo pkill -9 -f uvicorn || true
+          sudo pkill -9 -f main.py || true
+          echo "⏳ Waiting for processes to terminate..."
+          sleep 3
+          
+          # BULLETPROOF NUKING - Remove entire directory in one command
+          echo "🧹 Removing entire directory..."
+          sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+          
+          # Retry if directory still exists
+          for i in {1..3}; do
+            if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
+              echo "❌ Directory still exists, trying again (attempt $i)..."
+              sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+              sleep 2
+            fi
+          done
+          
+          # Verify directory is gone
+          if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
+            echo "❌ Directory could not be fully deleted. Showing contents:"
+            sudo find /home/ubuntu/vernal-agents-post-v0
+            exit 1
+          fi
+          echo "✅ Directory completely removed"
+          
+          # 2. Clone fresh from GitHub
+          echo "📦 Cloning fresh from GitHub..."
+          git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
+          cd /home/ubuntu/vernal-agents-post-v0
+          
+          # 3. Setup venv from scratch with memory optimization
+          echo "🐍 Setting up virtual environment..."
+          python3 -m venv venv
+          source venv/bin/activate
+          
+          # Memory monitoring and optimization
+          echo "📊 Memory status before pip install:"
+          free -h
+          
+          # Aggressive memory cleanup
+          echo "🧹 Cleaning up memory..."
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /tmp/*
+          echo "📊 Memory after cleanup:"
+          free -h
+          
+          # Memory optimization: upgrade pip and install with no cache
+          echo "⬆️ Upgrading pip..."
+          pip install --upgrade pip --no-cache-dir
+          
+          # Install packages one by one to reduce memory pressure
+          echo "📦 Installing requirements with memory optimization..."
+          pip install -r requirements.txt --no-cache-dir --no-deps --progress-bar off
+          
+          # Clean up pip cache
+          pip cache purge
+          
+          echo "📊 Memory status after pip install:"
+          free -h
+          
+          # Check if we're running low on memory
+          AVAILABLE_MEM=$(free -m | awk 'NR==2{printf "%.0f", $7}')
+          if [ "$AVAILABLE_MEM" -lt 100 ]; then
+            echo "⚠️ WARNING: Low memory detected ($AVAILABLE_MEM MB available)"
+            echo "🧹 Running additional cleanup..."
+            sudo sync
+            echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+            echo "📊 Memory after emergency cleanup:"
+            free -h
+          fi
+          
+          # CRITICAL: Validate main.py defines FastAPI app
+          echo "🔍 Validating main.py..."
+          test -f main.py || { echo "ERROR: main.py not found!"; exit 1; }
+          grep -q "app = FastAPI" main.py || { echo "ERROR: main.py must define app = FastAPI()!"; exit 1; }
+          echo "✅ main.py validation passed"
+          
+          # CRITICAL: Validate environment variables
+          echo "🔍 Validating environment..."
+          if [ -z "$DB_HOST" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ] || [ -z "$DB_NAME" ]; then
+            echo "❌ ERROR: Missing required environment variables!"
+            echo "Required: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME"
+            exit 1
+          fi
+          echo "✅ Environment validation passed"
+          
+          # 4. Set environment variables
+          echo "🔧 Setting environment variables..."
+          export PYTHONPATH="/home/ubuntu/vernal-agents-post-v0:$PYTHONPATH"
+          echo "✅ Environment variables set"
+          
+          # 5. Start the service
+          echo "🚀 Starting service..."
+          sudo systemctl start vernal-agents
+          sudo systemctl enable vernal-agents
+          echo "✅ Service started"
+          
+          # 6. Wait for service to start
+          echo "⏳ Waiting for service to start..."
+          sleep 15
+          
+          # 7. Verify service is running
+          echo "🔍 Verifying service status..."
+          if ! systemctl is-active --quiet vernal-agents; then
+            echo "❌ Service is not running!"
+            sudo journalctl -u vernal-agents --no-pager -l
+            exit 1
+          fi
+          echo "✅ Service is running"
+          
+          # 8. Wait for port 8000 to be available
+          echo "🔍 Waiting for port 8000..."
+          for i in {1..30}; do
+            if netstat -tlnp | grep -q ":8000 "; then
+              echo "✅ Port 8000 is listening"
+              break
+            fi
+            echo "⏳ Waiting for port 8000... (attempt $i/30)"
+            sleep 2
+          done
+          
+          if ! netstat -tlnp | grep -q ":8000 "; then
+            echo "❌ Port 8000 is not listening after 60 seconds!"
+            sudo journalctl -u vernal-agents --no-pager -l
+            exit 1
+          fi
+          echo "✅ Port 8000 is listening"
+          
+          # External access test
+          echo "🔍 Testing external access..."
+          curl -f https://themachine.vernalcontentum.com/health || { echo "❌ External health check failed!"; exit 1; }
+          curl -f https://themachine.vernalcontentum.com/version || { echo "❌ External version check failed!"; exit 1; }
+          curl -f https://themachine.vernalcontentum.com/mcp/enhanced/health || { echo "❌ External database test failed!"; exit 1; }
+          echo "✅ External access working"
+          
+          # 9. Verify deployment completion with commit hash
+          echo "🔍 Verifying deployment completion..."
+          COMMIT_HASH=$(git rev-parse HEAD)
+          PYTHON_VERSION=$(python --version)
+          
+          # Final memory check
+          echo "📊 Final memory status:"
+          free -h
+          
+          # Write completion marker file
+          echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
+          
+          # Copy verification script for manual use
+          cp verify_deployment.sh /home/ubuntu/verify_deployment.sh
+          chmod +x /home/ubuntu/verify_deployment.sh
+          
+          # Copy lightweight deployment script
+          cp deploy_lightweight.sh /home/ubuntu/deploy_lightweight.sh
+          chmod +x /home/ubuntu/deploy_lightweight.sh
+          
+          # Log successful deployment
+          echo "$(date) - SELF-HOSTED HIGH-MEMORY Backend deployed successfully via GitHub Actions, commit: $COMMIT_HASH, Python: $PYTHON_VERSION" >> ~/vernal_agents_deploy.log
+          
+          # Final verification - test commit hash endpoint
+          echo "🔍 Testing commit hash endpoint..."
+          curl -f http://localhost:8000/deploy/commit || { echo "❌ Commit hash endpoint failed!"; exit 1; }
+          
+          echo "🎉 SELF-HOSTED HIGH-MEMORY BACKEND DEPLOYMENT SUCCESSFUL!"
+          echo "📝 Deployment logged to ~/vernal_agents_deploy.log"
+          echo "📝 Completion marker: /home/ubuntu/vernal_agents_deploy_complete.txt"
+          echo "🔗 Commit hash: $COMMIT_HASH"
+          echo "🔧 Manual verification: /home/ubuntu/verify_deployment.sh"
+          echo "🚀 Lightweight deploy: /home/ubuntu/deploy_lightweight.sh"
