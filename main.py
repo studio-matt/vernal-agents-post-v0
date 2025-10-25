@@ -31,12 +31,6 @@ app.add_middleware(
 from auth_api import auth_router
 app.include_router(auth_router)
 
-from campaign_api import campaign_router
-app.include_router(campaign_router)
-
-from content_api import content_router
-app.include_router(content_router)
-
 from enhanced_mcp_api import enhanced_mcp_router
 app.include_router(enhanced_mcp_router)
 
