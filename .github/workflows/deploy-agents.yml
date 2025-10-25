@@ -10,11 +10,24 @@ jobs:
   deploy:
     name: Deploy Agents
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Deploy on Agents Server
       uses: appleboy/ssh-action@v1.0.3
@@ -76,11 +89,14 @@ jobs:
           git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
           cd /home/ubuntu/vernal-agents-post-v0
 
-          # 3. Setup venv from scratch
+          # 3. Setup venv from scratch with memory optimization
           echo "🐍 Setting up virtual environment..."
           python3 -m venv venv
           source venv/bin/activate
-          pip install -r requirements.txt
+          
+          # Memory optimization: upgrade pip and install with no cache
+          pip install --upgrade pip --no-cache-dir
+          pip install -r requirements.txt --no-cache-dir
 
           # CRITICAL: Validate main.py defines FastAPI app
           echo "🔍 Validating main.py..."
@@ -216,6 +232,10 @@ jobs:
           # Write completion marker file
           echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
           
+          # Copy verification script for manual use
+          cp verify_deployment.sh /home/ubuntu/verify_deployment.sh
+          chmod +x /home/ubuntu/verify_deployment.sh
+          
           # Log successful deployment
           echo "$(date) - BULLETPROOF Backend deployed successfully via GitHub Actions, commit: $COMMIT_HASH, Python: $PYTHON_VERSION" >> ~/vernal_agents_deploy.log
           
@@ -227,3 +247,4 @@ jobs:
           echo "📝 Deployment logged to ~/vernal_agents_deploy.log"
           echo "📝 Completion marker: /home/ubuntu/vernal_agents_deploy_complete.txt"
           echo "🔗 Commit hash: $COMMIT_HASH"
+          echo "🔧 Manual verification: /home/ubuntu/verify_deployment.sh"
