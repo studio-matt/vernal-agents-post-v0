@@ -3,7 +3,12 @@
 
 echo "🔧 COMPILING LOCKED REQUIREMENTS..."
 
+# Upgrade build tools for Python 3.11 compatibility
+echo "⬆️ Upgrading build tools..."
+pip install --upgrade pip setuptools wheel
+
 # Install pip-tools if not available
+echo "📦 Installing pip-tools..."
 pip install pip-tools
 
 # Compile requirements from .in file

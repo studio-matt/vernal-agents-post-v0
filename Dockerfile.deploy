@@ -17,11 +17,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements files
-COPY requirements.in .
 COPY requirements-locked.txt .
 
 # Install locked dependencies (faster and more reliable)
-RUN pip install --upgrade pip && \
+RUN pip install --upgrade pip setuptools wheel && \
     pip install -r requirements-locked.txt --no-cache-dir && \
     pip cache purge
 

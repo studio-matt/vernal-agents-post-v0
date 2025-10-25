@@ -13,17 +13,18 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Generate locked requirements
+    - name: Verify locked requirements
       run: |
-        # Install pip-tools
-        pip install pip-tools
-        
-        # Generate locked requirements
-        pip-compile requirements.in --output-file requirements-locked.txt
-        
-        # Show what was generated
-        echo "📋 Generated requirements-locked.txt:"
-        head -20 requirements-locked.txt
+        echo "📋 Verifying pre-generated requirements-locked.txt exists..."
+        if [ -f requirements-locked.txt ]; then
+          echo "✅ requirements-locked.txt found"
+          echo "📊 Dependencies count: $(wc -l < requirements-locked.txt)"
+          echo "🔍 First 10 dependencies:"
+          head -10 requirements-locked.txt
+        else
+          echo "❌ requirements-locked.txt not found - using fallback"
+          echo "⚠️ This may cause dependency conflicts"
+        fi
         
     - name: Build Docker image
       run: |
