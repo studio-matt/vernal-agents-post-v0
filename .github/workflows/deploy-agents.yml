@@ -10,7 +10,7 @@ jobs:
   deploy:
     name: Deploy Agents
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
     - name: Checkout
@@ -98,15 +98,39 @@ jobs:
           echo "📊 Memory status before pip install:"
           free -h
           
+          # Aggressive memory cleanup
+          echo "🧹 Cleaning up memory..."
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /tmp/*
+          echo "📊 Memory after cleanup:"
+          free -h
+          
           # Memory optimization: upgrade pip and install with no cache
           echo "⬆️ Upgrading pip..."
           pip install --upgrade pip --no-cache-dir
           
+          # Install packages one by one to reduce memory pressure
           echo "📦 Installing requirements with memory optimization..."
-          pip install -r requirements.txt --no-cache-dir --no-deps
+          pip install -r requirements.txt --no-cache-dir --no-deps --progress-bar off
+          
+          # Clean up pip cache
+          pip cache purge
           
           echo "📊 Memory status after pip install:"
           free -h
+          
+          # Check if we're running low on memory
+          AVAILABLE_MEM=$(free -m | awk 'NR==2{printf "%.0f", $7}')
+          if [ "$AVAILABLE_MEM" -lt 100 ]; then
+            echo "⚠️ WARNING: Low memory detected ($AVAILABLE_MEM MB available)"
+            echo "🧹 Running additional cleanup..."
+            sudo sync
+            echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+            echo "📊 Memory after emergency cleanup:"
+            free -h
+          fi
 
           # CRITICAL: Validate main.py defines FastAPI app
           echo "🔍 Validating main.py..."
@@ -239,12 +263,20 @@ jobs:
           COMMIT_HASH=$(git rev-parse HEAD)
           PYTHON_VERSION=$(python --version)
           
+          # Final memory check
+          echo "📊 Final memory status:"
+          free -h
+          
           # Write completion marker file
           echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
           
           # Copy verification script for manual use
           cp verify_deployment.sh /home/ubuntu/verify_deployment.sh
           chmod +x /home/ubuntu/verify_deployment.sh
+          
+          # Copy lightweight deployment script
+          cp deploy_lightweight.sh /home/ubuntu/deploy_lightweight.sh
+          chmod +x /home/ubuntu/deploy_lightweight.sh
           
           # Log successful deployment
           echo "$(date) - BULLETPROOF Backend deployed successfully via GitHub Actions, commit: $COMMIT_HASH, Python: $PYTHON_VERSION" >> ~/vernal_agents_deploy.log
@@ -258,3 +290,4 @@ jobs:
           echo "📝 Completion marker: /home/ubuntu/vernal_agents_deploy_complete.txt"
           echo "🔗 Commit hash: $COMMIT_HASH"
           echo "🔧 Manual verification: /home/ubuntu/verify_deployment.sh"
+          echo "🚀 Lightweight deploy: /home/ubuntu/deploy_lightweight.sh"
