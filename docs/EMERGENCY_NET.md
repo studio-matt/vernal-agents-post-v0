@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v4)
+# Vernal Agents Backend — Emergency Net (v5)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -781,6 +781,142 @@ echo "🎉 Full System Health Check PASSED!"
 - [ ] **JWT token creation working correctly**
 - [ ] **Email service configured and tested**
 - [ ] **Database tables exist and accessible**
+
+---
+
+## 🚨 CRITICAL: SIGKILL (STATUS 137) PREVENTION (v5)
+
+### **THE #1 CAUSE OF CI DEPLOYMENT FAILURES**
+
+**PROBLEM:** GitHub Actions runner killed with SIGKILL (status 137) before deployment completes, even though the script is bulletproof.
+
+**ROOT CAUSE:** CI runner runs out of RAM (<7GB) or hits timeout during heavy Python package installation.
+
+**SYMPTOMS:**
+- GitHub Action shows "Process exited with status 137 from signal KILL"
+- Deployment script is perfect but never finishes
+- Backend may not be updated even if script is correct
+- Endless deployment loops with no clear error messages
+
+### **MANDATORY DEPLOYMENT OPTIONS**
+
+#### **1. SELF-HOSTED RUNNER (RECOMMENDED)**
+```yaml
+# Use .github/workflows/deploy-self-hosted.yml
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64]  # High RAM runner
+    timeout-minutes: 120  # 2 hours for heavy installs
+```
+
+**Benefits:**
+- 8GB+ RAM available (vs 7GB on GitHub-hosted)
+- 120-minute timeout (vs 90-minute limit)
+- Full control over environment
+- No memory constraints
+
+#### **2. DOCKER DEPLOYMENT (MEMORY ALLOCATED)**
+```yaml
+# Use .github/workflows/deploy-docker.yml
+docker run -d \
+  --name vernal-agents-container \
+  --memory=4g \
+  --memory-swap=6g \
+  -p 8000:8000 \
+  vernal-agents:latest
+```
+
+**Benefits:**
+- 4GB memory allocation guaranteed
+- Container isolation prevents OOM
+- Consistent environment
+- Easy rollback
+
+#### **3. MEMORY-OPTIMIZED SCRIPT (CHUNKED INSTALLS)**
+```bash
+# Use deploy_memory_optimized.sh
+# Installs dependencies in chunks:
+# 1. requirements-core.txt (FastAPI, SQLAlchemy)
+# 2. requirements-ai.txt (OpenAI, Anthropic)  
+# 3. requirements-remaining.txt (Everything else)
+```
+
+**Benefits:**
+- Reduces memory pressure during install
+- Memory monitoring between chunks
+- Emergency cleanup when <200MB available
+- Works on standard GitHub runners
+
+#### **4. LIGHTWEIGHT DEPLOYMENT (MINIMAL DEPS)**
+```bash
+# Use deploy_lightweight.sh
+# Installs only essential packages first
+# Then remaining packages from requirements.txt
+```
+
+**Benefits:**
+- Minimal memory usage
+- Faster deployment
+- Works in resource-constrained environments
+- Good for quick fixes
+
+### **DEPLOYMENT VERIFICATION**
+
+**After ANY deployment, verify completion:**
+```bash
+# Check completion marker
+cat /home/ubuntu/vernal_agents_deploy_complete.txt
+
+# Test commit hash endpoint
+curl https://themachine.vernalcontentum.com/deploy/commit
+
+# Run full verification
+/home/ubuntu/verify_deployment.sh
+```
+
+**Success Indicators:**
+- ✅ Completion marker file exists with today's timestamp
+- ✅ `/deploy/commit` returns latest commit hash
+- ✅ All health endpoints return 200 OK
+- ✅ External access works
+- ✅ No SIGKILL in deployment logs
+
+### **EMERGENCY RECOVERY FOR SIGKILL**
+
+**If CI keeps failing with status 137:**
+
+1. **Use manual deployment:**
+   ```bash
+   ssh ubuntu@18.235.104.132
+   cd /home/ubuntu/vernal-agents-post-v0
+   ./deploy_memory_optimized.sh
+   ```
+
+2. **Or use lightweight deployment:**
+   ```bash
+   ./deploy_lightweight.sh
+   ```
+
+3. **Or use Docker deployment:**
+   ```bash
+   docker run -d --name vernal-agents-container --memory=4g -p 8000:8000 vernal-agents:latest
+   ```
+
+4. **Verify deployment completed:**
+   ```bash
+   /home/ubuntu/verify_deployment.sh
+   ```
+
+### **INFRASTRUCTURE REQUIREMENTS**
+
+**For reliable automated deployments:**
+- **Self-hosted runner:** 8GB+ RAM, 120min timeout
+- **Docker deployment:** 4GB memory allocation
+- **Memory monitoring:** Check available RAM before heavy operations
+- **Chunked installs:** Split requirements.txt into core/ai/remaining
+- **Emergency cleanup:** Drop caches when <200MB available
+
+**This prevents the deployment vortex caused by CI infrastructure limits, not code issues.**
 
 ---
 
