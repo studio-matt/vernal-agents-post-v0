@@ -1,11 +1,11 @@
-name: Deploy Agents (Docker with High Memory)
+name: Deploy Agents (Pre-built Docker Image)
 
 on:
   workflow_dispatch:  # Manual trigger only
 
 jobs:
-  deploy:
-    name: Deploy Agents (Docker High Memory)
+  build-and-deploy:
+    name: Build Pre-built Image and Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 60
     
@@ -13,11 +13,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Build Docker image
+    - name: Build pre-built Docker image
       run: |
-        docker build -f Dockerfile.deploy -t vernal-agents:latest .
+        echo "🐳 Building pre-built Docker image with ALL dependencies..."
+        docker build -f Dockerfile.prebuilt -t vernal-agents:prebuilt .
+        echo "✅ Pre-built image created successfully"
         
-    - name: Deploy on Agents Server
+    - name: Deploy pre-built image
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -26,7 +28,7 @@ jobs:
         passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
         script: |
           set -e
-          echo "🐳 DOCKER HIGH-MEMORY DEPLOYMENT STARTING..."
+          echo "🐳 PRE-BUILT DOCKER DEPLOYMENT STARTING..."
           
           # 1. Stop existing services
           echo "🛑 Stopping existing services..."
@@ -34,9 +36,17 @@ jobs:
           docker stop vernal-agents-container || true
           docker rm vernal-agents-container || true
           
-          # 2. Clean up old images
-          echo "🧹 Cleaning up old Docker images..."
-          docker image prune -f
+          # 2. Setup swap space
+          echo "💾 Setting up swap space..."
+          if ! swapon --show | grep -q "/swapfile"; then
+            sudo fallocate -l 8G /swapfile
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+          fi
+          echo "✅ Swap space configured:"
+          free -h
           
           # 3. Pull latest code
           echo "📦 Pulling latest code..."
@@ -45,12 +55,12 @@ jobs:
           git clone https://github.com/studio-matt/vernal-agents-post-v0.git vernal-agents-post-v0
           cd vernal-agents-post-v0
           
-          # 4. Build Docker image with memory allocation
-          echo "🐳 Building Docker image..."
-          docker build -f Dockerfile.deploy -t vernal-agents:latest .
+          # 4. Build pre-built Docker image (dependencies already installed)
+          echo "🐳 Building pre-built Docker image..."
+          docker build -f Dockerfile.prebuilt -t vernal-agents:prebuilt .
           
-          # 5. Run container with high memory allocation
-          echo "🚀 Starting container with high memory..."
+          # 5. Run container with maximum memory allocation
+          echo "🚀 Starting container with maximum memory..."
           docker run -d \
             --name vernal-agents-container \
             --restart unless-stopped \
@@ -62,7 +72,7 @@ jobs:
             -e DB_PASSWORD="$DB_PASSWORD" \
             -e DB_NAME="$DB_NAME" \
             -e PYTHONPATH="/app" \
-            vernal-agents:latest
+            vernal-agents:prebuilt
           
           # 6. Wait for container to start
           echo "⏳ Waiting for container to start..."
@@ -93,7 +103,9 @@ jobs:
           COMMIT_HASH=$(git rev-parse HEAD)
           echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
           
-          echo "🎉 DOCKER HIGH-MEMORY DEPLOYMENT SUCCESSFUL!"
+          echo "🎉 PRE-BUILT DOCKER DEPLOYMENT SUCCESSFUL!"
           echo "🔗 Commit: $COMMIT_HASH"
           echo "🐳 Container: vernal-agents-container"
-          echo "💾 Memory: 4GB allocated"
+          echo "💾 Memory: 8GB allocated + 8GB swap"
+          echo "📊 Final memory status:"
+          free -h

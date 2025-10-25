@@ -1,0 +1,160 @@
+name: Deploy Agents (VM with 16GB+ RAM)
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  deploy:
+    name: Deploy Agents (VM High Memory)
+    runs-on: [self-hosted, linux, x64]  # Self-hosted runner with 16GB+ RAM
+    timeout-minutes: 180  # 3 hours for heavy installs
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup swap space
+      run: |
+        echo "💾 Setting up swap space..."
+        sudo fallocate -l 8G /swapfile || true
+        sudo chmod 600 /swapfile || true
+        sudo mkswap /swapfile || true
+        sudo swapon /swapfile || true
+        echo "✅ Swap space configured:"
+        free -h
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Deploy on Agents Server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
+        passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
+        script: |
+          set -e
+          echo "🚀 VM HIGH-MEMORY DEPLOYMENT STARTING..."
+          
+          # 0. Setup swap space on target server
+          echo "💾 Setting up swap space on target server..."
+          if ! swapon --show | grep -q "/swapfile"; then
+            sudo fallocate -l 8G /swapfile
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+          fi
+          echo "✅ Swap space configured:"
+          free -h
+          
+          # 1. BULLETPROOF NUKING
+          echo "🧹 Nuking old code..."
+          sudo systemctl stop vernal-agents || true
+          sudo pkill -9 -f python || true
+          sudo pkill -9 -f uvicorn || true
+          sudo pkill -9 -f main.py || true
+          sleep 3
+          sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+          
+          # 2. Clone fresh from GitHub
+          echo "📦 Cloning fresh from GitHub..."
+          git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
+          cd /home/ubuntu/vernal-agents-post-v0
+          
+          # 3. Setup venv with maximum memory optimization
+          echo "🐍 Setting up virtual environment..."
+          python3 -m venv venv
+          source venv/bin/activate
+          
+          # Memory monitoring
+          echo "📊 Memory status before pip install:"
+          free -h
+          
+          # Aggressive memory cleanup
+          echo "🧹 Cleaning up memory..."
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /tmp/*
+          sudo sync
+          echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+          
+          echo "📊 Memory after cleanup:"
+          free -h
+          
+          # Install with maximum memory optimization
+          echo "⬆️ Upgrading pip..."
+          pip install --upgrade pip --no-cache-dir
+          
+          # Install in chunks with memory monitoring
+          echo "📦 Installing core dependencies..."
+          pip install -r requirements-core.txt --no-cache-dir --progress-bar off
+          echo "📊 Memory after core:"
+          free -h
+          
+          echo "📦 Installing AI dependencies..."
+          pip install -r requirements-ai.txt --no-cache-dir --progress-bar off
+          echo "📊 Memory after AI:"
+          free -h
+          
+          echo "📦 Installing remaining dependencies..."
+          pip install -r requirements-remaining.txt --no-cache-dir --progress-bar off
+          echo "📊 Memory after all:"
+          free -h
+          
+          # Clean up
+          pip cache purge
+          
+          # 4. Validate and start service
+          echo "🔍 Validating main.py..."
+          test -f main.py || { echo "ERROR: main.py not found!"; exit 1; }
+          grep -q "app = FastAPI" main.py || { echo "ERROR: main.py must define app = FastAPI()!"; exit 1; }
+          
+          echo "🔧 Setting environment variables..."
+          export PYTHONPATH="/home/ubuntu/vernal-agents-post-v0:$PYTHONPATH"
+          
+          echo "🚀 Starting service..."
+          sudo systemctl start vernal-agents
+          sudo systemctl enable vernal-agents
+          
+          # 5. Wait and verify
+          echo "⏳ Waiting for service to start..."
+          sleep 20
+          
+          # Health checks
+          echo "🔍 Health check..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ Service is healthy"
+              break
+            fi
+            echo "⏳ Waiting for health check... (attempt $i/30)"
+            sleep 2
+          done
+          
+          if ! curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "❌ Service health check failed!"
+            sudo journalctl -u vernal-agents --no-pager -l
+            exit 1
+          fi
+          
+          # 6. Write completion marker
+          COMMIT_HASH=$(git rev-parse HEAD)
+          echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
+          
+          echo "🎉 VM HIGH-MEMORY DEPLOYMENT SUCCESSFUL!"
+          echo "🔗 Commit: $COMMIT_HASH"
+          echo "💾 Memory status:"
+          free -h
