@@ -31,10 +31,18 @@ jobs:
 
           # 1. BULLETPROOF NUKING - Remove entire directory in one command
           echo "🧹 Nuking old code..."
-          sudo systemctl stop vernal-agents || true
           
-          # Kill any stuck Python processes
-          sudo pkill -f python || true
+          # Stop service and wait for it to fully stop
+          sudo systemctl stop vernal-agents || true
+          echo "⏳ Waiting for service to stop..."
+          sleep 5
+          
+          # Kill any stuck Python processes more aggressively
+          sudo pkill -9 -f python || true
+          sudo pkill -9 -f uvicorn || true
+          sudo pkill -9 -f main.py || true
+          echo "⏳ Waiting for processes to terminate..."
+          sleep 3
           
           # BULLETPROOF NUKING - Remove entire directory in one command
           echo "🧹 Removing entire directory..."
