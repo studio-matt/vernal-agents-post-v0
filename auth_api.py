@@ -10,7 +10,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import logging
 # Lazy database import - will be initialized in startup event
-from models import User, OTP
+# Lazy models import
 
 # Lazy database access function
 def get_db_session():
@@ -99,6 +99,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
+        from models import User
         user = db.query(User).filter(User.id == int(user_id)).first()
         if user is None:
             raise HTTPException(
@@ -124,6 +125,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         logger.info(f"Signup attempt for username: {user_data.username}, email: {user_data.email}")
         
         # Check if user already exists
+        from models import User
         existing_user = db.query(User).filter(
             (User.username == user_data.username) | (User.email == user_data.email)
         ).first()
@@ -147,6 +149,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         hashed_password = hash_password(user_data.password)
         
         # Create new user
+        from models import User
         new_user = User(
             username=user_data.username,
             email=user_data.email,
@@ -166,6 +169,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         # Generate and send OTP
         otp_code = str(secrets.randbelow(900000) + 100000) # 6-digit OTP
         expires_at = datetime.utcnow() + timedelta(minutes=10)
+        from models import OTP
         new_otp = OTP(user_id=new_user.id, otp_code=otp_code, expires_at=expires_at)
         db.add(new_otp)
         db.commit()
@@ -241,6 +245,7 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
         logger.info(f"Login attempt for username: {user_data.username}")
         
         # Find user by username or email
+        from models import User
         user = db.query(User).filter(
             (User.username == user_data.username) | (User.email == user_data.username)
         ).first()
@@ -296,6 +301,7 @@ async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db
         logger.info(f"Email verification attempt for: {request.email}")
         
         # Find user by email
+        from models import User
         user = db.query(User).filter(User.email == request.email).first()
         
         if not user:
@@ -305,6 +311,7 @@ async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db
             )
         
         # Find valid OTP for user
+        from models import OTP
         otp_record = db.query(OTP).filter(
             OTP.user_id == user.id,
             OTP.otp_code == request.otp_code,
@@ -346,6 +353,7 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
         logger.info(f"Resend OTP request for: {request.email}")
         
         # Find user by email
+        from models import User
         user = db.query(User).filter(User.email == request.email).first()
         
         if not user:
@@ -405,6 +413,7 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
         logger.info(f"Forget password request for: {request.email}")
         
         # Find user by email
+        from models import User
         user = db.query(User).filter(User.email == request.email).first()
         
         if not user:
@@ -464,6 +473,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         logger.info(f"Password reset attempt for: {request.email}")
         
         # Find user by email
+        from models import User
         user = db.query(User).filter(User.email == request.email).first()
         
         if not user:
@@ -474,6 +484,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         
         # Mock OTP verification (accept any 6-digit code)
         # Find valid OTP for user
+        from models import OTP
         otp_record = db.query(OTP).filter(
             OTP.user_id == user.id,
             OTP.otp_code == request.otp_code,
