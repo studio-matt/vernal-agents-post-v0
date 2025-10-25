@@ -26,42 +26,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- INCLUDE ROUTERS AT GLOBAL SCOPE ---
+# --- ROUTER INCLUDES MUST BE HERE ---
 # This is REQUIRED for FastAPI to properly register endpoints
-try:
-    from auth_api import auth_router
-    app.include_router(auth_router)
-    logger.info("✅ Authentication router included successfully")
-except Exception as e:
-    logger.error(f"❌ Failed to include authentication router: {e}")
+from auth_api import auth_router
+app.include_router(auth_router)
 
-try:
-    from campaign_api import campaign_router
-    app.include_router(campaign_router)
-    logger.info("✅ Campaign router included successfully")
-except Exception as e:
-    logger.warning(f"Campaign router not available: {e}")
+from campaign_api import campaign_router
+app.include_router(campaign_router)
 
-try:
-    from content_api import content_router
-    app.include_router(content_router)
-    logger.info("✅ Content router included successfully")
-except Exception as e:
-    logger.warning(f"Content router not available: {e}")
+from content_api import content_router
+app.include_router(content_router)
 
-try:
-    from enhanced_mcp_api import enhanced_mcp_router
-    app.include_router(enhanced_mcp_router)
-    logger.info("✅ Enhanced MCP router included successfully")
-except Exception as e:
-    logger.warning(f"Enhanced MCP router not available: {e}")
+from enhanced_mcp_api import enhanced_mcp_router
+app.include_router(enhanced_mcp_router)
 
-try:
-    from simple_mcp_api import simple_mcp_router
-    app.include_router(simple_mcp_router)
-    logger.info("✅ Simple MCP router included successfully")
-except Exception as e:
-    logger.warning(f"Simple MCP router not available: {e}")
+from simple_mcp_api import simple_mcp_router
+app.include_router(simple_mcp_router)
 
 # Global variables for lazy initialization
 db_manager = None
