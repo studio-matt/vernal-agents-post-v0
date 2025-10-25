@@ -553,8 +553,9 @@ async def auth_health():
 async def debug_database():
     """Debug database connection"""
     try:
-        db = get_db()
+        db = next(get_db())
         # Try a simple query
+        from models import User
         result = db.query(User).limit(1).all()
         return {
             "status": "success",
