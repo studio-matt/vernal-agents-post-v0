@@ -105,6 +105,19 @@ def database_health():
 def root():
     return {"message": "Vernal Agents Backend API", "status": "running"}
 
+@app.get("/deploy/commit")
+def deploy_commit():
+    """Return the current deployed commit hash for verification"""
+    import subprocess
+    try:
+        result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd='/home/ubuntu/vernal-agents-post-v0')
+        if result.returncode == 0:
+            return {"commit": result.stdout.strip(), "status": "ok"}
+        else:
+            return {"commit": "unknown", "status": "error", "message": "Failed to get commit hash"}
+    except Exception as e:
+        return {"commit": "unknown", "status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
