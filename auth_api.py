@@ -12,15 +12,6 @@ import logging
 # Lazy database import - will be initialized in startup event
 # Lazy models import
 
-# Lazy database access function
-def get_db_session():
-    """Get database session using lazy initialization"""
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 # Lazy utils import
 # Lazy email service import
 from sqlalchemy.orm import Session
