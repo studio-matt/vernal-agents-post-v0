@@ -83,7 +83,12 @@ class ResetPasswordRequest(BaseModel):
 # Helper functions
 def get_db():
     """Get database session using lazy initialization"""
-    return get_db_session()
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     """Get current authenticated user"""
