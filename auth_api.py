@@ -176,8 +176,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         
         try:
             from email_service import get_email_service
-            from email_service import get_email_service
-        email_service = get_email_service()
+            email_service = get_email_service()
             email_sent = await email_service.send_otp_email(
                 email=new_user.email,
                 otp_code=otp_code,
