@@ -1,0 +1,67 @@
+name: Dependency Audit
+
+on:
+  pull_request:
+    paths:
+      - 'requirements*.txt'
+      - 'Dockerfile*'
+      - '*.py'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install pip-tools
+      run: |
+        pip install --upgrade pip
+        pip install pip-tools
+        
+    - name: Test requirements installation
+      run: |
+        echo "🧪 Testing requirements installation..."
+        pip install -r requirements-core.txt
+        pip install -r requirements-ai.txt
+        pip install -r requirements-remaining.txt
+        
+    - name: Check for broken dependencies
+      run: |
+        echo "🔍 Running pip check..."
+        pip check
+        
+    - name: Test Docker build
+      run: |
+        echo "🐳 Testing Docker build..."
+        docker build -f Dockerfile.deploy -t vernal-agents-test .
+        docker rmi vernal-agents-test
+        
+    - name: Create locked requirements
+      run: |
+        echo "📋 Creating locked requirements..."
+        cat requirements-core.txt requirements-ai.txt requirements-remaining.txt > requirements-combined.txt
+        sort requirements-combined.txt | uniq > requirements-clean.txt
+        pip-compile requirements-clean.txt --output-file requirements-locked.txt
+        echo "✅ Locked requirements created"
+        
+    - name: Test locked requirements
+      run: |
+        echo "🧪 Testing locked requirements..."
+        pip install -r requirements-locked.txt
+        pip check
+        
+    - name: Upload locked requirements
+      uses: actions/upload-artifact@v3
+      with:
+        name: requirements-locked
+        path: requirements-locked.txt

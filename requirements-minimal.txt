@@ -1,0 +1,30 @@
+# Minimal requirements without version pins for testing
+# This helps identify what versions actually resolve
+
+# Core FastAPI dependencies
+fastapi
+uvicorn[standard]
+sqlalchemy
+pymysql
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+
+# AI/ML dependencies
+openai
+anthropic
+tiktoken
+numpy
+pandas
+
+# Remaining dependencies
+requests
+aiofiles
+jinja2
+email-validator
+apscheduler
+browser-use
+playwright
+beautifulsoup4
+lxml
