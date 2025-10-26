@@ -134,9 +134,10 @@ docker build -f Dockerfile.deploy -t test .
 **Prevention:** Always test pinned versions in Docker before committing
 
 #### Issue: "Dependency conflict"  
-**Root Cause:** Two packages require incompatible versions  
-**Fix:** Update to compatible versions, or use flexible pins  
-**Prevention:** Run `pip check` after every requirements change
+**Root Cause:** Two packages require incompatible versions (e.g., `python-dotenv==1.0.0` vs `browser-use requires >=1.0.1`)  
+**Fix:** Update to compatible versions (e.g., `python-dotenv>=1.0.1`) or use flexible pins  
+**Prevention:** Run `pip check` after every requirements change  
+**Example:** `python-dotenv==1.0.0` conflicts with `browser-use==0.1.0` which requires `>=1.0.1`
 
 #### Issue: "Python version mismatch"
 **Root Cause:** Package built for different Python version  
