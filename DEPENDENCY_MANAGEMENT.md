@@ -126,6 +126,23 @@ docker build -f Dockerfile.deploy -t test .
 - ✅ **Reproducible builds** with locked requirements
 - ✅ **Systematic approach** instead of reactive fixes
 
+### 8. 🚨 Common Dependency Issues
+
+#### Issue: "No matching distribution found"
+**Root Cause:** Pinned version doesn't exist for your Python/base image  
+**Fix:** Use flexible version pins (e.g., `cryptography>=46.0.0` instead of `==41.0.8`)  
+**Prevention:** Always test pinned versions in Docker before committing
+
+#### Issue: "Dependency conflict"  
+**Root Cause:** Two packages require incompatible versions  
+**Fix:** Update to compatible versions, or use flexible pins  
+**Prevention:** Run `pip check` after every requirements change
+
+#### Issue: "Python version mismatch"
+**Root Cause:** Package built for different Python version  
+**Fix:** Use Python 3.11 base image, upgrade build tools  
+**Prevention:** Specify Python version in all workflows
+
 ## Quick Start
 
 ```bash
