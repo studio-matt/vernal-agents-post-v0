@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v5)
+# Vernal Agents Backend — Emergency Net (v6)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -940,5 +940,25 @@ curl https://themachine.vernalcontentum.com/deploy/commit
 - ❌ `global_variable = []` (in-memory lists)
 - ❌ Mock/temporary authentication systems
 - ❌ Any data storage outside the database
+
+### **Dependency Management Rules (CRITICAL)**
+
+#### **Transitive Dependency Pinning**
+- **Never pin a package to a version that conflicts with a required range from a sub-dependency**
+- **Prefer compatible range pins** (e.g., `anthropic>=0.69.0,<1.0.0`) when required by another package
+- **Always regenerate your lock file** after updating any dependency or adding new packages
+- **Test requirements install** in your actual deployment Docker image before merging
+
+#### **Common Dependency Conflicts**
+- `anthropic==0.7.8` → Use `anthropic>=0.69.0,<1.0.0` (required by langchain-anthropic)
+- `requests==2.31.0` → Use `requests>=2.32.3` (required by browser-use)
+- `python-dotenv==1.0.0` → Use `python-dotenv>=1.0.1` (required by browser-use)
+- `beautifulsoup4==4.12.2` → Use `beautifulsoup4>=4.12.3` (required by browser-use)
+
+#### **ResolutionImpossible Prevention**
+- **Golden Rule:** Never pin a package to a version below what any dependencies require
+- **Use flexible pins:** Prefer `>=` or range pins over exact pins `==`
+- **Test in Docker:** Always test locked requirements in production Docker image
+- **Run pip check:** Verify no conflicts after every requirements change
 
 ---
