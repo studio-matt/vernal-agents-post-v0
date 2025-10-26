@@ -133,16 +133,35 @@ docker build -f Dockerfile.deploy -t test .
 **Fix:** Use flexible version pins (e.g., `cryptography>=46.0.0` instead of `==41.0.8`)  
 **Prevention:** Always test pinned versions in Docker before committing
 
-#### Issue: "Dependency conflict"  
-**Root Cause:** Two packages require incompatible versions (e.g., `python-dotenv==1.0.0` vs `browser-use requires >=1.0.1`)  
-**Fix:** Update to compatible versions (e.g., `python-dotenv>=1.0.1`) or use flexible pins  
+#### Issue: "Dependency conflict" / "ResolutionImpossible"  
+**Root Cause:** Two packages require incompatible versions (e.g., `requests==2.31.0` vs `browser-use requires >=2.32.3`)  
+**Fix:** Update to compatible versions (e.g., `requests>=2.32.3`) or use flexible pins  
 **Prevention:** Run `pip check` after every requirements change  
-**Example:** `python-dotenv==1.0.0` conflicts with `browser-use==0.1.0` which requires `>=1.0.1`
+**Golden Rule:** Never pin a package to a version below what any of your dependencies require  
+**Examples:** 
+- `python-dotenv==1.0.0` conflicts with `browser-use==0.1.0` which requires `>=1.0.1`
+- `requests==2.31.0` conflicts with `browser-use==0.1.0` which requires `>=2.32.3`
 
 #### Issue: "Python version mismatch"
 **Root Cause:** Package built for different Python version  
 **Fix:** Use Python 3.11 base image, upgrade build tools  
 **Prevention:** Specify Python version in all workflows
+
+### 9. 📋 DEPENDENCY MANAGEMENT RULES
+
+**Golden Rules:**
+1. **Never pin a package to a version below what any of your dependencies require**
+2. **Always regenerate your lock file after updating any dependency**
+3. **Test requirements install in your actual production Docker image before merging**
+4. **Use flexible pins (>=) instead of exact pins (==) when possible**
+5. **Run `pip check` after every requirements change to catch conflicts**
+
+**Workflow:**
+1. Update requirements.in with compatible versions
+2. Regenerate requirements-locked.txt with `pip-compile`
+3. Test Docker build locally: `docker build -f Dockerfile.deploy -t test .`
+4. Run `pip check` to verify no conflicts
+5. Commit and push
 
 ## Quick Start
 
