@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v6)
+# Vernal Agents Backend — Emergency Net (v7)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -960,5 +960,30 @@ curl https://themachine.vernalcontentum.com/deploy/commit
 - **Use flexible pins:** Prefer `>=` or range pins over exact pins `==`
 - **Test in Docker:** Always test locked requirements in production Docker image
 - **Run pip check:** Verify no conflicts after every requirements change
+
+#### **Resolution-Too-Deep Prevention** (CRITICAL)
+- **ALWAYS use lower bounds (>=) for ALL dependencies** - This prevents "resolution-too-deep" errors
+- **Never use just package names** - Always specify minimum versions (e.g., `fastapi>=0.104.1`)
+- **Only use upper bounds (<) when required by sub-dependencies** - (e.g., `anthropic>=0.69.0,<1.0.0`)
+- **Avoid mixing exact pins (==) with unpinned packages** - Use consistent `>=` constraints
+- **Let pip-compile resolve final versions** - Don't manually edit locked files
+
+**Example of CORRECT requirements.in:**
+```python
+# ✅ CORRECT: Using lower bounds
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+sqlalchemy>=2.0.23
+anthropic>=0.69.0,<1.0.0  # Only < when required by sub-dependency
+```
+
+**Example of INCORRECT requirements.in (causes "resolution-too-deep"):**
+```python
+# ❌ WRONG: Mixing exact pins and unpinned packages
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+sqlalchemy  # Missing version constraint!
+anthropic  # Missing version constraint!
+```
 
 ---

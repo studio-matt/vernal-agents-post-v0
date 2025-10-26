@@ -16,11 +16,12 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements files
-COPY requirements-locked.txt .
+# Copy requirements files (requirements.in is now used to generate locked)
+COPY requirements.in .
 
-# Install locked dependencies (faster and more reliable)
-RUN pip install --upgrade pip setuptools wheel && \
+# Generate locked requirements with lower bounds (prevents resolution-too-deep)
+RUN pip install --upgrade pip setuptools wheel pip-tools && \
+    pip-compile requirements.in --output-file requirements-locked.txt && \
     pip install -r requirements-locked.txt --no-cache-dir && \
     pip cache purge
 

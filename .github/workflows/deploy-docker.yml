@@ -13,18 +13,33 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Verify locked requirements
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Generate locked requirements with lower bounds
       run: |
-        echo "📋 Verifying pre-generated requirements-locked.txt exists..."
-        if [ -f requirements-locked.txt ]; then
-          echo "✅ requirements-locked.txt found"
-          echo "📊 Dependencies count: $(wc -l < requirements-locked.txt)"
-          echo "🔍 First 10 dependencies:"
-          head -10 requirements-locked.txt
-        else
-          echo "❌ requirements-locked.txt not found - using fallback"
-          echo "⚠️ This may cause dependency conflicts"
-        fi
+        echo "🔧 Generating requirements-locked.txt with lower bounds..."
+        echo "📋 This prevents 'resolution-too-deep' errors by using >= constraints"
+        
+        # Upgrade build tools
+        pip install --upgrade pip setuptools wheel
+        
+        # Install pip-tools
+        pip install pip-tools
+        
+        # Generate locked requirements from requirements.in (with lower bounds)
+        pip-compile requirements.in --output-file requirements-locked.txt
+        
+        # Show what was generated
+        echo "✅ Generated requirements-locked.txt:"
+        echo "📊 Total lines: $(wc -l < requirements-locked.txt)"
+        echo "🔍 First 15 dependencies:"
+        head -15 requirements-locked.txt
+        echo ""
+        echo "🔍 Last 5 dependencies:"
+        tail -5 requirements-locked.txt
         
     - name: Build Docker image
       run: |

@@ -1,31 +1,31 @@
-# Top-level requirements for pip-compile
-# This file lists only the main packages we need
-# pip-compile will resolve all dependencies and create requirements.txt
+# Top-level requirements with LOWER BOUNDS for dependency resolution
+# Using >= (lower bounds) helps pip resolve the dependency graph efficiently
+# Only use < (upper bounds) when required by sub-dependencies
 
 # Core FastAPI dependencies
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlalchemy==2.0.23
-pymysql==1.1.0
-python-multipart==0.0.6
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+sqlalchemy>=2.0.23
+pymysql>=1.1.0
+python-multipart>=0.0.6
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
 python-dotenv>=1.0.1
 
 # AI/ML dependencies
-openai==1.3.7
-anthropic>=0.69.0,<1.0.0
-tiktoken==0.5.1
-numpy==1.24.3
-pandas==2.0.3
+openai>=1.3.7
+anthropic>=0.69.0,<1.0.0  # <1.0.0 required by langchain-anthropic
+tiktoken>=0.5.1
+numpy>=1.24.3
+pandas>=2.0.3
 
 # Remaining dependencies
-requests>=2.32.3
-aiofiles==23.2.1
-jinja2==3.1.2
-email-validator==2.1.0
-apscheduler==3.10.4
-browser-use==0.1.0
-playwright==1.40.0
-beautifulsoup4>=4.12.3
-lxml==4.9.3
+requests>=2.32.3  # Required by browser-use
+aiofiles>=23.2.1
+jinja2>=3.1.2
+email-validator>=2.1.0
+apscheduler>=3.10.4
+browser-use>=0.1.0
+playwright>=1.40.0
+beautifulsoup4>=4.12.3  # Required by browser-use
+lxml>=4.9.3
