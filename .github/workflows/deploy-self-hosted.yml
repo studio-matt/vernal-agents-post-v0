@@ -103,8 +103,7 @@ jobs:
           echo "📦 Installing requirements with memory optimization..."
           pip install -r requirements.txt --no-cache-dir --no-deps --progress-bar off
           
-          # Clean up pip cache
-          pip cache purge
+          # Note: No pip cache purge needed - using --no-cache-dir already
           
           echo "📊 Memory status after pip install:"
           free -h

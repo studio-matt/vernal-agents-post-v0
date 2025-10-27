@@ -114,8 +114,7 @@ jobs:
           echo "📊 Memory after all:"
           free -h
           
-          # Clean up
-          pip cache purge
+          # Note: No pip cache purge needed - using --no-cache-dir already
           
           # 4. Validate and start service
           echo "🔍 Validating main.py..."

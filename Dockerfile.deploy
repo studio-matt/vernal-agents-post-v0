@@ -24,8 +24,7 @@ COPY requirements.in .
 RUN pip install "pip<25.0" setuptools wheel pip-tools && \
     pip-compile requirements.in --output-file requirements-locked.txt && \
     pip install --upgrade pip && \
-    pip install -r requirements-locked.txt --no-cache-dir && \
-    pip cache purge
+    pip install -r requirements-locked.txt --no-cache-dir
 
 # Copy application code
 COPY . .
