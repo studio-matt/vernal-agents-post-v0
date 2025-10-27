@@ -20,12 +20,11 @@ WORKDIR /app
 COPY requirements.in .
 
 # Generate locked requirements with lower bounds (prevents resolution-too-deep)
-# CRITICAL: Force pip<25.0 for pip-tools compatibility (pip-tools 7.x doesn't support pip 25.x)
-# CRITICAL: Upgrade pip-tools to >=7.4.0 for pip 24.x compatibility  
-# CRITICAL: Install pip-tools FIRST, then upgrade pip, then run pip-compile
-# CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
-RUN pip install --upgrade "pip-tools>=7.4.0" && \
-    pip install "pip<25.0" setuptools wheel && \
+# CRITICAL: pip-tools 7.x doesn't support pip 25.x
+# Install pip-tools FIRST (pulls in pip 25.x), then IMMEDIATELY downgrade pip to <25.0
+# Use python -m piptools to ensure we use the installed version, not old global binary
+RUN pip install --upgrade pip setuptools wheel "pip-tools>=7.4.0" && \
+    pip install "pip<25.0" && \
     python -m piptools compile requirements.in --output-file requirements-locked.txt && \
     pip install -r requirements-locked.txt --no-cache-dir
 
