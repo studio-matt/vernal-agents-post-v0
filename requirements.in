@@ -4,10 +4,10 @@
 
 # Core FastAPI dependencies
 fastapi>=0.104.1
-uvicorn[standard]>=0.24.0
+uvicorn[standard]>=0.31.1  # Required by mcp (was >=0.24.0)
 sqlalchemy>=2.0.23
 pymysql>=1.1.0
-python-multipart>=0.0.6
+python-multipart>=0.0.9  # Required by mcp (was >=0.0.6)
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 python-dotenv>=1.0.1
@@ -25,7 +25,7 @@ langchain-openai>=0.0.5  # Langchain v1.x compatible
 
 # Remaining dependencies
 requests>=2.32.3  # Required by browser-use
-aiofiles>=23.2.1
+aiofiles>=24.1.0  # Required by bubus (was >=23.2.1)
 jinja2>=3.1.2
 email-validator>=2.1.0
 apscheduler>=3.10.4
@@ -33,3 +33,4 @@ browser-use>=0.1.0
 playwright>=1.40.0
 beautifulsoup4>=4.12.3  # Required by browser-use
 lxml>=4.9.3
+anyio>=4.9.0  # Required by bubus, google-genai, mcp, sse-starlette
