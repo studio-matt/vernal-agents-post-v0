@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v8)
+# Vernal Agents Backend — Emergency Net (v9)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -1008,5 +1008,30 @@ pip install pip-tools  # Incompatible with pip 25.x
 pip-compile requirements.in --output-file requirements-locked.txt
 # Error: AttributeError: 'InstallRequirement' object has no attribute 'use_pep517'
 ```
+
+#### **Real Dependency Conflict (ResolutionImpossible)** (CRITICAL)
+- **Always check upstream package requirements** for direct and transitive pins
+- **If a package requires a conflicting version**, adjust your lower bounds to match the minimum version required by all dependencies
+- **If no compatible range exists**, you must:
+  - Wait for upstream packages to update
+  - Refactor code to avoid the conflict
+  - Open an issue with the upstream package maintainer
+
+**Example: numpy/browser-use conflict**
+```python
+# ❌ WRONG: Too strict numpy constraint
+numpy>=1.24.3  # Conflicts with browser-use which requires older numpy
+browser-use>=0.1.0
+
+# ✅ CORRECT: Looser numpy constraint for browser-use compatibility
+numpy>=1.21.0  # Lower bound allows browser-use to resolve
+browser-use>=0.1.0
+```
+
+**Diagnosis Steps:**
+1. **Check package requirements on PyPI** (`https://pypi.org/project/package-name/`)
+2. **Run `pip install package-name`** in a clean environment to see what versions it pulls in
+3. **Adjust your constraints** to match the minimum required by all packages
+4. **Test in Docker** with your actual base image before merging
 
 ---
