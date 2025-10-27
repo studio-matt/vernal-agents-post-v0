@@ -56,9 +56,7 @@ jobs:
         
     - name: Create locked requirements
       run: |
-        echo "📋 Creating locked requirements..."
-        cat requirements-core.txt requirements-ai.txt requirements-remaining.txt > requirements-combined.txt
-        sort requirements-combined.txt | uniq > requirements-clean.txt
+        echo "📋 Creating locked requirements from requirements.in..."
         
         # CRITICAL: Install pip-tools, then IMMEDIATELY pin pip<25.0
         # pip-tools 7.x doesn't support pip 25.x - must downgrade after installing pip-tools
@@ -74,8 +72,9 @@ jobs:
         python -m piptools compile --version
         
         # CRITICAL: Use python -m piptools to ensure we use the installed version
-        echo "📦 Compiling requirements..."
-        python -m piptools compile requirements-clean.txt --output-file requirements-locked.txt
+        # Generate from requirements.in (with crewai, langchain-openai)
+        echo "📦 Compiling requirements from requirements.in..."
+        python -m piptools compile requirements.in --output-file requirements-locked.txt
         echo "✅ Locked requirements created"
         
     - name: Test locked requirements
