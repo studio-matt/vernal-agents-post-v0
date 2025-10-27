@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v9)
+# Vernal Agents Backend — Emergency Net (v10)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -994,20 +994,32 @@ anthropic  # Missing version constraint!
 
 **Example of CORRECT pip-tools usage:**
 ```bash
-# ✅ CORRECT: Force pip<25.0 before pip-compile
+# ✅ CORRECT: Force pip<25.0 before pip-compile AND KEEP IT
 pip install "pip<25.0" setuptools wheel pip-tools
 pip-compile requirements.in --output-file requirements-locked.txt
-pip install --upgrade pip  # Upgrade after lock generation
+pip install -r requirements-locked.txt --no-cache-dir
+# CRITICAL: Do NOT upgrade pip after pip-compile - keep pip<25.0 throughout
 ```
 
 **Example of INCORRECT pip-tools usage (causes AttributeError):**
 ```bash
-# ❌ WRONG: Using pip 25.x with pip-tools 7.x
+# ❌ WRONG: Upgrading pip after pip-compile breaks compatibility
+pip install "pip<25.0" setuptools wheel pip-tools
+pip-compile requirements.in --output-file requirements-locked.txt
+pip install --upgrade pip  # ❌ This upgrades pip to 25.x
+# Error: AttributeError: 'InstallRequirement' object has no attribute 'use_pep517'
+
+# ❌ WRONG: Using pip 25.x with pip-tools 7.x from the start
 pip install --upgrade pip  # Installs pip 25.x
 pip install pip-tools  # Incompatible with pip 25.x
 pip-compile requirements.in --output-file requirements-locked.txt
 # Error: AttributeError: 'InstallRequirement' object has no attribute 'use_pep517'
 ```
+
+**CRITICAL RULE:**
+- **NEVER run `pip install --upgrade pip` after pip-compile** when using pip<25.0
+- **Keep pip<25.0 throughout the entire build process**
+- Only upgrade pip if you want to break pip-tools compatibility
 
 #### **Real Dependency Conflict (ResolutionImpossible)** (CRITICAL)
 - **Always check upstream package requirements** for direct and transitive pins
