@@ -1,6 +1,6 @@
 # AI/ML dependencies - install second
-openai==1.3.7
-anthropic==0.7.8
+openai>=1.13.3  # Required by crewai 1.2.0
+anthropic>=0.69.0,<1.0.0  # Required by langchain-anthropic
 tiktoken==0.5.1
-numpy==1.24.3
+numpy>=1.21.0  # Lower bound for browser-use compatibility
 pandas==2.0.3
