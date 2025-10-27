@@ -19,6 +19,10 @@ tiktoken>=0.5.1
 numpy>=1.21.0  # Lower bound for browser-use compatibility
 pandas>=2.0.3  # Will pull in compatible numpy automatically
 
+# Langchain ecosystem (must align to same major version for browser-use compatibility)
+crewai>=0.28.0  # Langchain v1.x compatible
+langchain-openai>=0.0.5  # Langchain v1.x compatible
+
 # Remaining dependencies
 requests>=2.32.3  # Required by browser-use
 aiofiles>=23.2.1

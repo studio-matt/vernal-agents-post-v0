@@ -1034,4 +1034,38 @@ browser-use>=0.1.0
 3. **Adjust your constraints** to match the minimum required by all packages
 4. **Test in Docker** with your actual base image before merging
 
+#### **Langchain-core Ecosystem Conflicts** (CRITICAL)
+- **Always align all langchain, langchain-core, crewai, langchain-openai, and browser-use to the same major version family**
+- **If browser-use requires langchain-core>=1.0.0,<2.0.0**, all related packages must be compatible
+- **Upgrade crewai to >=0.28.0** to avoid old langchain-core<0.4.0 pin
+
+**Example: langchain-core version conflicts**
+```python
+# ❌ WRONG: Mixed langchain versions causing ResolutionImpossible
+browser-use>=0.1.0  # Requires langchain-core>=1.0.0,<2.0.0
+crewai<0.24.0  # Requires langchain-core<0.4.0
+# Error: ResolutionImpossible: Cannot resolve langchain-core
+
+# ✅ CORRECT: All langchain packages aligned to v1.x
+browser-use>=0.1.0  # Requires langchain-core>=1.0.0,<2.0.0
+crewai>=0.28.0  # Compatible with langchain-core>=1.0.0,<2.0.0
+langchain-openai>=0.0.5  # Compatible with langchain-core>=1.0.0,<2.0.0
+anthropic>=0.69.0,<1.0.0  # langchain-anthropic requires langchain-core>=1.0.0,<2.0.0
+```
+
+**Langchain Ecosystem Compatibility Table:**
+| Package | Requires langchain-core | Compatible? |
+|---------|-------------------------|-------------|
+| browser-use | >=1.0.0,<2.0.0 | YES |
+| crewai >=0.28.0 | >=1.0.0,<2.0.0 | YES |
+| crewai <0.24.0 | <0.4.0 | NO |
+| langchain-openai >=0.0.5 | >=1.0.0,<2.0.0 | YES |
+| anthropic (via langchain-anthropic) | >=1.0.0,<2.0.0 | YES |
+
+**Key Rules:**
+- All langchain ecosystem packages must require the same langchain-core major version
+- Upgrade crewai to >=0.28.0 to align with browser-use
+- Use langchain-openai >=0.0.5 for langchain v1.x compatibility
+- Test in Docker before deploying to catch conflicts early
+
 ---
