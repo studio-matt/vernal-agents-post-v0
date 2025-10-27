@@ -33,7 +33,7 @@ RUN pip install --upgrade "pip-tools>=7.4.0" && \
 COPY . .
 
 # Set environment variables
-ENV PYTHONPATH="/app:$PYTHONPATH"
+ENV PYTHONPATH="/app"
 
 # Expose port
 EXPOSE 8000

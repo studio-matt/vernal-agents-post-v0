@@ -25,7 +25,9 @@ jobs:
         
     - name: Install pip-tools and diagnostic tools
       run: |
-        pip install --upgrade pip setuptools wheel
+        # CRITICAL: Pin pip<25.0 BEFORE installing pip-tools
+        # pip-tools 7.x doesn't support pip 25.x
+        pip install "pip<25.0" setuptools wheel
         pip install "pip-tools>=7.4.0" pipdeptree
         
     - name: Test requirements installation
