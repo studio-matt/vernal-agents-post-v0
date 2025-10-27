@@ -67,7 +67,8 @@ cat requirements-core.txt requirements-ai.txt requirements-remaining.txt > /tmp/
 sort /tmp/requirements.in | uniq > /tmp/requirements_clean.in
 
 echo "Compiling locked requirements..."
-pip-compile /tmp/requirements_clean.in --output-file /tmp/requirements-locked.txt
+# CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
+python -m piptools compile /tmp/requirements_clean.in --output-file /tmp/requirements-locked.txt
 
 echo "✅ Locked requirements created: /tmp/requirements-locked.txt"
 

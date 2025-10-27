@@ -28,8 +28,9 @@ jobs:
         # CRITICAL: Upgrade pip-tools to >=7.4.0 for pip 24.x compatibility
         pip install "pip<25.0" setuptools wheel "pip-tools>=7.4.0"
         
+        # CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
         # Generate locked requirements from requirements.in (with lower bounds)
-        pip-compile requirements.in --output-file requirements-locked.txt
+        python -m piptools compile requirements.in --output-file requirements-locked.txt
         
         # CRITICAL: Do NOT upgrade pip after pip-compile - keep pip<25.0 throughout
         # pip upgrade here breaks pip-tools compatibility

@@ -57,7 +57,8 @@ jobs:
         echo "📋 Creating locked requirements..."
         cat requirements-core.txt requirements-ai.txt requirements-remaining.txt > requirements-combined.txt
         sort requirements-combined.txt | uniq > requirements-clean.txt
-        pip-compile requirements-clean.txt --output-file requirements-locked.txt
+        # CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
+        python -m piptools compile requirements-clean.txt --output-file requirements-locked.txt
         echo "✅ Locked requirements created"
         
     - name: Test locked requirements

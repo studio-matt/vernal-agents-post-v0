@@ -23,9 +23,10 @@ COPY requirements.in .
 # CRITICAL: Force pip<25.0 for pip-tools compatibility (pip-tools 7.x doesn't support pip 25.x)
 # CRITICAL: Upgrade pip-tools to >=7.4.0 for pip 24.x compatibility  
 # CRITICAL: Install pip-tools FIRST, then upgrade pip, then run pip-compile
+# CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
 RUN pip install --upgrade "pip-tools>=7.4.0" && \
     pip install "pip<25.0" setuptools wheel && \
-    pip-compile requirements.in --output-file requirements-locked.txt && \
+    python -m piptools compile requirements.in --output-file requirements-locked.txt && \
     pip install -r requirements-locked.txt --no-cache-dir
 
 # Copy application code

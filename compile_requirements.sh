@@ -11,9 +11,10 @@ pip install --upgrade pip setuptools wheel
 echo "📦 Installing pip-tools..."
 pip install pip-tools
 
+# CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
 # Compile requirements from .in file
 echo "📦 Compiling requirements from requirements.in..."
-pip-compile requirements.in --output-file requirements-locked.txt
+python -m piptools compile requirements.in --output-file requirements-locked.txt
 
 # Show the results
 echo "✅ Generated requirements-locked.txt"
