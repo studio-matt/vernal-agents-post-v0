@@ -30,8 +30,8 @@ jobs:
         # Generate locked requirements from requirements.in (with lower bounds)
         pip-compile requirements.in --output-file requirements-locked.txt
         
-        # Upgrade pip after lock generation for build/install steps
-        pip install --upgrade pip
+        # CRITICAL: Do NOT upgrade pip after pip-compile - keep pip<25.0 throughout
+        # pip upgrade here breaks pip-tools compatibility
         
         # Show what was generated
         echo "✅ Generated requirements-locked.txt:"

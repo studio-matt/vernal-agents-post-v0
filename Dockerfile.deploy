@@ -21,9 +21,9 @@ COPY requirements.in .
 
 # Generate locked requirements with lower bounds (prevents resolution-too-deep)
 # Force pip<25.0 for pip-tools compatibility (pip-tools 7.x doesn't support pip 25.x)
+# CRITICAL: Do NOT upgrade pip after pip-compile - keep pip<25.0 throughout
 RUN pip install "pip<25.0" setuptools wheel pip-tools && \
     pip-compile requirements.in --output-file requirements-locked.txt && \
-    pip install --upgrade pip && \
     pip install -r requirements-locked.txt --no-cache-dir
 
 # Copy application code
