@@ -90,18 +90,22 @@ async def startup_event():
 
 # REQUIRED ENDPOINTS FOR DEPLOYMENT
 @app.get("/health")
+@app.head("/health")
 def health():
     return {"status": "ok", "message": "Backend is running", "timestamp": datetime.now().isoformat()}
 
 @app.get("/version")
+@app.head("/version")
 def version():
     return {"version": os.getenv("GITHUB_SHA", "development"), "status": "ok", "timestamp": datetime.now().isoformat()}
 
 @app.get("/mcp/enhanced/health")
+@app.head("/mcp/enhanced/health")
 def database_health():
     return {"status": "ok", "message": "Database health check", "database_connected": True}
 
 @app.get("/")
+@app.head("/")
 def root():
     return {"message": "Vernal Agents Backend API", "status": "running"}
 
