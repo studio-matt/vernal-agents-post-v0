@@ -26,7 +26,7 @@ jobs:
     - name: Install pip-tools and diagnostic tools
       run: |
         pip install --upgrade pip setuptools wheel
-        pip install pip-tools pipdeptree
+        pip install "pip-tools>=7.4.0" pipdeptree
         
     - name: Test requirements installation
       run: |
