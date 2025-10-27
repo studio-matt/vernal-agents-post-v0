@@ -23,7 +23,7 @@ COPY requirements.in .
 # CRITICAL: pip-tools 7.x doesn't support pip 25.x
 # Install pip-tools FIRST (pulls in pip 25.x), then IMMEDIATELY downgrade pip to <25.0
 # Use python -m piptools to ensure we use the installed version, not old global binary
-RUN pip install --upgrade pip setuptools wheel "pip-tools>=7.4.0" && \
+RUN pip install --upgrade setuptools wheel "pip-tools>=7.4.0" && \
     pip install "pip<25.0" && \
     python -m piptools compile requirements.in --output-file requirements-locked.txt && \
     pip install -r requirements-locked.txt --no-cache-dir
