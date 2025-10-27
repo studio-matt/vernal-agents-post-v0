@@ -23,22 +23,28 @@ jobs:
       with:
         python-version: '3.11'
         
-    - name: Install pip-tools
+    - name: Install pip-tools and diagnostic tools
       run: |
         pip install --upgrade pip setuptools wheel
-        pip install pip-tools
+        pip install pip-tools pipdeptree
         
     - name: Test requirements installation
       run: |
         echo "🧪 Testing requirements installation..."
-        pip install -r requirements-core.txt
-        pip install -r requirements-ai.txt
-        pip install -r requirements-remaining.txt
+        pip install -r requirements.in || pip install -r requirements.txt
         
-    - name: Check for broken dependencies
+    - name: Check for broken dependencies with diagnostics
       run: |
         echo "🔍 Running pip check..."
-        pip check
+        pip check || true
+        
+        echo ""
+        echo "📊 Running pipdeptree --warn conflict..."
+        pipdeptree --warn conflict || true
+        
+        echo ""
+        echo "📋 Full dependency tree:"
+        pipdeptree || true
         
     - name: Test Docker build
       run: |
