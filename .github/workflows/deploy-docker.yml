@@ -23,14 +23,15 @@ jobs:
         echo "🔧 Generating requirements-locked.txt with lower bounds..."
         echo "📋 This prevents 'resolution-too-deep' errors by using >= constraints"
         
-        # Upgrade build tools
-        pip install --upgrade pip setuptools wheel
-        
-        # Install pip-tools
-        pip install pip-tools
+        # CRITICAL: Force pip<25.0 for pip-tools compatibility
+        # pip-tools 7.x doesn't support pip 25.x (AttributeError: 'InstallRequirement' object has no attribute 'use_pep517')
+        pip install "pip<25.0" setuptools wheel pip-tools
         
         # Generate locked requirements from requirements.in (with lower bounds)
         pip-compile requirements.in --output-file requirements-locked.txt
+        
+        # Upgrade pip after lock generation for build/install steps
+        pip install --upgrade pip
         
         # Show what was generated
         echo "✅ Generated requirements-locked.txt:"

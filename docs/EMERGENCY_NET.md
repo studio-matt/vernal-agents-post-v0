@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v7)
+# Vernal Agents Backend — Emergency Net (v8)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -984,6 +984,29 @@ fastapi==0.104.1
 uvicorn[standard]==0.24.0
 sqlalchemy  # Missing version constraint!
 anthropic  # Missing version constraint!
+```
+
+#### **pip-tools/pip 25.x Compatibility** (CRITICAL)
+- **CRITICAL:** For reproducible pip-compile lockfiles, ALWAYS use `pip<25.0` until pip-tools is upgraded
+- **Root Cause:** pip-tools 7.x doesn't support pip 25.x (AttributeError: 'InstallRequirement' object has no attribute 'use_pep517')
+- **Workaround:** Force `pip install "pip<25.0"` before running `pip-compile`
+- **Best Practice:** Install `pip<25.0`, generate lockfile, then upgrade pip for builds
+
+**Example of CORRECT pip-tools usage:**
+```bash
+# ✅ CORRECT: Force pip<25.0 before pip-compile
+pip install "pip<25.0" setuptools wheel pip-tools
+pip-compile requirements.in --output-file requirements-locked.txt
+pip install --upgrade pip  # Upgrade after lock generation
+```
+
+**Example of INCORRECT pip-tools usage (causes AttributeError):**
+```bash
+# ❌ WRONG: Using pip 25.x with pip-tools 7.x
+pip install --upgrade pip  # Installs pip 25.x
+pip install pip-tools  # Incompatible with pip 25.x
+pip-compile requirements.in --output-file requirements-locked.txt
+# Error: AttributeError: 'InstallRequirement' object has no attribute 'use_pep517'
 ```
 
 ---
