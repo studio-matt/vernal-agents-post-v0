@@ -25,11 +25,18 @@ jobs:
         
         # CRITICAL: Force pip<25.0 for pip-tools compatibility
         # pip-tools 7.x doesn't support pip 25.x (AttributeError: 'InstallRequirement' object has no attribute 'use_pep517')
-        # CRITICAL: Upgrade pip-tools to >=7.4.0 for pip 24.x compatibility
-        pip install "pip<25.0" setuptools wheel "pip-tools>=7.4.0"
+        # CRITICAL: Force-reinstall pip-tools to ensure we use the latest version, not preinstalled one
+        echo "⬆️ Installing pip<25.0 and upgrading pip-tools..."
+        pip install "pip<25.0" setuptools wheel
+        python -m pip install --force-reinstall --upgrade "pip-tools>=7.4.0"
+        
+        # Verify pip-tools version
+        echo "🔍 Verifying pip-tools version..."
+        python -m piptools compile --version
         
         # CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
         # Generate locked requirements from requirements.in (with lower bounds)
+        echo "📦 Compiling requirements..."
         python -m piptools compile requirements.in --output-file requirements-locked.txt
         
         # CRITICAL: Do NOT upgrade pip after pip-compile - keep pip<25.0 throughout

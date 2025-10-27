@@ -57,7 +57,17 @@ jobs:
         echo "📋 Creating locked requirements..."
         cat requirements-core.txt requirements-ai.txt requirements-remaining.txt > requirements-combined.txt
         sort requirements-combined.txt | uniq > requirements-clean.txt
+        
+        # CRITICAL: Force-reinstall pip-tools to ensure we use the latest version, not preinstalled one
+        echo "⬆️ Upgrading pip-tools to >=7.4.0..."
+        python -m pip install --force-reinstall --upgrade "pip-tools>=7.4.0"
+        
+        # Verify pip-tools version
+        echo "🔍 Verifying pip-tools version..."
+        python -m piptools compile --version
+        
         # CRITICAL: Use python -m piptools to ensure we use the installed version, not old global binary
+        echo "📦 Compiling requirements..."
         python -m piptools compile requirements-clean.txt --output-file requirements-locked.txt
         echo "✅ Locked requirements created"
         
