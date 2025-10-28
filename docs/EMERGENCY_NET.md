@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v11)
+# Vernal Agents Backend — Emergency Net (v12)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -70,13 +70,13 @@ git show <commit>:main.py | grep -A 50 "@app.post.*campaign"
 
 ---
 
-## 🚨 CRITICAL: GIT SUBMODULE ERRORS (v1)
+## 🚨 CRITICAL: GIT SUBMODULE ERRORS (v2)
 
 ### **THE #1 CAUSE OF DEPLOYMENT FAILURES**
 
-**PROBLEM:** GitHub Actions fails with "No url found for submodule path 'agents-backend' in .gitmodules" when this repo doesn't use submodules.
+**PROBLEM:** GitHub Actions fails with "No url found for submodule path 'agents-backend'/'backend-server' in .gitmodules" when this repo doesn't use submodules.
 
-**ROOT CAUSE:** Default Git checkout behavior tries to initialize submodules even when they don't exist or aren't configured.
+**ROOT CAUSE:** Stale submodule references in Git history that don't exist anymore, plus default Git checkout behavior tries to initialize them.
 
 **SYMPTOMS:**
 - Deployment fails at checkout step
@@ -99,6 +99,34 @@ git show <commit>:main.py | grep -A 50 "@app.post.*campaign"
 - Results in fatal error: "No url found for submodule path"
 - **ALL deployment workflows must disable submodules**
 
+### **STALE SUBMODULE CLEANUP (CRITICAL)**
+
+**If you see submodule errors, check and remove stale references:**
+```bash
+# List all submodule entries in current commit
+git ls-tree HEAD | grep "160000 commit"
+
+# Remove stale submodule references
+git rm --cached agents-backend backend-server
+
+# Commit and push
+git commit -m "CRITICAL: Remove stale submodule references"
+git push origin main
+```
+
+**Stale submodules known to cause issues:**
+- `agents-backend` (removed in commit a4f13ea)
+- `backend-server` (removed in commit 3429460)
+
+**How to detect stale submodules:**
+```bash
+# Check if any submodule entries exist
+git ls-tree HEAD | grep "160000 commit"
+
+# If you see any "160000 commit" entries, they're stale submodules
+# This repo does NOT use submodules - all 160000 entries must be removed
+```
+
 ### **APPLY TO ALL WORKFLOWS**
 - ✅ dependency-check.yml
 - ✅ deploy-docker.yml  
@@ -107,7 +135,10 @@ git show <commit>:main.py | grep -A 50 "@app.post.*campaign"
 - ✅ deploy-agents.yml
 - ✅ deploy-prebuilt.yml
 
-**CRITICAL RULE: Every workflow file MUST have `submodules: false` in checkout step.**
+**CRITICAL RULES:**
+1. **Every workflow file MUST have `submodules: false` in checkout step**
+2. **NEVER add submodule references** - this repo uses direct dependencies
+3. **Remove ANY stale submodule references** found in `git ls-tree HEAD`
 
 ---
 
