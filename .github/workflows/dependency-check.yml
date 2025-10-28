@@ -28,7 +28,9 @@ jobs:
         # CRITICAL: Pin pip<25.0 BEFORE installing pip-tools
         # pip-tools 7.x doesn't support pip 25.x
         pip install "pip<25.0" setuptools wheel
-        pip install "pip-tools>=7.4.0" pipdeptree
+        pip install "pip-tools>=7.4.0"
+        # Pin pipdeptree to version compatible with pip<25.0
+        pip install "pipdeptree<2.29.0"
         
     - name: Test requirements installation
       run: |
