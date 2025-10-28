@@ -12,6 +12,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        submodules: false  # No submodules in this repo
       
     - name: Setup Python
       uses: actions/setup-python@v4

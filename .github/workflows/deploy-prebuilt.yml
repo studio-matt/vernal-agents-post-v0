@@ -12,6 +12,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        submodules: false  # No submodules in this repo
       
     - name: Build pre-built Docker image
       run: |
