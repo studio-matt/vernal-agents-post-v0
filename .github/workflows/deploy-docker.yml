@@ -1,7 +1,9 @@
 name: Deploy Agents (Docker with High Memory)
 
-on:
-  workflow_dispatch:  # Manual trigger only
+# ⚠️ DISABLED: Server doesn't have Docker installed
+# Use deploy-agents.yml instead for systemd-based deployment
+# on:
+#   workflow_dispatch:  # Manual trigger only
 
 jobs:
   deploy:
