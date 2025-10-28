@@ -136,6 +136,8 @@ jobs:
           # CRITICAL: Validate main.py defines FastAPI app
           echo "🔍 Validating main.py..."
           test -f main.py || { echo "ERROR: main.py not found!"; exit 1; }
+          sleep 2  # Ensure file is fully written
+          test -s main.py || { echo "ERROR: main.py is empty!"; exit 1; }
           grep -q "app = FastAPI" main.py || { echo "ERROR: main.py must define app = FastAPI()!"; exit 1; }
           grep -q "from fastapi import FastAPI" main.py || { echo "ERROR: main.py must import FastAPI!"; exit 1; }
           echo "✅ main.py validation passed"
