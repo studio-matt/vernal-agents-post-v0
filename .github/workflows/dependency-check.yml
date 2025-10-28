@@ -41,8 +41,8 @@ jobs:
         pip check || true
         
         echo ""
-        echo "📊 Running pipdeptree --warn conflict..."
-        pipdeptree --warn conflict || true
+        echo "📊 Running pipdeptree --warn fail..."
+        pipdeptree --warn fail || true
         
         echo ""
         echo "📋 Full dependency tree:"
