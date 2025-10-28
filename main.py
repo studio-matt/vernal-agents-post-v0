@@ -58,8 +58,8 @@ def include_routers():
     except Exception as e:
         logger.warning(f"Simple MCP router not available: {e}")
 
-# Don't include routers yet - wait for startup event
-# include_routers()  # Moved to startup_event for safety
+# Include routers immediately but with error handling
+include_routers()
 
 # Global variables for lazy initialization
 db_manager = None
@@ -110,10 +110,6 @@ async def startup_event():
         scheduler = BackgroundScheduler()
         scheduler.start()
         logger.info("Scheduler started")
-        
-        # NOW include routers after DB and scheduler are ready
-        include_routers()
-        logger.info("All routers included after startup")
         
     except Exception as e:
         logger.error(f"Startup error: {e}")
