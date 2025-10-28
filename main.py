@@ -5,9 +5,15 @@ Following Emergency Net v4 template with ALL functionality restored
 """
 
 import os
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import json
+import uuid
 from datetime import datetime
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 import logging
 
 # Configure logging
@@ -67,6 +73,29 @@ def get_db_manager():
         db_manager = DatabaseManager()
     return db_manager
 
+def get_db():
+    """Get database session"""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Pydantic models for campaign endpoints
+class CampaignCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    type: str
+    keywords: Optional[List[str]] = None
+    urls: Optional[List[str]] = None
+    trendingTopics: Optional[List[str]] = None
+    topics: Optional[List[str]] = None
+    extractionSettings: Optional[Dict[str, Any]] = None
+    preprocessingSettings: Optional[Dict[str, Any]] = None
+    entitySettings: Optional[Dict[str, Any]] = None
+    modelingSettings: Optional[Dict[str, Any]] = None
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup - NOT at import time"""
@@ -121,6 +150,154 @@ def deploy_commit():
             return {"commit": "unknown", "status": "error", "message": "Failed to get commit hash"}
     except Exception as e:
         return {"commit": "unknown", "status": "error", "message": str(e)}
+
+# Campaign endpoints with REAL database operations
+@app.get("/campaigns")
+def get_campaigns(db: Session = Depends(get_db)):
+    """Get all campaigns - REAL database query"""
+    try:
+        from models import Campaign
+        campaigns = db.query(Campaign).all()
+        return {
+            "status": "success",
+            "campaigns": [
+                {
+                    "id": campaign.id,
+                    "campaign_id": campaign.campaign_id,
+                    "name": campaign.campaign_name,
+                    "description": campaign.description,
+                    "type": campaign.type,
+                    "status": campaign.status,
+                    "progress": campaign.progress,
+                    "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+                    "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+                }
+                for campaign in campaigns
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching campaigns: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch campaigns"
+        )
+
+@app.post("/campaigns")
+def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(get_db)):
+    """Create campaign - REAL database save"""
+    try:
+        from models import Campaign
+        logger.info(f"Creating campaign: {campaign_data.name}")
+        
+        # Generate unique campaign ID
+        campaign_id = str(uuid.uuid4())
+        
+        # Convert lists to strings for database storage
+        keywords_str = json.dumps(campaign_data.keywords) if campaign_data.keywords else None
+        urls_str = json.dumps(campaign_data.urls) if campaign_data.urls else None
+        trending_topics_str = json.dumps(campaign_data.trendingTopics) if campaign_data.trendingTopics else None
+        topics_str = json.dumps(campaign_data.topics) if campaign_data.topics else None
+        
+        # Create campaign in database
+        db_manager = get_db_manager()
+        db_manager.create_campaign(
+            campaign_id=campaign_id,
+            campaign_name=campaign_data.name,
+            description=campaign_data.description,
+            query=campaign_data.name,
+            campaign_type=campaign_data.type,
+            keywords_str=keywords_str,
+            urls_str=urls_str,
+            trending_topics_str=trending_topics_str,
+            topics_str=topics_str,
+            status="created",
+            extraction_settings=campaign_data.extractionSettings or {},
+            preprocessing_settings=campaign_data.preprocessingSettings or {},
+            entity_settings=campaign_data.entitySettings or {},
+            modeling_settings=campaign_data.modelingSettings or {}
+        )
+        
+        logger.info(f"Campaign created successfully: {campaign_id}")
+        
+        return {
+            "status": "success",
+            "message": {
+                "id": campaign_id,
+                "name": campaign_data.name,
+                "description": campaign_data.description,
+                "type": campaign_data.type,
+                "status": "created"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating campaign: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create campaign"
+        )
+
+@app.get("/campaigns/{campaign_id}")
+def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
+    """Get campaign by ID - REAL database query"""
+    try:
+        from models import Campaign
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Campaign not found"
+            )
+        
+        return {
+            "status": "success",
+            "campaign": {
+                "id": campaign.id,
+                "campaign_id": campaign.campaign_id,
+                "name": campaign.campaign_name,
+                "description": campaign.description,
+                "type": campaign.type,
+                "status": campaign.status,
+                "progress": campaign.progress,
+                "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
+                "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching campaign: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch campaign"
+        )
+
+@app.delete("/campaigns/{campaign_id}")
+def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
+    """Delete campaign - REAL database deletion"""
+    try:
+        from models import Campaign
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Campaign not found"
+            )
+        db.delete(campaign)
+        db.commit()
+        logger.info(f"Campaign deleted successfully: {campaign_id}")
+        return {
+            "status": "success",
+            "message": "Campaign deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting campaign: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete campaign"
+        )
 
 if __name__ == "__main__":
     import uvicorn
