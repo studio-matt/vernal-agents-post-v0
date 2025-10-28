@@ -84,10 +84,16 @@ jobs:
           echo "📦 Pulling latest code..."
           cd /home/ubuntu
           rm -rf vernal-agents-post-v0
-          git clone --depth=1 --no-single-branch --no-checkout https://github.com/studio-matt/vernal-agents-post-v0.git vernal-agents-post-v0
+          # Set git to ignore submodules BEFORE cloning
+          git config --global submodule.recurse false || true
+          git clone --depth=1 --no-checkout https://github.com/studio-matt/vernal-agents-post-v0.git vernal-agents-post-v0
           cd vernal-agents-post-v0
-          git config --unset submodule.recurse || true
           git checkout HEAD
+          # Verify no submodules were initialized
+          if [ -d ".git/modules" ]; then
+            echo "⚠️  Warning: Submodules detected but will be ignored"
+            rm -rf .git/modules
+          fi
           
           # 4. Build Docker image with memory allocation
           echo "🐳 Building Docker image..."
