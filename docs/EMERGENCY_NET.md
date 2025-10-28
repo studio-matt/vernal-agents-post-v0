@@ -129,7 +129,6 @@ git ls-tree HEAD | grep "160000 commit"
 
 ### **APPLY TO ALL WORKFLOWS**
 - ✅ dependency-check.yml
-- ✅ deploy-docker.yml  
 - ✅ deploy-vm.yml
 - ✅ deploy-self-hosted.yml
 - ✅ deploy-agents.yml
