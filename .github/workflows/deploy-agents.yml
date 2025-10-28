@@ -248,7 +248,7 @@ jobs:
             echo "🔍 Checking systemd logs for errors..."
             sudo journalctl -u vernal-agents -n 50 --no-pager
             echo "🔍 Verifying main.py defines app = FastAPI()..."
-            grep -q "app = FastAPI" main.py || echo "❌ main.py does not define app = FastAPI()!"
+            grep -q "app = FastAPI" /home/ubuntu/vernal-agents-post-v0/main.py || echo "❌ main.py does not define app = FastAPI()!"
             echo "🔍 Common causes: code bug, missing dependency, or main.py does not define app = FastAPI()"
             exit 1
           fi
