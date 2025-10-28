@@ -113,9 +113,9 @@ jobs:
           echo "⬆️ Upgrading pip..."
           pip install --upgrade pip --no-cache-dir
           
-          # Install packages one by one to reduce memory pressure
+          # Install packages with memory optimization
           echo "📦 Installing requirements with memory optimization..."
-          pip install -r requirements.txt --no-cache-dir --no-deps --progress-bar off
+          pip install -r requirements.txt --no-cache-dir --progress-bar off
           
           # Note: No pip cache purge needed - using --no-cache-dir already
           
