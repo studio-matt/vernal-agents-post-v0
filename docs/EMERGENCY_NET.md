@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v10)
+# Vernal Agents Backend — Emergency Net (v11)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
@@ -9,6 +9,105 @@
 - **Git repo:** `https://github.com/studio-matt/vernal-agents-post-v0.git`
 - **Deploy flow:** Pull from repo → activate venv → restart systemd service
 - **Verify:** Health endpoints, database connectivity, CORS, and auth flows.
+
+---
+
+## 🚨 CRITICAL: CODE PRESERVATION RULES (v6)
+
+### **THE #1 CAUSE OF REGRESSION: Removing Working Code**
+
+**PROBLEM:** During code cleanup or fixing non-existent imports, working endpoints get accidentally removed, breaking previously functional features.
+
+**SYMPTOMS:**
+- Feature worked before, now returns 404
+- "Previously saved campaigns" are missing from UI
+- Endpoints that existed are gone
+- Database has data but no way to access it
+
+### **MANDATORY CODE PRESERVATION RULES**
+
+#### **1. NEVER REMOVE ENDPOINTS WITHOUT VERIFYING THEY DON'T EXIST**
+```python
+# ❌ WRONG: Removing imports that "don't exist"
+# You removed campaign_api and content_api imports
+# But campaign endpoints were IN main.py, not in separate files!
+
+# ✅ CORRECT: Check if endpoints are in main.py before removing imports
+# If imports are missing, check if code is inlined in main.py
+```
+
+#### **2. SEARCH BEFORE REMOVING**
+```bash
+# BEFORE removing any code, search for where it's used:
+git log --all --full-history -- "**/campaign*"
+git show <commit>:main.py | grep campaign
+find . -name "*campaign*" -type f
+```
+
+#### **3. VERIFY FUNCTIONALITY STILL EXISTS**
+```bash
+# Check if endpoints are defined in main.py:
+grep -n "def.*campaign" main.py
+grep -n "@app.get.*campaign" main.py
+```
+
+#### **4. IF CODE IS MISSING, RESTORE IT FROM HISTORY**
+```bash
+# Find working commit:
+git log --all --grep="campaign" --oneline
+
+# View code from working commit:
+git show <commit>:main.py | grep -A 50 "@app.post.*campaign"
+
+# Restore the endpoints manually
+```
+
+### **CRITICAL RULE: If It Worked Before, It Must Exist Somewhere**
+- Check Git history for removed code
+- Check inline definitions vs imports
+- Never assume missing imports = missing functionality
+- Always verify endpoints exist before declaring them missing
+
+---
+
+## 🚨 CRITICAL: GIT SUBMODULE ERRORS (v1)
+
+### **THE #1 CAUSE OF DEPLOYMENT FAILURES**
+
+**PROBLEM:** GitHub Actions fails with "No url found for submodule path 'agents-backend' in .gitmodules" when this repo doesn't use submodules.
+
+**ROOT CAUSE:** Default Git checkout behavior tries to initialize submodules even when they don't exist or aren't configured.
+
+**SYMPTOMS:**
+- Deployment fails at checkout step
+- Error: "fatal: No url found for submodule path"
+- Workflow fails before any code runs
+
+### **MANDATORY FIX FOR ALL WORKFLOWS**
+
+**Every workflow that uses `actions/checkout@v4` MUST have:**
+```yaml
+- name: Checkout
+  uses: actions/checkout@v4
+  with:
+    submodules: false  # No submodules in this repo
+```
+
+**Why this matters:**
+- This repo doesn't use Git submodules
+- Default `actions/checkout` behavior tries to initialize them
+- Results in fatal error: "No url found for submodule path"
+- **ALL deployment workflows must disable submodules**
+
+### **APPLY TO ALL WORKFLOWS**
+- ✅ dependency-check.yml
+- ✅ deploy-docker.yml  
+- ✅ deploy-vm.yml
+- ✅ deploy-self-hosted.yml
+- ✅ deploy-agents.yml
+- ✅ deploy-prebuilt.yml
+
+**CRITICAL RULE: Every workflow file MUST have `submodules: false` in checkout step.**
 
 ---
 
