@@ -151,8 +151,8 @@ jobs:
           test -f "$MAIN_PY" || { echo "ERROR: main.py not found at $MAIN_PY!"; exit 1; }
           sleep 2  # Ensure file is fully written
           test -s "$MAIN_PY" || { echo "ERROR: main.py is empty!"; exit 1; }
-          grep -q "app = FastAPI" "$MAIN_PY" || { echo "ERROR: main.py must define app = FastAPI()! Showing contents:"; cat "$MAIN_PY"; exit 1; }
-          grep -q "from fastapi import FastAPI" "$MAIN_PY" || { echo "ERROR: main.py must import FastAPI! Showing contents:"; cat "$MAIN_PY"; exit 1; }
+          grep -q "app = FastAPI()" "$MAIN_PY" || { echo "ERROR: main.py must define app = FastAPI()! Showing contents:"; head -30 "$MAIN_PY"; exit 1; }
+          grep -E "(from fastapi import FastAPI|import FastAPI)" "$MAIN_PY" || { echo "ERROR: main.py must import FastAPI! Showing contents:"; head -30 "$MAIN_PY"; exit 1; }
           echo "✅ main.py validation passed"
 
           # 4. Copy and validate environment variables
