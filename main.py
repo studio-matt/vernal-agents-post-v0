@@ -58,8 +58,8 @@ def include_routers():
     except Exception as e:
         logger.warning(f"Simple MCP router not available: {e}")
 
-# Include routers immediately but with error handling
-include_routers()
+# Don't include routers yet - wait for startup event
+# include_routers()  # Moved to startup_event for safety
 
 # Global variables for lazy initialization
 db_manager = None
@@ -111,8 +111,9 @@ async def startup_event():
         scheduler.start()
         logger.info("Scheduler started")
         
-        # Routers are now included at global scope above
-        logger.info("All routers included at global scope")
+        # NOW include routers after DB and scheduler are ready
+        include_routers()
+        logger.info("All routers included after startup")
         
     except Exception as e:
         logger.error(f"Startup error: {e}")
@@ -143,7 +144,9 @@ def deploy_commit():
     """Return the current deployed commit hash for verification"""
     import subprocess
     try:
-        result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd='/home/ubuntu/vernal-agents-post-v0')
+        # Use current file location instead of hardcoded path
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd=repo_dir)
         if result.returncode == 0:
             return {"commit": result.stdout.strip(), "status": "ok"}
         else:
