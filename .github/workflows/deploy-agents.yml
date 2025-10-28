@@ -113,9 +113,21 @@ jobs:
           echo "⬆️ Upgrading pip..."
           pip install --upgrade pip --no-cache-dir
           
-          # Install packages with memory optimization
-          echo "📦 Installing requirements with memory optimization..."
+          # Install packages in chunks to reduce memory pressure
+          echo "📦 Installing core dependencies..."
+          pip install fastapi uvicorn sqlalchemy pymysql python-multipart --no-cache-dir --progress-bar off
+          echo "📊 Memory after core:"
+          free -h
+          
+          echo "📦 Installing AI dependencies..."
+          pip install openai anthropic tiktoken --no-cache-dir --progress-bar off
+          echo "📊 Memory after AI:"
+          free -h
+          
+          echo "📦 Installing remaining dependencies..."
           pip install -r requirements.txt --no-cache-dir --progress-bar off
+          echo "📊 Memory after all:"
+          free -h
           
           # Note: No pip cache purge needed - using --no-cache-dir already
           
