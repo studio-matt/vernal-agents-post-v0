@@ -12,7 +12,7 @@
 
 ---
 
-## 🚨 CRITICAL: CODE PRESERVATION RULES (v6)
+## 🚨 CRITICAL: CODE PRESERVATION RULES (v7)
 
 ### **THE #1 CAUSE OF REGRESSION: Removing Working Code**
 
@@ -23,6 +23,7 @@
 - "Previously saved campaigns" are missing from UI
 - Endpoints that existed are gone
 - Database has data but no way to access it
+- **Backend service fails for 2,168+ attempts due to missing .env file**
 
 ### **MANDATORY CODE PRESERVATION RULES**
 
@@ -67,6 +68,27 @@ git show <commit>:main.py | grep -A 50 "@app.post.*campaign"
 - Check inline definitions vs imports
 - Never assume missing imports = missing functionality
 - Always verify endpoints exist before declaring them missing
+
+#### **5. NEVER DELETE .env FILES DURING CLEANUP (CRITICAL)**
+```bash
+# ❌ WRONG: These commands delete .env and break systemd service
+rm -rf /home/ubuntu/vernal-agents-post-v0/*
+rm -rf /home/ubuntu/vernal-agents-post-v0/.env*
+
+# ✅ CORRECT: Preserve .env during cleanup
+rm -rf /home/ubuntu/vernal-agents-post-v0/*.py
+rm -rf /home/ubuntu/vernal-agents-post-v0/__pycache__
+# Keep .env file intact!
+
+# MANDATORY: Always backup .env before cleanup
+cp /home/ubuntu/vernal-agents-post-v0/.env /home/ubuntu/.env.backup
+```
+
+**Why this matters:**
+- Systemd service requires `EnvironmentFile=/home/ubuntu/vernal-agents-post-v0/.env`
+- Without .env, service fails for 2,168+ consecutive attempts
+- Causes 502 Bad Gateway and CORS errors
+- **This is the #1 cause of backend service failures**
 
 ---
 
