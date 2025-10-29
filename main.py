@@ -96,6 +96,15 @@ class CampaignCreate(BaseModel):
     entitySettings: Optional[Dict[str, Any]] = None
     modelingSettings: Optional[Dict[str, Any]] = None
 
+# Pydantic models for author personalities endpoints
+class AuthorPersonalityCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+class AuthorPersonalityUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup - NOT at import time"""
@@ -175,10 +184,12 @@ def get_campaigns(db: Session = Depends(get_db)):
             ]
         }
     except Exception as e:
+        import traceback
         logger.error(f"Error fetching campaigns: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch campaigns"
+            detail=f"Failed to fetch campaigns: {str(e)}"
         )
 
 @app.post("/campaigns")
@@ -230,10 +241,12 @@ def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(get_db)
         }
         
     except Exception as e:
+        import traceback
         logger.error(f"Error creating campaign: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create campaign"
+            detail=f"Failed to create campaign: {str(e)}"
         )
 
 @app.get("/campaigns/{campaign_id}")
@@ -296,6 +309,158 @@ def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete campaign"
+        )
+
+# Author Personalities endpoints
+@app.get("/author_personalities")
+def get_author_personalities(db: Session = Depends(get_db)):
+    """Get all author personalities - REAL database query"""
+    try:
+        from models import AuthorPersonality
+        personalities = db.query(AuthorPersonality).all()
+        return {
+            "status": "success",
+            "personalities": [
+                {
+                    "id": personality.id,
+                    "name": personality.name,
+                    "description": personality.description,
+                    "created_at": personality.created_at.isoformat() if personality.created_at else None,
+                    "updated_at": personality.updated_at.isoformat() if personality.updated_at else None,
+                    "user_id": personality.user_id
+                }
+                for personality in personalities
+            ]
+        }
+    except Exception as e:
+        import traceback
+        logger.error(f"Error fetching author personalities: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch author personalities: {str(e)}"
+        )
+
+@app.post("/author_personalities")
+def create_author_personality(personality_data: AuthorPersonalityCreate, db: Session = Depends(get_db)):
+    """Create author personality - REAL database save"""
+    try:
+        from models import AuthorPersonality
+        logger.info(f"Creating author personality: {personality_data.name}")
+        
+        # Generate unique ID
+        personality_id = str(uuid.uuid4())
+        
+        # Create personality in database
+        personality = AuthorPersonality(
+            id=personality_id,
+            name=personality_data.name,
+            description=personality_data.description,
+            user_id=None  # Can be extended to associate with logged-in user
+        )
+        
+        db.add(personality)
+        db.commit()
+        db.refresh(personality)
+        
+        logger.info(f"Author personality created successfully: {personality_id}")
+        
+        return {
+            "status": "success",
+            "message": {
+                "id": personality.id,
+                "name": personality.name,
+                "description": personality.description,
+                "created_at": personality.created_at.isoformat() if personality.created_at else None,
+                "updated_at": personality.updated_at.isoformat() if personality.updated_at else None
+            }
+        }
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Error creating author personality: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create author personality: {str(e)}"
+        )
+
+@app.put("/author_personalities/{personality_id}")
+def update_author_personality(personality_id: str, personality_data: AuthorPersonalityUpdate, db: Session = Depends(get_db)):
+    """Update author personality - REAL database update"""
+    try:
+        from models import AuthorPersonality
+        personality = db.query(AuthorPersonality).filter(AuthorPersonality.id == personality_id).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found"
+            )
+        
+        # Update fields if provided
+        if personality_data.name is not None:
+            personality.name = personality_data.name
+        if personality_data.description is not None:
+            personality.description = personality_data.description
+        
+        personality.updated_at = datetime.now()
+        db.commit()
+        db.refresh(personality)
+        
+        logger.info(f"Author personality updated successfully: {personality_id}")
+        
+        return {
+            "status": "success",
+            "message": {
+                "id": personality.id,
+                "name": personality.name,
+                "description": personality.description,
+                "created_at": personality.created_at.isoformat() if personality.created_at else None,
+                "updated_at": personality.updated_at.isoformat() if personality.updated_at else None
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error updating author personality: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update author personality: {str(e)}"
+        )
+
+@app.delete("/author_personalities/{personality_id}")
+def delete_author_personality(personality_id: str, db: Session = Depends(get_db)):
+    """Delete author personality - REAL database deletion"""
+    try:
+        from models import AuthorPersonality
+        personality = db.query(AuthorPersonality).filter(AuthorPersonality.id == personality_id).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found"
+            )
+        db.delete(personality)
+        db.commit()
+        logger.info(f"Author personality deleted successfully: {personality_id}")
+        return {
+            "status": "success",
+            "message": "Author personality deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error deleting author personality: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete author personality: {str(e)}"
         )
 
 if __name__ == "__main__":
