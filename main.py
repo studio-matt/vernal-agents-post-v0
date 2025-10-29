@@ -161,7 +161,7 @@ def deploy_commit():
 
 # Campaign endpoints with REAL database operations (EMERGENCY_NET: Multi-tenant scoped)
 @app.get("/campaigns")
-def get_campaigns(request: Request = None, db: Session = Depends(get_db)):
+def get_campaigns(request: Request, db: Session = Depends(get_db)):
     """Get all campaigns - REAL database query (EMERGENCY_NET: Multi-tenant scoped)"""
     try:
         from models import Campaign, User
@@ -169,7 +169,7 @@ def get_campaigns(request: Request = None, db: Session = Depends(get_db)):
         # Get current user from auth token if provided (EMERGENCY_NET compliance)
         current_user = None
         try:
-            auth_header = request.headers.get("Authorization", "") if request else ""
+            auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
                 token = auth_header.replace("Bearer ", "")
                 from utils import verify_token
@@ -216,7 +216,7 @@ def get_campaigns(request: Request = None, db: Session = Depends(get_db)):
         )
 
 @app.post("/campaigns")
-def create_campaign(campaign_data: CampaignCreate, request: Request = None, db: Session = Depends(get_db)):
+def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session = Depends(get_db)):
     """Create campaign - REAL database save (EMERGENCY_NET: Multi-tenant scoped)"""
     try:
         from models import Campaign, User
@@ -224,7 +224,7 @@ def create_campaign(campaign_data: CampaignCreate, request: Request = None, db: 
         # Get current user from auth token (EMERGENCY_NET compliance)
         user_id = None
         try:
-            auth_header = request.headers.get("Authorization", "") if request else ""
+            auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
                 token = auth_header.replace("Bearer ", "")
                 from utils import verify_token
