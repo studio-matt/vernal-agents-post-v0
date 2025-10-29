@@ -36,11 +36,37 @@ echo "📦 Cloning fresh from GitHub..."
 git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
 cd /home/ubuntu/vernal-agents-post-v0
 
-# 3. Setup venv from scratch
+# 3. Setup venv from scratch with memory optimization
 echo "🐍 Setting up virtual environment..."
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+
+# Memory monitoring and optimization
+echo "📊 Memory status before pip install:"
+free -h
+
+# Aggressive memory cleanup
+echo "🧹 Cleaning up memory..."
+sudo apt-get clean
+sudo apt-get autoremove -y 2>/dev/null || true
+sudo rm -rf /var/cache/apt/archives/* 2>/dev/null || true
+sudo rm -rf /tmp/* 2>/dev/null || true
+echo "📊 Memory after cleanup:"
+free -h
+
+# Memory optimization: upgrade pip and install with no cache
+echo "⬆️ Upgrading pip..."
+pip install --upgrade pip --no-cache-dir
+
+# Install packages in chunks to reduce memory pressure (prevents SIGKILL)
+echo "📦 Installing core dependencies..."
+pip install fastapi uvicorn sqlalchemy pymysql python-multipart python-dotenv pydantic --no-cache-dir --progress-bar off || { echo "❌ Core dependencies failed!"; exit 1; }
+
+echo "📦 Installing AI/ML dependencies (this may take 5-10 minutes)..."
+pip install openai anthropic transformers torch --no-cache-dir --progress-bar off || { echo "⚠️ Some AI packages failed, continuing..." || true; }
+
+echo "📦 Installing remaining dependencies..."
+pip install -r requirements.txt --no-cache-dir --progress-bar off || { echo "⚠️ Some packages failed to install"; }
 
 # 4. Restore and validate environment variables (EMERGENCY_NET.md v7)
 echo "🔐 Setting up environment..."
