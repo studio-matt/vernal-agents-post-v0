@@ -7,6 +7,21 @@ echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
 
 # 1. Nuke old code completely
 echo "🧹 Nuking old code..."
+
+# CRITICAL: Change to safe directory BEFORE deleting (prevents "getcwd() failed" errors)
+cd /home/ubuntu || exit 1
+
+# CRITICAL: Backup .env file before deletion (EMERGENCY_NET.md v7)
+echo "🔐 Backing up .env file before cleanup..."
+if [ -f /home/ubuntu/vernal-agents-post-v0/.env ]; then
+  sudo cp /home/ubuntu/vernal-agents-post-v0/.env /home/ubuntu/.env.backup
+  sudo chown ubuntu:ubuntu /home/ubuntu/.env.backup
+  chmod 600 /home/ubuntu/.env.backup
+  echo "✅ .env file backed up to /home/ubuntu/.env.backup"
+else
+  echo "⚠️ No existing .env file found to backup"
+fi
+
 sudo systemctl stop vernal-agents || true
 rm -rf /home/ubuntu/vernal-agents-post-v0
 
@@ -27,17 +42,31 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 4. Copy and validate environment variables
+# 4. Restore and validate environment variables (EMERGENCY_NET.md v7)
 echo "🔐 Setting up environment..."
-sudo cp /etc/environment .env
-sudo chown ubuntu:ubuntu .env
-chmod 600 .env
 
-# Validate critical environment variables
+# CRITICAL: Restore .env from backup if it exists, otherwise use /etc/environment
+if [ -f /home/ubuntu/.env.backup ]; then
+  echo "✅ Restoring .env from backup..."
+  sudo cp /home/ubuntu/.env.backup .env
+  sudo chown ubuntu:ubuntu .env
+  chmod 600 .env
+  echo "✅ .env file restored from backup with preserved credentials"
+else
+  echo "⚠️ No .env backup found, creating from /etc/environment..."
+  sudo cp /etc/environment .env
+  sudo chown ubuntu:ubuntu .env
+  chmod 600 .env
+  echo "⚠️ WARNING: .env created from /etc/environment - DB and JWT credentials may be missing!"
+  echo "⚠️ Please verify .env contains DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, and JWT_SECRET_KEY"
+fi
+
+# Validate critical environment variables (EMERGENCY_NET.md v7)
 echo "🔍 Validating environment variables..."
 REQUIRED_VARS=("DB_HOST" "DB_USER" "DB_PASSWORD" "DB_NAME" "OPENAI_API_KEY")
 MISSING_VARS=()
 
+# Check for presence of required variables
 for var in "${REQUIRED_VARS[@]}"; do
     if ! grep -q "^${var}=" .env; then
         MISSING_VARS+=("$var")
@@ -47,11 +76,22 @@ done
 if [ ${#MISSING_VARS[@]} -ne 0 ]; then
     echo "❌ Missing required environment variables:"
     printf '%s\n' "${MISSING_VARS[@]}"
-    echo "Please update /etc/environment or provide a complete .env file"
+    echo "Please restore .env from backup or manually configure with real credentials"
     exit 1
 fi
 
-echo "✅ All required environment variables present"
+# CRITICAL: Validate no placeholder values (EMERGENCY_NET.md)
+echo "🔍 Validating no placeholder values..."
+if grep -E "myuser|localhost|dummy|mypassword" .env > /dev/null; then
+    echo "❌ CRITICAL: Placeholder values detected in .env file!"
+    echo "❌ Detected placeholders:"
+    grep -E "myuser|localhost|dummy|mypassword" .env || true
+    echo "❌ This will cause database connection failures!"
+    echo "❌ Please restore .env from backup or manually configure with real credentials"
+    exit 1
+fi
+
+echo "✅ All required environment variables present with real values"
 
 # 5. Overwrite systemd unit (always)
 echo "⚙️ Configuring systemd service..."
@@ -68,6 +108,7 @@ ExecStart=/home/ubuntu/vernal-agents-post-v0/venv/bin/uvicorn main:app --host 0.
 Restart=always
 RestartSec=10
 Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
+EnvironmentFile=/home/ubuntu/vernal-agents-post-v0/.env
 
 [Install]
 WantedBy=multi-user.target
