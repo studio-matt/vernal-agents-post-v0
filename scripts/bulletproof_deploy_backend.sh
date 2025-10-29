@@ -137,9 +137,9 @@ VERSION_RESPONSE=$(curl -s http://localhost:8000/version)
 echo "$VERSION_RESPONSE" | jq . || { echo "❌ Version endpoint returned invalid JSON!"; exit 1; }
 echo "✅ Version check passed"
 
-# Database test
+# Database test (using health endpoint that checks DB)
 echo "🔍 Testing database connectivity..."
-curl -f http://localhost:8000/config/test || { echo "❌ Database test failed!"; exit 1; }
+curl -f http://localhost:8000/mcp/enhanced/health || { echo "❌ Database health check failed!"; exit 1; }
 echo "✅ Database test passed"
 
 # Systemd status
