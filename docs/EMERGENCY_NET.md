@@ -374,6 +374,51 @@ git remote -v
 
 ## 🚀 Bulletproof Manual Deploy
 
+### **OPTION A: Automated Bulletproof Script (RECOMMENDED for v13+)**
+
+**This is the complete, tested, end-to-end deployment script that handles everything:**
+```bash
+cd /home/ubuntu
+rm -rf /home/ubuntu/vernal-agents-post-v0 2>/dev/null || true
+git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
+cd /home/ubuntu/vernal-agents-post-v0
+chmod +x scripts/bulletproof_deploy_backend.sh
+bash scripts/bulletproof_deploy_backend.sh
+```
+
+**What this script does:**
+1. ✅ Changes to safe directory (`/home/ubuntu`) before deletion (prevents getcwd errors)
+2. ✅ Backs up `.env` file automatically (EMERGENCY_NET v7 compliance)
+3. ✅ Deletes old code completely
+4. ✅ Clones fresh from GitHub
+5. ✅ Sets up venv with chunked pip installation (prevents SIGKILL)
+6. ✅ Restores `.env` from backup
+7. ✅ Validates required environment variables (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)
+8. ✅ Validates no placeholder values (myuser, localhost, dummy, mypassword)
+9. ✅ Configures systemd service
+10. ✅ Starts service and waits
+11. ✅ Runs comprehensive health checks (local, version, database, external)
+12. ✅ Logs successful deployment
+
+**Required Environment Variables:**
+- `DB_HOST` (must not be localhost)
+- `DB_USER` (must not be myuser)
+- `DB_PASSWORD` (must not be mypassword/dummy)
+- `DB_NAME`
+- `JWT_SECRET_KEY` (generated if missing)
+
+**Optional:**
+- `OPENAI_API_KEY` (not required for backend startup, can be per-user)
+
+**If script fails:**
+- Check logs for specific error message
+- Verify `.env` backup exists: `ls -la /home/ubuntu/.env.backup`
+- Restore `.env` manually if needed: `cp /home/ubuntu/.env.backup /home/ubuntu/vernal-agents-post-v0/.env`
+
+---
+
+### **OPTION B: Manual Step-by-Step Deploy**
+
 ### 1. **Pull Latest Code**
 ```bash
 cd /home/ubuntu/vernal-agents-post-v0
