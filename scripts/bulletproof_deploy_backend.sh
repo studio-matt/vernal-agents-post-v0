@@ -89,7 +89,7 @@ fi
 
 # Validate critical environment variables (EMERGENCY_NET.md v7)
 echo "🔍 Validating environment variables..."
-REQUIRED_VARS=("DB_HOST" "DB_USER" "DB_PASSWORD" "DB_NAME" "OPENAI_API_KEY")
+REQUIRED_VARS=("DB_HOST" "DB_USER" "DB_PASSWORD" "DB_NAME")
 MISSING_VARS=()
 
 # Check for presence of required variables
