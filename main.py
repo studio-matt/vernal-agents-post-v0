@@ -175,8 +175,11 @@ def get_campaigns(db: Session = Depends(get_db)):
                     "name": campaign.campaign_name,
                     "description": campaign.description,
                     "type": campaign.type,
-                    "status": campaign.status,
-                    "progress": campaign.progress,
+                    "query": campaign.query,
+                    "keywords": campaign.keywords.split(",") if campaign.keywords else [],
+                    "urls": campaign.urls.split(",") if campaign.urls else [],
+                    "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
+                    "topics": campaign.topics.split(",") if campaign.topics else [],
                     "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
                     "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
                 }
@@ -202,30 +205,33 @@ def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(get_db)
         # Generate unique campaign ID
         campaign_id = str(uuid.uuid4())
         
-        # Convert lists to strings for database storage
-        keywords_str = json.dumps(campaign_data.keywords) if campaign_data.keywords else None
-        urls_str = json.dumps(campaign_data.urls) if campaign_data.urls else None
-        trending_topics_str = json.dumps(campaign_data.trendingTopics) if campaign_data.trendingTopics else None
-        topics_str = json.dumps(campaign_data.topics) if campaign_data.topics else None
+        # Convert lists to comma-separated strings for database storage (matching model)
+        keywords_str = ",".join(campaign_data.keywords) if campaign_data.keywords else None
+        urls_str = ",".join(campaign_data.urls) if campaign_data.urls else None
+        trending_topics_str = ",".join(campaign_data.trendingTopics) if campaign_data.trendingTopics else None
+        topics_str = ",".join(campaign_data.topics) if campaign_data.topics else None
         
-        # Create campaign in database
-        db_manager = get_db_manager()
-        db_manager.create_campaign(
+        # Get current user ID (for now, use 1 as default - should get from auth token)
+        from models import Campaign
+        user_id = 1  # TODO: Get from authenticated user
+        
+        # Create campaign directly using SQLAlchemy
+        campaign = Campaign(
             campaign_id=campaign_id,
             campaign_name=campaign_data.name,
             description=campaign_data.description,
             query=campaign_data.name,
-            campaign_type=campaign_data.type,
-            keywords_str=keywords_str,
-            urls_str=urls_str,
-            trending_topics_str=trending_topics_str,
-            topics_str=topics_str,
-            status="created",
-            extraction_settings=campaign_data.extractionSettings or {},
-            preprocessing_settings=campaign_data.preprocessingSettings or {},
-            entity_settings=campaign_data.entitySettings or {},
-            modeling_settings=campaign_data.modelingSettings or {}
+            type=campaign_data.type,
+            keywords=keywords_str,
+            urls=urls_str,
+            trending_topics=trending_topics_str,
+            topics=topics_str,
+            user_id=user_id
         )
+        
+        db.add(campaign)
+        db.commit()
+        db.refresh(campaign)
         
         logger.info(f"Campaign created successfully: {campaign_id}")
         
@@ -269,8 +275,11 @@ def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
                 "name": campaign.campaign_name,
                 "description": campaign.description,
                 "type": campaign.type,
-                "status": campaign.status,
-                "progress": campaign.progress,
+                "query": campaign.query,
+                    "keywords": campaign.keywords.split(",") if campaign.keywords else [],
+                    "urls": campaign.urls.split(",") if campaign.urls else [],
+                    "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
+                    "topics": campaign.topics.split(",") if campaign.topics else [],
                 "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
                 "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
             }
