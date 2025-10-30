@@ -560,7 +560,14 @@ def get_analyze_status(task_id: str):
     Progress advances deterministically based on time since start.
     """
     if task_id not in TASKS:
-        raise HTTPException(status_code=404, detail="Task not found")
+        # Be resilient across restarts: report pending instead of 404 so UI keeps polling
+        return {
+            "status": "pending",
+            "progress": 5,
+            "current_step": "initializing",
+            "progress_message": "Waiting for task",
+            "campaign_id": None,
+        }
     
     task = TASKS[task_id]
     # Compute time-based progress (simulate steps over ~45s)
