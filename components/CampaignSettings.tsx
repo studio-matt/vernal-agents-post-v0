@@ -746,7 +746,7 @@ export function CampaignSettings({
         console.log("📡 analyzeTrends response:", response);
       }
 
-      if (response.status === "success") {
+      if (response.status === "success" || response.status === "started") {
         console.log("✅ Campaign build successful!");
         const responseData = response as any; // Type assertion for now
         
