@@ -892,10 +892,14 @@ export function CampaignSettings({
           }
         };
 
+        // Get auth token for backend API
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        
         const response = await fetch('/api/campaigns', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           },
           body: JSON.stringify(campaignToCreate)
         });
