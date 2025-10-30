@@ -161,7 +161,7 @@ def deploy_commit():
 
 # Campaign endpoints with REAL database operations (EMERGENCY_NET: Multi-tenant scoped)
 @app.get("/campaigns")
-def get_campaigns(request: Optional[Request] = None, db: Session = Depends(get_db)):
+def get_campaigns(request: Request, db: Session = Depends(get_db)):
     """Get all campaigns - REAL database query (EMERGENCY_NET: Multi-tenant scoped)"""
     try:
         from models import Campaign, User
@@ -169,14 +169,13 @@ def get_campaigns(request: Optional[Request] = None, db: Session = Depends(get_d
         # Get current user from auth token if provided (EMERGENCY_NET compliance)
         current_user = None
         try:
-            if request:
-                auth_header = request.headers.get("Authorization", "")
-                if auth_header.startswith("Bearer "):
-                    token = auth_header.replace("Bearer ", "")
-                    from utils import verify_token
-                    payload = verify_token(token)
-                    user_id = int(payload.get("sub"))
-                    current_user = db.query(User).filter(User.id == user_id).first()
+            auth_header = request.headers.get("Authorization", "") if request else ""
+            if auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                from utils import verify_token
+                payload = verify_token(token)
+                user_id = int(payload.get("sub"))
+                current_user = db.query(User).filter(User.id == user_id).first()
         except:
             # If auth fails, continue without filtering (backward compatibility)
             pass
@@ -217,7 +216,7 @@ def get_campaigns(request: Optional[Request] = None, db: Session = Depends(get_d
         )
 
 @app.post("/campaigns")
-def create_campaign(campaign_data: CampaignCreate, request: Optional[Request] = None, db: Session = Depends(get_db)):
+def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session = Depends(get_db)):
     """Create campaign - REAL database save (EMERGENCY_NET: Multi-tenant scoped)"""
     try:
         from models import Campaign, User
@@ -225,20 +224,19 @@ def create_campaign(campaign_data: CampaignCreate, request: Optional[Request] = 
         # Get current user from auth token (EMERGENCY_NET compliance)
         user_id = None
         try:
-            if request:
-                auth_header = request.headers.get("Authorization", "")
-                if auth_header.startswith("Bearer "):
-                    token = auth_header.replace("Bearer ", "")
-                    from utils import verify_token
-                    payload = verify_token(token)
-                    user_id = int(payload.get("sub"))
-                    # Verify user exists
-                    user = db.query(User).filter(User.id == user_id).first()
-                    if not user:
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="User not found"
-                        )
+            auth_header = request.headers.get("Authorization", "") if request else ""
+            if auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                from utils import verify_token
+                payload = verify_token(token)
+                user_id = int(payload.get("sub"))
+                # Verify user exists
+                user = db.query(User).filter(User.id == user_id).first()
+                if not user:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="User not found"
+                    )
         except HTTPException:
             raise
         except Exception as auth_error:
