@@ -539,6 +539,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                         # Store coarse topics from keywords as a ready signal
                         if (data.keywords or []) and not camp.topics:
                             camp.topics = ",".join((data.keywords or [])[:10])
+                        camp.status = "READY_TO_ACTIVATE"
                         camp.updated_at = datetime.utcnow()
                         session.commit()
                 except Exception as _:
