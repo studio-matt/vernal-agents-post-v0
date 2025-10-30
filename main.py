@@ -164,6 +164,7 @@ def deploy_commit():
 @app.get("/campaigns")
 def get_campaigns(request: Request, db: Session = Depends(get_db)):
     """Get all campaigns - REAL database query (EMERGENCY_NET: Multi-tenant scoped)"""
+    logger.info("🔍 /campaigns GET endpoint called")
     try:
         from models import Campaign, User
         
@@ -378,6 +379,7 @@ def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
 @app.get("/author_personalities")
 def get_author_personalities(db: Session = Depends(get_db)):
     """Get all author personalities - REAL database query"""
+    logger.info("🔍 /author_personalities GET endpoint called")
     try:
         from models import AuthorPersonality
         personalities = db.query(AuthorPersonality).all()
