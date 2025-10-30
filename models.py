@@ -191,3 +191,18 @@ class Campaign(Base):
     
     def __repr__(self):
         return f"<Campaign(id={self.id}, campaign_id={self.campaign_id}, name={self.campaign_name})>"
+
+# Raw scraped documents associated with a campaign
+class CampaignRawData(Base):
+    __tablename__ = "campaign_raw_data"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(String(255), index=True, nullable=False)  # stores Campaign.campaign_id UUID
+    source_url = Column(Text, nullable=True)
+    fetched_at = Column(DateTime, default=datetime.now)
+    raw_html = Column(Text, nullable=True)
+    extracted_text = Column(Text, nullable=True)
+    meta_json = Column(Text, nullable=True)
+    content_hash = Column(String(255), nullable=True)
+
+    def __repr__(self):
+        return f"<CampaignRawData(id={self.id}, campaign_id={self.campaign_id}, url={self.source_url})>"
