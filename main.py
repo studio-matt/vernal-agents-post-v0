@@ -375,6 +375,111 @@ def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
             detail="Failed to delete campaign"
         )
 
+# Analyze endpoint models
+class AnalyzeRequest(BaseModel):
+    campaign_id: Optional[str] = None
+    campaign_name: Optional[str] = None
+    description: Optional[str] = None
+    query: Optional[str] = None
+    keywords: Optional[List[str]] = []
+    urls: Optional[List[str]] = []
+    trendingTopics: Optional[List[str]] = []
+    topics: Optional[List[str]] = []
+    type: Optional[str] = "keyword"
+    depth: Optional[int] = 3
+    max_pages: Optional[int] = 10
+    batch_size: Optional[int] = 1
+    include_links: Optional[bool] = True
+    stem: Optional[bool] = False
+    lemmatize: Optional[bool] = False
+    remove_stopwords_toggle: Optional[bool] = False
+    extract_persons: Optional[bool] = False
+    extract_organizations: Optional[bool] = False
+    extract_locations: Optional[bool] = False
+    extract_dates: Optional[bool] = False
+    topic_tool: Optional[str] = "lda"
+    num_topics: Optional[int] = 3
+    iterations: Optional[int] = 25
+    pass_threshold: Optional[float] = 0.7
+
+# Analyze endpoint (for campaign building)
+@app.post("/analyze")
+def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    Analyze campaign - Stub endpoint (returns task_id for now)
+    TODO: Implement full analysis workflow
+    
+    IMPORTANT: This endpoint should NOT delete campaigns. It only starts analysis.
+    """
+    try:
+        # Try to get user from token
+        user_id = None
+        try:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                from utils import verify_token
+                payload = verify_token(token)
+                user_id = int(payload.get("sub"))
+                logger.info(f"Token verified for user_id: {user_id}")
+        except Exception as auth_error:
+            logger.warning(f"Authentication failed for /analyze: {auth_error}")
+            user_id = 1  # Fallback
+        
+        campaign_id = analyze_data.campaign_id or f"campaign-{uuid.uuid4()}"
+        campaign_name = analyze_data.campaign_name or "Unknown Campaign"
+        
+        logger.info(f"🔍 /analyze POST endpoint called for campaign: {campaign_name} (ID: {campaign_id}) by user {user_id}")
+        logger.info(f"🔍 Request data: campaign_name={analyze_data.campaign_name}, type={analyze_data.type}, keywords={len(analyze_data.keywords or [])} keywords")
+        
+        # IMPORTANT: Verify campaign exists and belongs to user (don't delete, just verify)
+        from models import Campaign, User
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if campaign:
+            logger.info(f"✅ Campaign {campaign_id} found in database (user_id: {campaign.user_id})")
+            if campaign.user_id != user_id:
+                logger.warning(f"⚠️ Campaign {campaign_id} belongs to user {campaign.user_id} but request is from user {user_id}")
+        else:
+            logger.warning(f"⚠️ Campaign {campaign_id} not found in database - analysis will continue anyway")
+        
+        # TODO: Implement actual analysis workflow (web scraping, NLP, topic modeling, etc.)
+        # For now, return a task_id so the frontend can poll for status
+        task_id = str(uuid.uuid4())
+        
+        logger.warning(f"⚠️ /analyze endpoint is a stub - analysis not implemented yet. Returning task_id: {task_id}")
+        logger.info(f"✅ Analysis task created (stub): task_id={task_id}, campaign_id={campaign_id}, user_id={user_id}")
+        
+        return {
+            "status": "started",
+            "task_id": task_id,
+            "message": "Analysis started (stub endpoint - implementation pending)",
+            "campaign_id": campaign_id,
+            "campaign_name": campaign_name
+        }
+    except Exception as e:
+        import traceback
+        logger.error(f"Error in /analyze endpoint: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start analysis: {str(e)}"
+        )
+
+@app.get("/analyze/status/{task_id}")
+def get_analyze_status(task_id: str, db: Session = Depends(get_db)):
+    """
+    Get analysis status - Stub endpoint
+    TODO: Implement actual status checking
+    """
+    logger.info(f"🔍 /analyze/status/{task_id} GET endpoint called")
+    
+    # TODO: Check actual task status from database/queue
+    return {
+        "status": "pending",
+        "progress": 0,
+        "message": "Status endpoint not implemented yet"
+    }
+
 # Author Personalities endpoints
 @app.get("/author_personalities")
 def get_author_personalities(db: Session = Depends(get_db)):
