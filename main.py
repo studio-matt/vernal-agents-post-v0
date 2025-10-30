@@ -210,6 +210,7 @@ def get_campaigns(request: Request, db: Session = Depends(get_db)):
                     "urls": campaign.urls.split(",") if campaign.urls else [],
                     "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
                     "topics": campaign.topics.split(",") if campaign.topics else [],
+                    "user_id": campaign.user_id,  # Include user_id in response for debugging
                     "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
                     "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
                 }
