@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -466,7 +467,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
         # Kick off a lightweight background job to simulate real steps and persist raw data
         def run_analysis_background(tid: str, cid: str, data: AnalyzeRequest):
             from database import SessionLocal
-            from models import CampaignRawData
+            from models import CampaignRawData, Campaign
             session = SessionLocal()
             try:
                 # Helper to update task atomically
@@ -530,6 +531,18 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
 
                 # Finalize
                 set_task("finalizing", 100, "Finalizing")
+
+                # Mark campaign ready in DB
+                try:
+                    camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                    if camp:
+                        # Store coarse topics from keywords as a ready signal
+                        if (data.keywords or []) and not camp.topics:
+                            camp.topics = ",".join((data.keywords or [])[:10])
+                        camp.updated_at = datetime.utcnow()
+                        session.commit()
+                except Exception as _:
+                    session.rollback()
             except Exception as e:
                 logger.error(f"Background analysis error: {e}")
             finally:
@@ -617,6 +630,76 @@ def get_status_by_campaign(campaign_id: str):
     if not task_id:
         raise HTTPException(status_code=404, detail="No task for campaign")
     return get_analyze_status(task_id)
+
+# Research data endpoint: returns urls, raw samples, word cloud, topics and entities
+@app.get("/campaigns/{campaign_id}/research")
+def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depends(get_db)):
+    """
+    Aggregate research outputs for a campaign.
+    - urls: list of source_url
+    - raw: up to `limit` extracted_text samples
+    - wordCloud: top 10 terms by frequency
+    - topics: naive primary topics (top terms)
+    - entities: placeholder extraction using simple regex/heuristics
+    """
+    try:
+        from models import CampaignRawData
+
+        rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+        urls = []
+        texts = []
+        for r in rows:
+            if r.source_url:
+                urls.append(r.source_url)
+            if r.extracted_text:
+                texts.append(r.extracted_text)
+
+        # Build simple word frequency
+        stop = set(
+            "the a an and or of for to in on at from by with as is are was were be been being this that those these it its into over under about after before above below between across can will would should could may might not no yes you your we our their them they he she his her him i me my do does did done have has had having".split()
+        )
+        counts = {}
+        tokenizer = re.compile(r"[A-Za-z]{3,}")
+        for t in texts:
+            for w in tokenizer.findall(t.lower()):
+                if w in stop:
+                    continue
+                counts[w] = counts.get(w, 0) + 1
+        top_terms = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
+        word_cloud = [{"term": k, "count": v} for k, v in top_terms]
+
+        topics = [{"label": k, "score": v} for k, v in top_terms]
+
+        # Naive entities via regex (very rough placeholders)
+        persons = []
+        organizations = []
+        locations = []
+        dates = []
+        date_regex = re.compile(r"\b(\d{4}|\d{1,2}/\d{1,2}/\d{2,4}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b", re.I)
+        for t in texts[:100]:
+            dates += date_regex.findall(t)
+        entities = {
+            "persons": list(dict.fromkeys(persons))[:20],
+            "organizations": list(dict.fromkeys(organizations))[:20],
+            "locations": list(dict.fromkeys(locations))[:20],
+            "dates": list(dict.fromkeys(dates))[:20],
+        }
+
+        return {
+            "status": "success",
+            "campaign_id": campaign_id,
+            "urls": urls,
+            "raw": texts[: max(0, limit) or 20],
+            "wordCloud": word_cloud,
+            "topics": topics,
+            "entities": entities,
+            "total_raw": len(texts),
+        }
+    except Exception as e:
+        import traceback
+        logger.error(f"Error aggregating research for {campaign_id}: {e}")
+        logger.debug(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Failed to get research data")
 
 # Author Personalities endpoints
 @app.get("/author_personalities")
