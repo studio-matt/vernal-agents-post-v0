@@ -512,7 +512,7 @@ export function CampaignSettings({
     setUrls(urls.filter((_, i) => i !== index));
   };
 
-  const handleSaveSettings = (e: React.MouseEvent) => {
+  const handleSaveSettings = async (e: React.MouseEvent) => {
     e.preventDefault();
     
     // Validate that name is filled out
@@ -526,28 +526,82 @@ export function CampaignSettings({
     
     setIsSaving(true);
     
-    // Create the campaign data
-    const campaignData = {
-      name,
-      description,
-      type,
-      keywords: type === "keyword" ? keywords : undefined,
-      urls: type === "url" ? urls : undefined,
-      trendingTopics: type === "trending" ? trendingTopics : undefined,
-      query,
-      extractionSettings,
-      preprocessingSettings,
-      entitySettings,
-      modelingSettings,
-    };
-    
-    // Call the onSave prop to persist the campaign
-    onSave(campaignData);
-    
-    setTimeout(() => {
+    try {
+      // Create the campaign data
+      const campaignData = {
+        name,
+        description,
+        type,
+        keywords: type === "keyword" ? keywords : undefined,
+        urls: type === "url" ? urls : undefined,
+        trendingTopics: type === "trending" ? trendingTopics : undefined,
+        query,
+        extractionSettings,
+        preprocessingSettings,
+        entitySettings,
+        modelingSettings,
+      };
+      
+      // Get auth token for backend API
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      
+      // If campaign already has an ID, update it; otherwise create new
+      if (campaign.id && campaign.id !== "") {
+        // Update existing campaign in backend
+        console.log("📝 Updating existing campaign in backend:", campaign.id);
+        const updateResponse = await fetch(`/api/campaigns/${campaign.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(campaignData)
+        });
+        
+        if (updateResponse.ok) {
+          const updatedCampaign = await updateResponse.json();
+          console.log("✅ Campaign updated in backend:", updatedCampaign);
+          // Also call onSave for local state update
+          onSave(campaignData);
+        } else {
+          throw new Error(`Failed to update campaign: ${updateResponse.statusText}`);
+        }
+      } else {
+        // Create new campaign in backend with INCOMPLETE status (user can finish later)
+        console.log("➕ Creating new campaign in backend (draft/incomplete)");
+        const createResponse = await fetch('/api/campaigns', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            ...campaignData,
+            status: "INCOMPLETE"  // Mark as incomplete so user can come back later
+          })
+        });
+        
+        if (createResponse.ok) {
+          const createdCampaign = await createResponse.json();
+          console.log("✅ Campaign created in backend (draft):", createdCampaign);
+          // Also call onSave for local state update
+          onSave(campaignData);
+        } else {
+          const errorText = await createResponse.text();
+          throw new Error(`Failed to create campaign: ${errorText}`);
+        }
+      }
+      
       setIsSaving(false);
       setShowSavedModal(true);
-    }, 1000);
+    } catch (error) {
+      console.error("❌ Error saving campaign:", error);
+      setIsSaving(false);
+      setError({
+        isOpen: true,
+        message: error instanceof Error ? error.message : "Failed to save campaign. Please try again.",
+      });
+    }
   };
 
   const checkForValidApiKeys = async (): Promise<boolean> => {
