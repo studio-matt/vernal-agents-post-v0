@@ -169,17 +169,26 @@ def get_campaigns(request: Request, db: Session = Depends(get_db)):
         
         # Get current user from auth token if provided (EMERGENCY_NET compliance)
         current_user = None
-        try:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
                 token = auth_header.replace("Bearer ", "")
                 from utils import verify_token
                 payload = verify_token(token)
                 user_id = int(payload.get("sub"))
+                logger.info(f"Token verified for user_id: {user_id}")
                 current_user = db.query(User).filter(User.id == user_id).first()
-        except:
-            # If auth fails, continue without filtering (backward compatibility)
-            pass
+                if current_user:
+                    logger.info(f"User found: {current_user.id} ({current_user.username})")
+                else:
+                    logger.warning(f"User {user_id} not found in database")
+            except Exception as auth_error:
+                # Log auth errors but continue without filtering for backward compatibility
+                logger.warning(f"Authentication failed for /campaigns GET: {auth_error}")
+                import traceback
+                logger.debug(f"Auth error traceback: {traceback.format_exc()}")
+        else:
+            logger.info("No Authorization header provided - returning all campaigns")
         
         # EMERGENCY_NET: Multi-tenant - filter by user if authenticated
         if current_user:
