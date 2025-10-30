@@ -9,7 +9,8 @@ import json
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -169,7 +170,7 @@ def get_campaigns(request: Request, db: Session = Depends(get_db)):
         # Get current user from auth token if provided (EMERGENCY_NET compliance)
         current_user = None
         try:
-            auth_header = request.headers.get("Authorization", "") if request else ""
+            auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
                 token = auth_header.replace("Bearer ", "")
                 from utils import verify_token
@@ -224,7 +225,7 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
         # Get current user from auth token (EMERGENCY_NET compliance)
         user_id = None
         try:
-            auth_header = request.headers.get("Authorization", "") if request else ""
+            auth_header = request.headers.get("Authorization", "")
             if auth_header.startswith("Bearer "):
                 token = auth_header.replace("Bearer ", "")
                 from utils import verify_token
