@@ -351,10 +351,12 @@ def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
                 "description": campaign.description,
                 "type": campaign.type,
                 "query": campaign.query,
-                    "keywords": campaign.keywords.split(",") if campaign.keywords else [],
-                    "urls": campaign.urls.split(",") if campaign.urls else [],
-                    "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
-                    "topics": campaign.topics.split(",") if campaign.topics else [],
+                "keywords": campaign.keywords.split(",") if campaign.keywords else [],
+                "urls": campaign.urls.split(",") if campaign.urls else [],
+                "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
+                "topics": campaign.topics.split(",") if campaign.topics else [],
+                "status": campaign.status or "INCOMPLETE",  # Include status field
+                "user_id": campaign.user_id,
                 "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
                 "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
             }
