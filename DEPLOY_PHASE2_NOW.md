@@ -51,7 +51,7 @@ source venv/bin/activate
 # This only downloads the Chromium browser binaries (~170MB)
 playwright install chromium
 
-# 6. Restart Systemd Service
+# 5. Restart Systemd Service
 sudo systemctl restart vernal-agents
 sudo systemctl status vernal-agents
 
