@@ -571,30 +571,33 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 urls = data.urls or []
                 keywords = data.keywords or []
 
-                # Create a few seed rows to prove persistence; real scraper can replace this later
+                # Create rows with sample extracted text for display
+                # TODO: Replace with actual web scraping implementation
                 created = 0
                 now = datetime.utcnow()
-                # For URLs
+                # For URLs - create sample extracted text
                 for u in urls[:10]:
+                    sample_text = f"Sample content extracted from {u}. This is placeholder text that would normally come from scraping the actual webpage. In a production environment, this would contain the real extracted content from the URL including article text, descriptions, and relevant information."
                     row = CampaignRawData(
                         campaign_id=cid,
                         source_url=u,
                         fetched_at=now,
                         raw_html=None,
-                        extracted_text=None,
-                        meta_json=json.dumps({"seed": True, "type": "url"})
+                        extracted_text=sample_text,
+                        meta_json=json.dumps({"seed": True, "type": "url", "source": u})
                     )
                     session.add(row)
                     created += 1
-                # For keywords, create placeholder search documents
+                # For keywords, create placeholder search documents with sample content
                 for kw in keywords[:10]:
+                    sample_text = f"Sample content related to keyword: {kw}. This text represents content that would be gathered from search results and related sources when scraping for this keyword. It includes relevant information, context, and discussions about the topic."
                     row = CampaignRawData(
                         campaign_id=cid,
                         source_url=f"keyword:{kw}",
                         fetched_at=now,
                         raw_html=None,
-                        extracted_text=None,
-                        meta_json=json.dumps({"seed": True, "type": "keyword"})
+                        extracted_text=sample_text,
+                        meta_json=json.dumps({"seed": True, "type": "keyword", "keyword": kw})
                     )
                     session.add(row)
                     created += 1
