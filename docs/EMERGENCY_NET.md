@@ -729,6 +729,9 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | **Database connection failed** | **DB credentials/network** | **Check `.env`, test DB connectivity** |
 | **Access denied for user 'myuser'** | **Wrong DB credentials** | **Fix .env with real credentials** |
 | **ModuleNotFoundError: No module named 'browser_use'** | **Missing dependencies** | **pip install browser-use** |
+| **OSError: Can't find model 'en_core_web_md'** | **spaCy model not downloaded** | **python -m spacy download en_core_web_md** |
+| **ModuleNotFoundError: No module named 'spacy'** | **Missing spacy package** | **pip install spacy>=3.7.0** |
+| **ModuleNotFoundError: No module named 'duckduckgo_search'** | **Missing duckduckgo-search** | **pip install duckduckgo-search>=6.0.0** |
 | **SyntaxError: invalid syntax** | **Code syntax error** | **Check database.py line 928 for missing newline** |
 | Email not sending       | SMTP configuration   | Check `.env` SMTP settings |
 | Service won't start     | Port conflict        | Kill processes on port 8000 |
