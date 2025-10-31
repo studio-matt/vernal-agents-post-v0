@@ -8,14 +8,10 @@
 
 ## ✅ EMERGENCY NET COMPLIANT DEPLOYMENT COMMANDS
 
+**Run these commands directly on the backend server terminal (you're already logged in).**
+
 ### **OPTION A: Automated Script (RECOMMENDED - Handles Everything)**
 
-**SSH to backend server first:**
-```bash
-ssh ubuntu@18.235.104.132
-```
-
-**Then run the bulletproof deployment script:**
 ```bash
 cd /home/ubuntu
 rm -rf /home/ubuntu/vernal-agents-post-v0 2>/dev/null || true
@@ -36,12 +32,7 @@ python -m spacy download en_core_web_md
 
 ### **OPTION B: Manual Step-by-Step (If You Prefer Control)**
 
-**SSH to backend server first:**
-```bash
-ssh ubuntu@18.235.104.132
-```
-
-**Then run these commands in order:**
+**Run these commands in order:**
 
 ```bash
 # 1. Pull Latest Code
@@ -79,10 +70,9 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 
 ## ✅ ONE-LINER (Copy-Paste Friendly)
 
-**If you prefer to copy-paste everything at once:**
+**Copy-paste this entire block:**
 
 ```bash
-ssh ubuntu@18.235.104.132 << 'DEPLOY_EOF'
 cd /home/ubuntu/vernal-agents-post-v0 && \
 git fetch origin && git switch main && git pull --ff-only origin main && \
 python3 validate_dependencies.py && \
@@ -94,7 +84,6 @@ sleep 5 && \
 curl -s http://127.0.0.1:8000/health | jq . && \
 curl -s http://127.0.0.1:8000/mcp/enhanced/health | jq . && \
 echo "✅ Deployment complete!"
-DEPLOY_EOF
 ```
 
 ---
