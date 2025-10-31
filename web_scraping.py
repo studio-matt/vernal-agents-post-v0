@@ -9,6 +9,8 @@ from typing import List, Dict, Optional, Set
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 # Use new ddgs package (duckduckgo_search is deprecated and causes warnings)
 DDGS = None
 try:
@@ -61,10 +63,14 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
         results = []
         try:
             with DDGS() as ddgs:
-                # Use text() method - returns generator of result dictionaries
-                count = 0
+                # Use text() method - returns list of result dictionaries (not generator in newer versions)
                 search_results = ddgs.text(search_query, max_results=max_results)
                 
+                # Handle both list and generator returns
+                if not isinstance(search_results, (list, tuple)):
+                    search_results = list(search_results)
+                
+                count = 0
                 for result in search_results:
                     # ddgs.text() returns dictionaries with different key formats
                     url = None

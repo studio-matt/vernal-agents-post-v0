@@ -8,19 +8,30 @@ with DDGS() as ddgs:
     print("Testing DuckDuckGo search...")
     results = ddgs.text("python programming", max_results=3)
     
+    # Handle both list and generator
+    if not isinstance(results, (list, tuple)):
+        results = list(results)
+    
     print("\n=== First result ===")
-    first = next(results, None)
-    if first:
+    if results and len(results) > 0:
+        first = results[0]
         print(f"Type: {type(first)}")
         print(f"Content: {first}")
         if isinstance(first, dict):
             print(f"Keys: {list(first.keys())}")
+    else:
+        print("No results returned")
     
     # Try to get a few more
     print("\n=== Processing results ===")
     count = 0
     with DDGS() as ddgs2:
-        for result in ddgs2.text("python programming", max_results=5):
+        search_results = ddgs2.text("python programming", max_results=5)
+        # Handle both list and generator
+        if not isinstance(search_results, (list, tuple)):
+            search_results = list(search_results)
+        
+        for result in search_results:
             count += 1
             print(f"\nResult {count}:")
             print(f"  Type: {type(result)}")
