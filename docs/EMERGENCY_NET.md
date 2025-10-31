@@ -437,13 +437,13 @@ pip install -r requirements.txt --no-cache-dir
 python -m spacy download en_core_web_md
 ```
 
-### 3. **Restart Systemd Service**
+### 4. **Restart Systemd Service**
 ```bash
 sudo systemctl restart vernal-agents
 sudo systemctl status vernal-agents
 ```
 
-### 4. **Verification (MANDATORY)**
+### 5. **Verification (MANDATORY)**
 ```bash
 curl -s http://127.0.0.1:8000/health | jq .
 curl -s http://127.0.0.1:8000/mcp/enhanced/health | jq .
@@ -678,20 +678,41 @@ def __init__(self):
                            f"Must use real production database credentials in .env file!")
 ```
 
-### **Python/Backend Dependency Validation (CRITICAL)**
+### **Python/Backend Dependency Validation (CRITICAL - MANDATORY BEFORE ANY DEPLOYMENT)**
+
+**🚨 MANDATORY: Run dependency validation before ANY deployment:**
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+python3 validate_dependencies.py
+```
+
+**This validation script checks:**
+- ✅ Pip version compatibility (pip<25.0 for pip-tools)
+- ✅ requirements.in follows best practices (lower bounds only)
+- ✅ No known conflict patterns
+- ✅ Dependency resolution succeeds without conflicts
+
+**If validation fails: DO NOT DEPLOY. Fix issues first.**
+
+**Additional manual checks:**
 - **Test all critical imports** (`python3 -c "import main; print('✅ All imports successful')"`)
 - **Verify no missing dependencies** (`python3 -c "from database import db_manager; print('✅ Database import successful')"`)
 - **Check virtual environment** (`which python3` should show `/home/ubuntu/vernal-agents-post-v0/venv/bin/python3`)
 - **Verify all packages installed** (`pip list | grep -E "fastapi|uvicorn|sqlalchemy|pymysql"`)
 
 ### **Standard Pre-Deployment Checks**
-- Confirm repo is up-to-date and clean (`git status`)
-- Verify Python version (`python3 --version`)
-- Check virtual environment is activated (`which python`)
-- Ensure `.env` file exists with all required variables
-- Verify database connectivity (`curl -s http://127.0.0.1:8000/mcp/enhanced/health`)
-- Check systemd service status (`sudo systemctl status vernal-agents`)
-- **Test auth endpoints locally** (`curl -X POST http://127.0.0.1:8000/auth/login`)
+
+**MANDATORY ORDER:**
+1. **Run dependency validation** (`python3 validate_dependencies.py`) - MUST PASS
+2. Confirm repo is up-to-date and clean (`git status`)
+3. Verify Python version (`python3 --version`)
+4. Check virtual environment is activated (`which python`)
+5. Ensure `.env` file exists with all required variables
+6. Verify database connectivity (`curl -s http://127.0.0.1:8000/mcp/enhanced/health`)
+7. Check systemd service status (`sudo systemctl status vernal-agents`)
+8. **Test auth endpoints locally** (`curl -X POST http://127.0.0.1:8000/auth/login`)
+
+**🚨 If dependency validation fails, deployment is BLOCKED until fixed.**
 
 ---
 
