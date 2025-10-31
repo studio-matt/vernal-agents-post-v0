@@ -12,12 +12,12 @@
 
 ### **ONE-LINER (Copy-Paste Friendly)**
 
+**Note:** Playwright Python package should already be installed from Phase 1. This only installs the browser binaries and updates code.
+
 ```bash
 cd /home/ubuntu/vernal-agents-post-v0 && \
 git fetch origin && git switch main && git pull --ff-only origin main && \
-python3 validate_dependencies.py && \
 source venv/bin/activate && \
-pip install -r requirements.txt --no-cache-dir && \
 playwright install chromium && \
 sudo systemctl restart vernal-agents && \
 sleep 5 && \
@@ -46,10 +46,12 @@ python3 validate_dependencies.py || {
 # 3. Activate Virtual Environment
 source venv/bin/activate
 
-# 4. Install/Update Dependencies (if needed)
-pip install -r requirements.txt --no-cache-dir
+# 4. Activate Virtual Environment (if not already activated)
+source venv/bin/activate
 
-# 5. Install Playwright Browser (REQUIRED for web scraping)
+# 5. Install Playwright Browser Binaries (REQUIRED for web scraping)
+# Note: Playwright Python package already installed from Phase 1
+# This only downloads the Chromium browser binaries (~170MB)
 playwright install chromium
 
 # 6. Restart Systemd Service
@@ -99,12 +101,16 @@ curl -I https://themachine.vernalcontentum.com/health
 
 ## ⚠️ IMPORTANT NOTES
 
-- **Playwright Browser Installation** - REQUIRED step: `playwright install chromium`
+- **Playwright Package vs Browsers**:
+  - ✅ **Playwright Python package** (`playwright>=1.40.0`) - Already installed from Phase 1
+  - ⚠️ **Playwright browser binaries** - Must be downloaded with `playwright install chromium`
   - This downloads Chromium browser (~170MB) needed for scraping
-  - Without this, scraping will fail with "browser not installed" error
+  - Without browser binaries, scraping will fail with "browser not installed" error
   - Takes ~1-2 minutes to download
 
-- **This is a LONG REBOOT** - Code changes require full service restart
+- **This is a SHORT REBOOT** - Only code changes, no new dependencies
+  - You can skip `pip install` and `validate_dependencies.py` if you're confident
+  - Only need: pull code → install browser binaries → restart service
 
 - **Service restart** - Backend will be down for ~10-15 seconds during restart
 
