@@ -65,32 +65,43 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
         results = []
         try:
             with DDGS() as ddgs:
+                # Use text() method - returns generator of result dictionaries
                 count = 0
-                # Try text search method
                 search_results = ddgs.text(search_query, max_results=max_results)
+                
                 for result in search_results:
-                    # Handle different result formats
+                    # ddgs.text() returns dictionaries with different key formats
                     url = None
                     if isinstance(result, dict):
-                        url = result.get('href') or result.get('url') or result.get('link')
-                    elif isinstance(result, str):
-                        url = result
+                        # Try multiple possible keys
+                        url = result.get('href') or result.get('url') or result.get('link') or result.get('url')
+                        
+                        # Some versions return nested structures
+                        if not url and isinstance(result.get('body'), dict):
+                            url = result['body'].get('href') or result['body'].get('url')
                     
                     if url and isinstance(url, str) and url.startswith(('http://', 'https://')):
-                        results.append(url)
-                        count += 1
-                        if count >= max_results:
-                            break
+                        # Avoid duplicates
+                        if url not in results:
+                            results.append(url)
+                            count += 1
+                            logger.debug(f"Found URL: {url}")
+                            if count >= max_results:
+                                break
                     
                     # Safety check to avoid infinite loops
                     if count > max_results * 2:
                         logger.warning(f"Search returning too many results, limiting to {max_results}")
                         break
+                
+                if count == 0:
+                    logger.warning(f"No URLs found in search results. Search query: '{search_query}'")
+                    logger.debug(f"Sample result structure: {list(search_results)[:1] if hasattr(search_results, '__iter__') else 'N/A'}")
                         
         except Exception as search_err:
             logger.error(f"Error in DuckDuckGo search execution: {search_err}")
             import traceback
-            logger.debug(traceback.format_exc())
+            logger.error(traceback.format_exc())
         
         logger.info(f"✅ DuckDuckGo search returned {len(results)} URLs")
         return results[:max_results]
