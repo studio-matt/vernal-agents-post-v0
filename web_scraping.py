@@ -9,11 +9,18 @@ from typing import List, Dict, Optional, Set
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
+# Try new package name first (ddgs), then fallback to old name
+DDGS = None
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS  # New package name
+    logger.info("Using ddgs package for DuckDuckGo search")
 except ImportError:
-    logging.warning("duckduckgo_search not available - search will be disabled")
-    DDGS = None
+    try:
+        from duckduckgo_search import DDGS  # Old package name (deprecated)
+        logger.warning("Using deprecated duckduckgo_search package. Consider: pip install ddgs")
+    except ImportError:
+        logger.warning("Neither ddgs nor duckduckgo_search available - search will be disabled")
+        DDGS = None
 
 try:
     from playwright.sync_api import sync_playwright, Browser, Page
@@ -55,24 +62,35 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
         
         logger.info(f"🔍 Searching DuckDuckGo for: '{search_query}' (max_results={max_results})")
         
-        with DDGS() as ddgs:
-            results = []
-            count = 0
-            for result in ddgs.text(search_query, max_results=max_results):
-                if 'href' in result:
-                    url = result['href']
-                    if url and url.startswith(('http://', 'https://')):
+        results = []
+        try:
+            with DDGS() as ddgs:
+                count = 0
+                # Try text search method
+                search_results = ddgs.text(search_query, max_results=max_results)
+                for result in search_results:
+                    # Handle different result formats
+                    url = None
+                    if isinstance(result, dict):
+                        url = result.get('href') or result.get('url') or result.get('link')
+                    elif isinstance(result, str):
+                        url = result
+                    
+                    if url and isinstance(url, str) and url.startswith(('http://', 'https://')):
                         results.append(url)
                         count += 1
                         if count >= max_results:
                             break
-                elif 'url' in result:
-                    url = result['url']
-                    if url and url.startswith(('http://', 'https://')):
-                        results.append(url)
-                        count += 1
-                        if count >= max_results:
-                            break
+                    
+                    # Safety check to avoid infinite loops
+                    if count > max_results * 2:
+                        logger.warning(f"Search returning too many results, limiting to {max_results}")
+                        break
+                        
+        except Exception as search_err:
+            logger.error(f"Error in DuckDuckGo search execution: {search_err}")
+            import traceback
+            logger.debug(traceback.format_exc())
         
         logger.info(f"✅ DuckDuckGo search returned {len(results)} URLs")
         return results[:max_results]

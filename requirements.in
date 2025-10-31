@@ -35,4 +35,4 @@ beautifulsoup4>=4.12.3  # Required by browser-use
 lxml>=4.9.3
 anyio>=4.9.0  # Required by bubus, google-genai, mcp, sse-starlette
 spacy>=3.7.0  # NLP for entity extraction, dependency parsing, word vectors
-duckduckgo-search>=6.0.0  # Free search API for enhanced query searching
+ddgs>=2024.10.28  # DuckDuckGo search (renamed from duckduckgo-search)
