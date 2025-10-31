@@ -46,10 +46,7 @@ python3 validate_dependencies.py || {
 # 3. Activate Virtual Environment
 source venv/bin/activate
 
-# 4. Activate Virtual Environment (if not already activated)
-source venv/bin/activate
-
-# 5. Install Playwright Browser Binaries (REQUIRED for web scraping)
+# 4. Install Playwright Browser Binaries (REQUIRED for web scraping)
 # Note: Playwright Python package already installed from Phase 1
 # This only downloads the Chromium browser binaries (~170MB)
 playwright install chromium
@@ -58,7 +55,7 @@ playwright install chromium
 sudo systemctl restart vernal-agents
 sudo systemctl status vernal-agents
 
-# 7. Verification (MANDATORY)
+# 6. Verification (MANDATORY)
 sleep 5
 curl -s http://127.0.0.1:8000/health | jq .
 curl -s http://127.0.0.1:8000/mcp/enhanced/health | jq .
