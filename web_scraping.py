@@ -9,18 +9,14 @@ from typing import List, Dict, Optional, Set
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
-# Try new package name first (ddgs), then fallback to old name
+# Use new ddgs package (duckduckgo_search is deprecated and causes warnings)
 DDGS = None
 try:
     from ddgs import DDGS  # New package name
-    logger.info("Using ddgs package for DuckDuckGo search")
+    logger.info("✅ Using ddgs package for DuckDuckGo search")
 except ImportError:
-    try:
-        from duckduckgo_search import DDGS  # Old package name (deprecated)
-        logger.warning("Using deprecated duckduckgo_search package. Consider: pip install ddgs")
-    except ImportError:
-        logger.warning("Neither ddgs nor duckduckgo_search available - search will be disabled")
-        DDGS = None
+    logger.error("ddgs package not available. Install with: pip install ddgs")
+    DDGS = None
 
 try:
     from playwright.sync_api import sync_playwright, Browser, Page
