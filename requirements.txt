@@ -34,6 +34,7 @@ python-dotenv>=1.0.1  # Required by browser-use
 # TEXT PROCESSING & NLP
 # =============================================================================
 nltk>=3.8.1
+spacy>=3.7.0  # NLP for entity extraction, dependency parsing, word vectors
 gensim>=4.3.2
 bertopic>=0.16.3
 scikit-learn>=1.4.2
@@ -91,6 +92,14 @@ apscheduler>=3.10.4
 # SOCIAL MEDIA & EXTERNAL APIS
 # =============================================================================
 tweepy>=4.14.0
+
+# =============================================================================
+# WEB SCRAPING & SEARCH
+# =============================================================================
+playwright>=1.40.0
+beautifulsoup4>=4.12.3  # Required by browser-use
+lxml>=4.9.3
+duckduckgo-search>=6.0.0  # Free search API for enhanced query searching
 
 # =============================================================================
 # SYSTEM & NETWORKING

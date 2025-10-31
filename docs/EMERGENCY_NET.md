@@ -428,7 +428,13 @@ git fetch origin && git switch main && git pull --ff-only origin main
 ### 2. **Activate Virtual Environment**
 ```bash
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt --no-cache-dir
+```
+
+**Note:** If installing new dependencies (e.g., spaCy), also download required models:
+```bash
+# Download spaCy language model (required for NLP processing)
+python -m spacy download en_core_web_md
 ```
 
 ### 3. **Restart Systemd Service**
@@ -784,10 +790,11 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 2. **Navigate to repo:** `cd /home/ubuntu/vernal-agents-post-v0`
 3. **Pull latest code:** `git fetch origin && git switch main && git pull --ff-only origin main`
 4. **Activate environment:** `source venv/bin/activate`
-5. **Install dependencies:** `pip install -r requirements.txt`
-6. **Restart service:** `sudo systemctl restart vernal-agents`
-7. **Run health check:** `./full_health_check.sh` (see script below)
-8. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
+5. **Install dependencies:** `pip install -r requirements.txt --no-cache-dir`
+6. **Download spaCy model (if new install):** `python -m spacy download en_core_web_md`
+7. **Restart service:** `sudo systemctl restart vernal-agents`
+8. **Run health check:** `./full_health_check.sh` (see script below)
+9. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
 
 ---
 
