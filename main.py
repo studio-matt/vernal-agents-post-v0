@@ -592,13 +592,27 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     from web_scraping import scrape_campaign_data
                 except ImportError as e:
                     logger.error(f"❌ Failed to import web_scraping module: {e}")
-                    raise HTTPException(status_code=500, detail=f"Web scraping module not available: {e}")
+                    # Create error row instead of raising exception in background thread
+                    row = CampaignRawData(
+                        campaign_id=cid,
+                        source_url="error:module_import_failed",
+                        fetched_at=now,
+                        raw_html=None,
+                        extracted_text=f"Web scraping module not available: {str(e)}",
+                        meta_json=json.dumps({"type": "error", "reason": "module_import_failed", "error": str(e)})
+                    )
+                    session.add(row)
+                    created = 1
+                    scrape_campaign_data = None  # Mark as unavailable
                 
                 # Perform actual web scraping
                 created = 0
                 now = datetime.utcnow()
                 
-                if not urls and not keywords:
+                if scrape_campaign_data is None:
+                    # Module import failed, error already logged and row created above
+                    logger.error(f"❌ Cannot proceed with scraping - module import failed")
+                elif not urls and not keywords:
                     logger.warning(f"⚠️ No URLs or keywords provided for campaign {cid}")
                     # Create placeholder row
                     sample_text = f"Placeholder content for campaign {cid}. No URLs or keywords were provided in the analysis request."
