@@ -859,10 +859,16 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
     - raw: up to `limit` extracted_text samples
     - wordCloud: top 10 terms by frequency
     - topics: naive primary topics (top terms)
-    - entities: placeholder extraction using simple regex/heuristics
+    - entities: NLTK-based extraction using named entity recognition
     """
     try:
         from models import CampaignRawData
+        # Import NLTK-based text processing
+        from text_processing import (
+            extract_entities as nltk_extract_entities,
+            remove_stopwords,
+            extract_keywords
+        )
 
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
         urls = []
@@ -889,45 +895,34 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
 
         topics = [{"label": k, "score": v} for k, v in top_terms]
 
-        # Enhanced entity extraction via regex patterns
+        # Use NLTK-based entity extraction for accurate named entity recognition
         persons = []
         organizations = []
         locations = []
         dates = []
         
-        # Common city names and locations
-        city_pattern = re.compile(r"\b(New York|San Francisco|Los Angeles|Chicago|Miami|Washington DC?|Boston|Seattle|Austin|Denver|Portland|Nashville|London|Tokyo|Paris|Berlin|Sydney|Toronto|Vancouver)\b", re.I)
-        
-        # Date patterns
-        date_regex = re.compile(r"\b(\d{4}|\d{1,2}/\d{1,2}/\d{2,4}|Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b", re.I)
-        
-        # Person patterns (Dr., Professor, or capitalized names after "like", "including", "from")
-        person_pattern = re.compile(r"\b(Dr\.|Professor|Dr)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)\b", re.I)
-        
-        # Organization patterns (The + Capitalized words, or known organizations)
-        org_pattern = re.compile(r"\b(The\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(University|Institute|Council|Group|Organization|Department|Commission|Agency|Forum|Institution|Standards|Health|Defense|Science|Foundation)))\b", re.I)
-        
-        # Company names pattern
-        company_pattern = re.compile(r"\b(Amazon|Google|Microsoft|Apple|IBM|Tesla|Facebook|Oracle|Verizon|AT&T|Comcast|FCC|SEC)\b", re.I)
-        
+        # Process texts with NLTK entity extraction
         for t in texts[:100]:
-            # Extract persons
-            person_matches = person_pattern.findall(t)
-            persons.extend([f"{p[0]} {p[1]}" if p[0] else p[1] for p in person_matches])
-            
-            # Extract organizations
-            org_matches = org_pattern.findall(t)
-            organizations.extend([(o[0] or "") + o[1] for o in org_matches if o[1]])
-            company_matches = company_pattern.findall(t)
-            organizations.extend(company_matches)
-            
-            # Extract locations
-            location_matches = city_pattern.findall(t)
-            locations.extend(location_matches)
-            
-            # Extract dates
-            date_matches = date_regex.findall(t)
-            dates.extend([d[0] if isinstance(d, tuple) else d for d in date_matches])
+            if not t or len(t.strip()) < 10:
+                continue
+            try:
+                entity_result = nltk_extract_entities(
+                    t,
+                    extract_persons=True,
+                    extract_organizations=True,
+                    extract_locations=True,
+                    extract_dates=True
+                )
+                persons.extend(entity_result.get('persons', []))
+                organizations.extend(entity_result.get('organizations', []))
+                locations.extend(entity_result.get('locations', []))
+                dates.extend(entity_result.get('dates', []))
+            except Exception as e:
+                logger.warning(f"Error extracting entities from text: {e}")
+                # Fallback to regex for dates if NLTK fails
+                date_regex = re.compile(r"\b(\d{4}|\d{1,2}/\d{1,2}/\d{2,4}|Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b", re.I)
+                date_matches = date_regex.findall(t)
+                dates.extend([d[0] if isinstance(d, tuple) else d for d in date_matches])
         
         entities = {
             "persons": list(dict.fromkeys(persons))[:20],
