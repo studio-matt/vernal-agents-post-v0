@@ -78,16 +78,23 @@ def remove_stopwords(text: str) -> str:
     filtered_words = [word for word in words if word.lower() not in stop_words]
     return ' '.join(filtered_words)
 
-def extract_entities(text: str, extract_persons: bool, extract_organizations: bool, extract_locations: bool, extract_dates: bool) -> Dict[str, List[str]]:
+def extract_entities(text: str, extract_persons: bool, extract_organizations: bool, extract_locations: bool, extract_dates: bool, 
+                     extract_money: bool = False, extract_percent: bool = False, extract_time: bool = False, extract_facility: bool = False) -> Dict[str, List[str]]:
+    import re
     entities = {
         'persons': [],
         'organizations': [],
         'locations': [],
-        'dates': []
+        'dates': [],
+        'money': [],
+        'percent': [],
+        'time': [],
+        'facility': []
     }
-    if not any([extract_persons, extract_organizations, extract_locations, extract_dates]):
+    if not any([extract_persons, extract_organizations, extract_locations, extract_dates, extract_money, extract_percent, extract_time, extract_facility]):
         return entities
 
+    # Extract NLTK entities (PERSON, ORGANIZATION, GPE, DATE)
     words = word_tokenize(text)
     pos_tags = pos_tag(words)
     chunks = ne_chunk(pos_tags)
@@ -104,6 +111,39 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                 entities['locations'].append(entity_text)
             elif entity_type == 'DATE' and extract_dates:
                 entities['dates'].append(entity_text)
+            # NLTK sometimes labels facilities as ORGANIZATION, but we'll use regex for better coverage
+            elif entity_type == 'FACILITY' and extract_facility:
+                entities['facility'].append(entity_text)
+    
+    # Extract money values using regex
+    if extract_money:
+        money_pattern = r'\$[\d,]+(?:\.\d{2})?|[\d,]+(?:\.\d{2})?\s*(?:dollars|USD|EUR|€|£|GBP|yen|JPY)'
+        money_matches = re.findall(money_pattern, text, re.IGNORECASE)
+        entities['money'].extend(money_matches)
+    
+    # Extract percentages using regex
+    if extract_percent:
+        percent_pattern = r'\d+(?:\.\d+)?%'
+        percent_matches = re.findall(percent_pattern, text)
+        entities['percent'].extend(percent_matches)
+    
+    # Extract time expressions using regex
+    if extract_time:
+        time_pattern = r'\b(?:0?[1-9]|1[0-2]):[0-5][0-9]\s*(?:AM|PM|am|pm)|(?:0?[0-9]|1[0-9]|2[0-3]):[0-5][0-9]\b|(?:noon|midnight|midday)'
+        time_matches = re.findall(time_pattern, text, re.IGNORECASE)
+        entities['time'].extend(time_matches)
+    
+    # Extract facilities using regex (buildings, hospitals, landmarks)
+    if extract_facility:
+        # Common facility patterns
+        facility_patterns = [
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Hospital|Clinic|Medical Center|University|College|School|Building|Tower|Center|Centre|Museum|Library|Stadium|Arena|Theater|Theatre|Airport|Station)',
+            r'\b(?:The\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Building|Tower|Center|Centre)',
+        ]
+        for pattern in facility_patterns:
+            facility_matches = re.findall(pattern, text)
+            entities['facility'].extend(facility_matches)
+    
     return entities
 
 def preprocess_text(text: str, aggressive: bool = False) -> List[str]:

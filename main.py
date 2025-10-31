@@ -488,6 +488,10 @@ class AnalyzeRequest(BaseModel):
     extract_organizations: Optional[bool] = False
     extract_locations: Optional[bool] = False
     extract_dates: Optional[bool] = False
+    extract_money: Optional[bool] = False
+    extract_percent: Optional[bool] = False
+    extract_time: Optional[bool] = False
+    extract_facility: Optional[bool] = False
     topic_tool: Optional[str] = "lda"
     num_topics: Optional[int] = 3
     iterations: Optional[int] = 25
@@ -940,6 +944,10 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         organizations = []
         locations = []
         dates = []
+        money = []
+        percent = []
+        time = []
+        facility = []
         
         # Process texts with NLTK entity extraction
         for t in texts[:100]:
@@ -951,12 +959,20 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     extract_persons=True,
                     extract_organizations=True,
                     extract_locations=True,
-                    extract_dates=True
+                    extract_dates=True,
+                    extract_money=True,
+                    extract_percent=True,
+                    extract_time=True,
+                    extract_facility=True
                 )
                 persons.extend(entity_result.get('persons', []))
                 organizations.extend(entity_result.get('organizations', []))
                 locations.extend(entity_result.get('locations', []))
                 dates.extend(entity_result.get('dates', []))
+                money.extend(entity_result.get('money', []))
+                percent.extend(entity_result.get('percent', []))
+                time.extend(entity_result.get('time', []))
+                facility.extend(entity_result.get('facility', []))
             except Exception as e:
                 logger.warning(f"Error extracting entities from text: {e}")
                 # Fallback to regex for dates if NLTK fails
@@ -969,6 +985,10 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             "organizations": list(dict.fromkeys(organizations))[:20],
             "locations": list(dict.fromkeys(locations))[:20],
             "dates": list(dict.fromkeys(dates))[:20],
+            "money": list(dict.fromkeys(money))[:20],
+            "percent": list(dict.fromkeys(percent))[:20],
+            "time": list(dict.fromkeys(time))[:20],
+            "facility": list(dict.fromkeys(facility))[:20],
         }
 
         return {
