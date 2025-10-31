@@ -476,7 +476,7 @@ class AnalyzeRequest(BaseModel):
     trendingTopics: Optional[List[str]] = []
     topics: Optional[List[str]] = []
     type: Optional[str] = "keyword"
-    depth: Optional[int] = 3
+    depth: Optional[int] = 1
     max_pages: Optional[int] = 10
     batch_size: Optional[int] = 1
     include_links: Optional[bool] = True
@@ -572,95 +572,35 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
                 time.sleep(3)  # Simulate setup time
 
-                # Step 2: fetching content (persist placeholder rows for now)
-                logger.info(f"📝 Step 2: Fetching content for campaign {cid}")
-                set_task("fetching_content", 25, "Fetching URLs and preparing scrape queue")
+                # Step 2: Web scraping with DuckDuckGo + Playwright
+                logger.info(f"📝 Step 2: Starting web scraping for campaign {cid}")
+                set_task("fetching_content", 25, "Searching web and scraping content")
+                
                 urls = data.urls or []
                 keywords = data.keywords or []
-                logger.info(f"📝 URLs to process: {len(urls)}, Keywords to process: {len(keywords)}")
+                depth = data.depth if hasattr(data, 'depth') and data.depth else 1
+                max_pages = data.max_pages if hasattr(data, 'max_pages') and data.max_pages else 10
+                include_images = data.include_images if hasattr(data, 'include_images') else False
+                include_links = data.include_links if hasattr(data, 'include_links') else False
+                
+                logger.info(f"📝 Scraping settings: URLs={len(urls)}, Keywords={len(keywords)}, depth={depth}, max_pages={max_pages}")
                 logger.info(f"📝 URL list: {urls}")
                 logger.info(f"📝 Keywords list: {keywords}")
-
-                # Create rows with sample extracted text for display
-                # TODO: Replace with actual web scraping implementation
+                
+                # Import web scraping module
+                try:
+                    from web_scraping import scrape_campaign_data
+                except ImportError as e:
+                    logger.error(f"❌ Failed to import web_scraping module: {e}")
+                    raise HTTPException(status_code=500, detail=f"Web scraping module not available: {e}")
+                
+                # Perform actual web scraping
                 created = 0
                 now = datetime.utcnow()
                 
-                # For URLs - create sample extracted text
-                if urls:
-                    logger.info(f"📝 Creating {min(len(urls), 10)} URL rows...")
-                    for u in urls[:10]:
-                        if not u or u.strip() == "":
-                            continue
-                        # Generate richer sample text with entities for better extraction
-                        sample_text = f"""
-                        Article content extracted from {u}. This webpage contains comprehensive information and analysis on the topic. 
-                        The content includes expert opinions from professionals like Dr. Robert Williams and Maria Garcia from leading 
-                        research institutions. Major organizations such as The World Economic Forum, The Brookings Institution, and The 
-                        Center for Strategic Studies have published reports on this subject. Geographic references include Washington DC, 
-                        Los Angeles, Chicago, and Miami where significant activity has occurred. Key dates mentioned in the content include 
-                        September 2024, October 2024, and November 2024 when major announcements were made. Industry leaders from companies 
-                        like Microsoft, Facebook, and Oracle have provided insights. Government bodies including the Department of Defense 
-                        and the National Science Foundation have funded research. Academic institutions like MIT, Caltech, and Princeton 
-                        University have conducted studies. International organizations such as the United Nations and World Health 
-                        Organization have issued statements. Cities like Denver, Portland, and Nashville have implemented related policies. 
-                        Experts including Dr. Lisa Thompson and Professor David Kim have contributed analysis. Upcoming events in March 2025 
-                        and April 2025 will address these topics. The content also references corporate entities like Verizon, AT&T, and 
-                        Comcast, as well as regulatory bodies such as the FCC and SEC.
-                        """
-                        row = CampaignRawData(
-                            campaign_id=cid,
-                            source_url=u,
-                            fetched_at=now,
-                            raw_html=None,
-                            extracted_text=sample_text.strip(),
-                            meta_json=json.dumps({"seed": True, "type": "url", "source": u})
-                        )
-                        session.add(row)
-                        created += 1
-                        logger.debug(f"📝 Added URL row: {u}")
-                else:
-                    logger.info(f"📝 No URLs provided, skipping URL row creation")
-                
-                # For keywords, create placeholder search documents with sample content
-                if keywords:
-                    logger.info(f"📝 Creating {min(len(keywords), 10)} keyword rows...")
-                    for kw in keywords[:10]:
-                        if not kw or str(kw).strip() == "":
-                            continue
-                        # Generate richer sample text with entities for better extraction
-                        sample_text = f"""
-                        Comprehensive research content related to {kw}. This article discusses various aspects and perspectives on the topic, 
-                        providing valuable insights for content creators. The content covers historical context, current trends, and future 
-                        implications. Notable experts in the field, such as Dr. Sarah Mitchell from Stanford University and John Anderson 
-                        from the Research Institute, have contributed significant findings. Organizations like The National Research Council 
-                        and Global Analysis Group have published extensive studies on this subject. Key locations where this topic has gained 
-                        traction include New York City, San Francisco, London, and Tokyo. Recent developments have been documented in reports 
-                        dated October 2024, November 2024, and December 2024. The topic has also been covered in publications from major 
-                        institutions including Harvard Business Review and MIT Technology Review. Industry leaders such as Amazon, Google, and 
-                        Microsoft have invested heavily in this area. Government agencies including the Department of Commerce and the Federal 
-                        Trade Commission have also issued guidelines. Cities like Boston, Seattle, and Austin have become hubs for innovation 
-                        in this space. Experts like Professor Michael Chen and Dr. Jennifer Lee have provided valuable commentary. Events 
-                        scheduled for January 2025 and February 2025 will further explore these developments. The International Standards 
-                        Organization has released new guidelines, while companies like Apple, IBM, and Tesla have announced new initiatives.
-                        """
-                        row = CampaignRawData(
-                            campaign_id=cid,
-                            source_url=f"keyword:{kw}",
-                            fetched_at=now,
-                            raw_html=None,
-                            extracted_text=sample_text.strip(),
-                            meta_json=json.dumps({"seed": True, "type": "keyword", "keyword": kw})
-                        )
-                        session.add(row)
-                        created += 1
-                        logger.debug(f"📝 Added keyword row: {kw}")
-                else:
-                    logger.info(f"📝 No keywords provided, skipping keyword row creation")
-                
-                # If no data was provided, create at least one placeholder row for testing
-                if created == 0:
-                    logger.warning(f"⚠️ No URLs or keywords provided, creating placeholder row for campaign {cid}")
+                if not urls and not keywords:
+                    logger.warning(f"⚠️ No URLs or keywords provided for campaign {cid}")
+                    # Create placeholder row
                     sample_text = f"Placeholder content for campaign {cid}. No URLs or keywords were provided in the analysis request."
                     row = CampaignRawData(
                         campaign_id=cid,
@@ -672,6 +612,88 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     )
                     session.add(row)
                     created = 1
+                else:
+                    # Perform real web scraping
+                    logger.info(f"🚀 Starting web scraping (keywords={keywords}, urls={urls}, depth={depth}, max_pages={max_pages})")
+                    
+                    try:
+                        scraped_results = scrape_campaign_data(
+                            keywords=keywords,
+                            urls=urls,
+                            query=data.query or "",
+                            depth=depth,
+                            max_pages=max_pages,
+                            include_images=include_images,
+                            include_links=include_links
+                        )
+                        
+                        logger.info(f"✅ Web scraping completed: {len(scraped_results)} pages scraped")
+                        
+                        # Store scraped data in database
+                        for result in scraped_results:
+                            url = result.get("url", "unknown")
+                            text = result.get("text", "")
+                            html = result.get("html")
+                            images = result.get("images", [])
+                            links = result.get("links", [])
+                            error = result.get("error")
+                            depth_level = result.get("depth", 0)
+                            
+                            # Build metadata JSON
+                            meta = {
+                                "type": "scraped",
+                                "depth": depth_level,
+                                "scraped_at": result.get("scraped_at"),
+                                "has_images": len(images) > 0,
+                                "image_count": len(images),
+                                "link_count": len(links)
+                            }
+                            if error:
+                                meta["error"] = error
+                            if images:
+                                meta["sample_images"] = images[:5]  # Store first 5 images
+                            
+                            row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=url,
+                                fetched_at=now,
+                                raw_html=html if include_links else None,  # Only store HTML if links were requested
+                                extracted_text=text if text else (f"Error scraping {url}: {error}" if error else ""),
+                                meta_json=json.dumps(meta)
+                            )
+                            session.add(row)
+                            created += 1
+                            logger.debug(f"✅ Stored scraped data for: {url} ({len(text)} chars)")
+                        
+                        if created == 0:
+                            logger.warning(f"⚠️ Web scraping returned no results for campaign {cid}")
+                            # Create error row
+                            row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url="error:no_results",
+                                fetched_at=now,
+                                raw_html=None,
+                                extracted_text=f"No results from web scraping. Keywords: {keywords}, URLs: {urls}",
+                                meta_json=json.dumps({"type": "error", "reason": "no_scrape_results"})
+                            )
+                            session.add(row)
+                            created = 1
+                    
+                    except Exception as scrape_error:
+                        logger.error(f"❌ Web scraping failed for campaign {cid}: {scrape_error}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        # Create error row
+                        row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url="error:scrape_failed",
+                            fetched_at=now,
+                            raw_html=None,
+                            extracted_text=f"Web scraping error: {str(scrape_error)}",
+                            meta_json=json.dumps({"type": "error", "reason": "scrape_exception", "error": str(scrape_error)})
+                        )
+                        session.add(row)
+                        created = 1
                 
                 if created > 0:
                     logger.info(f"💾 Committing {created} rows to database for campaign {cid}...")
@@ -684,21 +706,24 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 else:
                     logger.warning(f"⚠️ No rows to commit for campaign {cid}")
 
-                # Step 3: processing content
-                set_task("processing_content", 50, f"Processing {created} fetched items")
-                time.sleep(5)  # Simulate content processing time
+                # Step 3: processing content (scraping is already done, now just mark progress)
+                set_task("processing_content", 60, f"Processing {created} scraped pages")
+                # Content is already processed during scraping, minimal delay
+                time.sleep(2)
 
                 # Step 4: extracting entities
-                set_task("extracting_entities", 70, "Extracting entities and normalizing text")
-                time.sleep(4)  # Simulate entity extraction time
+                set_task("extracting_entities", 75, "Extracting entities from scraped content")
+                # Entities will be extracted when research endpoint is called
+                time.sleep(2)
 
                 # Step 5: modeling topics
-                set_task("modeling_topics", 85, "Modeling topics and summarizing")
-                time.sleep(5)  # Simulate topic modeling time
+                set_task("modeling_topics", 90, "Preparing content for analysis")
+                # Topics will be modeled when research endpoint is called
+                time.sleep(2)
 
                 # Finalize
-                set_task("finalizing", 100, "Finalizing")
-                time.sleep(2)  # Brief pause before marking complete
+                set_task("finalizing", 100, "Scraping complete")
+                time.sleep(1)
 
                 # Mark campaign ready in DB
                 logger.info(f"📝 Step 6: Finalizing campaign {cid}")
