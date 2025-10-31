@@ -553,55 +553,105 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
             from models import CampaignRawData, Campaign
             session = SessionLocal()
             try:
+                logger.info(f"🔵 Background thread started for task {tid}, campaign {cid}")
+                
                 # Helper to update task atomically
                 def set_task(step: str, prog: int, msg: str):
                     task = TASKS.get(tid)
                     if not task:
+                        logger.warning(f"⚠️ Task {tid} not found in TASKS dict")
                         return
                     task["current_step"] = step
                     task["progress"] = prog
                     task["progress_message"] = msg
+                    logger.info(f"📊 Task {tid}: {prog}% - {step} - {msg}")
 
                 # Step 1: collecting inputs
+                logger.info(f"📝 Step 1: Collecting inputs for campaign {cid}")
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
                 time.sleep(3)  # Simulate setup time
 
                 # Step 2: fetching content (persist placeholder rows for now)
+                logger.info(f"📝 Step 2: Fetching content for campaign {cid}")
                 set_task("fetching_content", 25, "Fetching URLs and preparing scrape queue")
                 urls = data.urls or []
                 keywords = data.keywords or []
+                logger.info(f"📝 URLs to process: {len(urls)}, Keywords to process: {len(keywords)}")
+                logger.info(f"📝 URL list: {urls}")
+                logger.info(f"📝 Keywords list: {keywords}")
 
                 # Create rows with sample extracted text for display
                 # TODO: Replace with actual web scraping implementation
                 created = 0
                 now = datetime.utcnow()
+                
                 # For URLs - create sample extracted text
-                for u in urls[:10]:
-                    sample_text = f"Sample content extracted from {u}. This is placeholder text that would normally come from scraping the actual webpage. In a production environment, this would contain the real extracted content from the URL including article text, descriptions, and relevant information."
-                    row = CampaignRawData(
-                        campaign_id=cid,
-                        source_url=u,
-                        fetched_at=now,
-                        raw_html=None,
-                        extracted_text=sample_text,
-                        meta_json=json.dumps({"seed": True, "type": "url", "source": u})
-                    )
-                    session.add(row)
-                    created += 1
+                if urls:
+                    logger.info(f"📝 Creating {min(len(urls), 10)} URL rows...")
+                    for u in urls[:10]:
+                        if not u or u.strip() == "":
+                            continue
+                        sample_text = f"Sample content extracted from {u}. This is placeholder text that would normally come from scraping the actual webpage. In a production environment, this would contain the real extracted content from the URL including article text, descriptions, and relevant information."
+                        row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=u,
+                            fetched_at=now,
+                            raw_html=None,
+                            extracted_text=sample_text,
+                            meta_json=json.dumps({"seed": True, "type": "url", "source": u})
+                        )
+                        session.add(row)
+                        created += 1
+                        logger.debug(f"📝 Added URL row: {u}")
+                else:
+                    logger.info(f"📝 No URLs provided, skipping URL row creation")
+                
                 # For keywords, create placeholder search documents with sample content
-                for kw in keywords[:10]:
-                    sample_text = f"Sample content related to keyword: {kw}. This text represents content that would be gathered from search results and related sources when scraping for this keyword. It includes relevant information, context, and discussions about the topic."
+                if keywords:
+                    logger.info(f"📝 Creating {min(len(keywords), 10)} keyword rows...")
+                    for kw in keywords[:10]:
+                        if not kw or str(kw).strip() == "":
+                            continue
+                        sample_text = f"Sample content related to keyword: {kw}. This text represents content that would be gathered from search results and related sources when scraping for this keyword. It includes relevant information, context, and discussions about the topic."
+                        row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"keyword:{kw}",
+                            fetched_at=now,
+                            raw_html=None,
+                            extracted_text=sample_text,
+                            meta_json=json.dumps({"seed": True, "type": "keyword", "keyword": kw})
+                        )
+                        session.add(row)
+                        created += 1
+                        logger.debug(f"📝 Added keyword row: {kw}")
+                else:
+                    logger.info(f"📝 No keywords provided, skipping keyword row creation")
+                
+                # If no data was provided, create at least one placeholder row for testing
+                if created == 0:
+                    logger.warning(f"⚠️ No URLs or keywords provided, creating placeholder row for campaign {cid}")
+                    sample_text = f"Placeholder content for campaign {cid}. No URLs or keywords were provided in the analysis request."
                     row = CampaignRawData(
                         campaign_id=cid,
-                        source_url=f"keyword:{kw}",
+                        source_url="placeholder:no_data",
                         fetched_at=now,
                         raw_html=None,
                         extracted_text=sample_text,
-                        meta_json=json.dumps({"seed": True, "type": "keyword", "keyword": kw})
+                        meta_json=json.dumps({"seed": True, "type": "placeholder", "reason": "no_urls_or_keywords"})
                     )
                     session.add(row)
-                    created += 1
-                session.commit()
+                    created = 1
+                
+                if created > 0:
+                    logger.info(f"💾 Committing {created} rows to database for campaign {cid}...")
+                    session.commit()
+                    logger.info(f"✅ Successfully committed {created} rows to database for campaign {cid}")
+                    
+                    # Verify data was saved
+                    verify_count = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).count()
+                    logger.info(f"✅ Verification: {verify_count} rows now exist in database for campaign {cid}")
+                else:
+                    logger.warning(f"⚠️ No rows to commit for campaign {cid}")
 
                 # Step 3: processing content
                 set_task("processing_content", 50, f"Processing {created} fetched items")
@@ -620,21 +670,35 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 time.sleep(2)  # Brief pause before marking complete
 
                 # Mark campaign ready in DB
+                logger.info(f"📝 Step 6: Finalizing campaign {cid}")
                 try:
                     camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
                     if camp:
+                        logger.info(f"📝 Found campaign {cid} in database, updating status...")
                         # Store coarse topics from keywords as a ready signal
                         if (data.keywords or []) and not camp.topics:
                             camp.topics = ",".join((data.keywords or [])[:10])
+                            logger.info(f"📝 Set topics to: {camp.topics}")
                         camp.status = "READY_TO_ACTIVATE"
                         camp.updated_at = datetime.utcnow()
                         session.commit()
-                except Exception as _:
+                        logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE")
+                    else:
+                        logger.warning(f"⚠️ Campaign {cid} not found in database when trying to finalize")
+                except Exception as finalize_err:
+                    logger.error(f"❌ Error finalizing campaign {cid}: {finalize_err}")
+                    import traceback
+                    logger.error(traceback.format_exc())
                     session.rollback()
+                    
+                logger.info(f"✅ Background analysis completed successfully for campaign {cid}")
             except Exception as e:
-                logger.error(f"Background analysis error: {e}")
+                import traceback
+                logger.error(f"❌ Background analysis error for campaign {cid}: {e}")
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
             finally:
                 session.close()
+                logger.info(f"🔵 Background thread finished for task {tid}, campaign {cid}")
 
         threading.Thread(target=run_analysis_background, args=(task_id, campaign_id, analyze_data), daemon=True).start()
 
@@ -718,6 +782,43 @@ def get_status_by_campaign(campaign_id: str):
     if not task_id:
         raise HTTPException(status_code=404, detail="No task for campaign")
     return get_analyze_status(task_id)
+
+# Debug endpoint to check raw data for a campaign
+@app.get("/campaigns/{campaign_id}/debug")
+def debug_campaign_data(campaign_id: str, db: Session = Depends(get_db)):
+    """Debug endpoint to check what raw data exists for a campaign"""
+    try:
+        from models import CampaignRawData, Campaign
+        
+        # Check campaign exists
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        
+        # Check raw data
+        raw_data_count = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).count()
+        raw_data_rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).limit(5).all()
+        
+        return {
+            "status": "success",
+            "campaign_id": campaign_id,
+            "campaign_exists": campaign is not None,
+            "campaign_status": campaign.status if campaign else None,
+            "raw_data_count": raw_data_count,
+            "sample_rows": [
+                {
+                    "id": r.id,
+                    "source_url": r.source_url,
+                    "has_extracted_text": bool(r.extracted_text),
+                    "extracted_text_length": len(r.extracted_text) if r.extracted_text else 0,
+                    "fetched_at": r.fetched_at.isoformat() if r.fetched_at else None,
+                }
+                for r in raw_data_rows
+            ]
+        }
+    except Exception as e:
+        import traceback
+        logger.error(f"Error in debug endpoint: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
 
 # Research data endpoint: returns urls, raw samples, word cloud, topics and entities
 @app.get("/campaigns/{campaign_id}/research")
