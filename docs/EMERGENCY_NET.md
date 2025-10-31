@@ -425,7 +425,18 @@ cd /home/ubuntu/vernal-agents-post-v0
 git fetch origin && git switch main && git pull --ff-only origin main
 ```
 
-### 2. **Activate Virtual Environment**
+### 2. **MANDATORY: Validate Dependencies (PREVENTS DEPENDENCY HELL)**
+```bash
+# Run dependency validation BEFORE installing
+python3 validate_dependencies.py || {
+    echo "❌ Dependency validation FAILED. Fix issues before proceeding."
+    exit 1
+}
+```
+
+**This catches ALL dependency conflicts before they cause deployment loops.**
+
+### 3. **Activate Virtual Environment**
 ```bash
 source venv/bin/activate
 pip install -r requirements.txt --no-cache-dir
