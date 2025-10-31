@@ -612,8 +612,6 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     )
                     session.add(row)
                     created = 1
-                    # Module import failed, error already logged and row created above
-                    logger.error(f"❌ Cannot proceed with scraping - module import failed")
                 elif not urls and not keywords:
                     logger.warning(f"⚠️ No URLs or keywords provided for campaign {cid}")
                     # Create placeholder row
