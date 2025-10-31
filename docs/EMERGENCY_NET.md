@@ -1161,6 +1161,20 @@ curl https://themachine.vernalcontentum.com/deploy/commit
 - `python-dotenv==1.0.0` → Use `python-dotenv>=1.0.1` (required by browser-use)
 - `beautifulsoup4==4.12.2` → Use `beautifulsoup4>=4.12.3` (required by browser-use)
 
+#### **Post-Installation Steps for NLP Dependencies**
+- **spaCy:** After installing `spacy>=3.7.0`, download language model: `python -m spacy download en_core_web_md`
+  - **Recommended model:** `en_core_web_md` (includes word vectors for semantic similarity)
+  - **Alternative models:** `en_core_web_sm` (smaller, no vectors), `en_core_web_lg` (larger, best accuracy)
+- **NLTK:** NLTK data downloads automatically on first import, but ensure required resources:
+  ```python
+  import nltk
+  nltk.download('punkt')
+  nltk.download('stopwords')
+  nltk.download('wordnet')
+  nltk.download('averaged_perceptron_tagger')
+  nltk.download('maxent_ne_chunker')
+  ```
+
 #### **ResolutionImpossible Prevention**
 - **Golden Rule:** Never pin a package to a version below what any dependencies require
 - **Use flexible pins:** Prefer `>=` or range pins over exact pins `==`
