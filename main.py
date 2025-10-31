@@ -588,21 +588,11 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 logger.info(f"📝 Keywords list: {keywords}")
                 
                 # Import web scraping module
+                scrape_campaign_data = None
                 try:
                     from web_scraping import scrape_campaign_data
                 except ImportError as e:
                     logger.error(f"❌ Failed to import web_scraping module: {e}")
-                    # Create error row instead of raising exception in background thread
-                    row = CampaignRawData(
-                        campaign_id=cid,
-                        source_url="error:module_import_failed",
-                        fetched_at=now,
-                        raw_html=None,
-                        extracted_text=f"Web scraping module not available: {str(e)}",
-                        meta_json=json.dumps({"type": "error", "reason": "module_import_failed", "error": str(e)})
-                    )
-                    session.add(row)
-                    created = 1
                     scrape_campaign_data = None  # Mark as unavailable
                 
                 # Perform actual web scraping
@@ -610,6 +600,18 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 now = datetime.utcnow()
                 
                 if scrape_campaign_data is None:
+                    # Module import failed - create error row
+                    logger.error(f"❌ Cannot proceed with scraping - module import failed")
+                    row = CampaignRawData(
+                        campaign_id=cid,
+                        source_url="error:module_import_failed",
+                        fetched_at=now,
+                        raw_html=None,
+                        extracted_text=f"Web scraping module not available. Please check server logs.",
+                        meta_json=json.dumps({"type": "error", "reason": "module_import_failed"})
+                    )
+                    session.add(row)
+                    created = 1
                     # Module import failed, error already logged and row created above
                     logger.error(f"❌ Cannot proceed with scraping - module import failed")
                 elif not urls and not keywords:
