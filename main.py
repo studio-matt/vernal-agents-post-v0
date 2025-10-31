@@ -480,6 +480,7 @@ class AnalyzeRequest(BaseModel):
     max_pages: Optional[int] = 10
     batch_size: Optional[int] = 1
     include_links: Optional[bool] = True
+    include_images: Optional[bool] = False
     stem: Optional[bool] = False
     lemmatize: Optional[bool] = False
     remove_stopwords_toggle: Optional[bool] = False
