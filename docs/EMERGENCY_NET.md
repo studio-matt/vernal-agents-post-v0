@@ -813,12 +813,13 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 1. **SSH to backend server:** `ssh ubuntu@18.235.104.132`
 2. **Navigate to repo:** `cd /home/ubuntu/vernal-agents-post-v0`
 3. **Pull latest code:** `git fetch origin && git switch main && git pull --ff-only origin main`
-4. **Activate environment:** `source venv/bin/activate`
-5. **Install dependencies:** `pip install -r requirements.txt --no-cache-dir`
-6. **Download spaCy model (if new install):** `python -m spacy download en_core_web_md`
-7. **Restart service:** `sudo systemctl restart vernal-agents`
-8. **Run health check:** `./full_health_check.sh` (see script below)
-9. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
+4. **MANDATORY: Validate dependencies** `python3 validate_dependencies.py` (MUST PASS)
+5. **Activate environment:** `source venv/bin/activate`
+6. **Install dependencies:** `pip install -r requirements.txt --no-cache-dir`
+7. **Download spaCy model (if new install):** `python -m spacy download en_core_web_md`
+8. **Restart service:** `sudo systemctl restart vernal-agents`
+9. **Run health check:** `./full_health_check.sh` (see script below)
+10. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
 
 ---
 
@@ -995,6 +996,7 @@ echo "🎉 Full System Health Check PASSED!"
 ---
 
 ## ☑️ FINAL CHECKLIST
+- [ ] **MANDATORY: Dependency validation passed** (`python3 validate_dependencies.py`)
 - [ ] App code and dependencies up-to-date
 - [ ] `.env` present and secure
 - [ ] **Verified .env contains production DB credentials (NO 'myuser', 'localhost', 'dummy', 'mypassword')**
@@ -1008,6 +1010,8 @@ echo "🎉 Full System Health Check PASSED!"
 - [ ] **JWT token creation working correctly**
 - [ ] **Email service configured and tested**
 - [ ] **Database tables exist and accessible**
+
+**🚨 If dependency validation fails, deployment is BLOCKED. This prevents dependency hell loops.**
 
 ---
 
