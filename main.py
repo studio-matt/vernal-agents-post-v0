@@ -105,6 +105,15 @@ class CampaignCreate(BaseModel):
     entitySettings: Optional[Dict[str, Any]] = None
     modelingSettings: Optional[Dict[str, Any]] = None
 
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    keywords: Optional[List[str]] = None
+    urls: Optional[List[str]] = None
+    status: Optional[str] = None
+    topics: Optional[List[str]] = None
+
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
     name: str
@@ -359,6 +368,74 @@ def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
             detail="Failed to fetch campaign"
         )
 
+@app.put("/campaigns/{campaign_id}")
+def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, request: Request, db: Session = Depends(get_db)):
+    """Update campaign - REAL database update"""
+    try:
+        from models import Campaign, User
+        
+        # Get current user from auth token
+        user_id = None
+        try:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                from utils import verify_token
+                payload = verify_token(token)
+                user_id = int(payload.get("sub"))
+        except Exception as auth_error:
+            logger.warning(f"Authentication failed for /campaigns PUT: {auth_error}")
+            user_id = 1  # Fallback
+        
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Campaign not found"
+            )
+        
+        # Update fields if provided
+        if campaign_data.status is not None:
+            campaign.status = campaign_data.status
+        if campaign_data.name is not None:
+            campaign.campaign_name = campaign_data.name
+        if campaign_data.description is not None:
+            campaign.description = campaign_data.description
+        if campaign_data.type is not None:
+            campaign.type = campaign_data.type
+        if campaign_data.keywords is not None:
+            campaign.keywords = ",".join(campaign_data.keywords) if campaign_data.keywords else None
+        if campaign_data.urls is not None:
+            campaign.urls = ",".join(campaign_data.urls) if campaign_data.urls else None
+        if campaign_data.topics is not None:
+            campaign.topics = ",".join(campaign_data.topics) if campaign_data.topics else None
+        
+        campaign.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(campaign)
+        
+        logger.info(f"Campaign updated successfully: {campaign_id}")
+        return {
+            "status": "success",
+            "message": {
+                "campaign_id": campaign.campaign_id,
+                "id": campaign.campaign_id,
+                "name": campaign.campaign_name,
+                "status": campaign.status
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating campaign: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update campaign: {str(e)}"
+        )
+
 @app.delete("/campaigns/{campaign_id}")
 def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Delete campaign - REAL database deletion"""
@@ -485,7 +562,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
 
                 # Step 1: collecting inputs
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
-                time.sleep(1)
+                time.sleep(3)  # Simulate setup time
 
                 # Step 2: fetching content (persist placeholder rows for now)
                 set_task("fetching_content", 25, "Fetching URLs and preparing scrape queue")
@@ -523,18 +600,19 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
 
                 # Step 3: processing content
                 set_task("processing_content", 50, f"Processing {created} fetched items")
-                time.sleep(1)
+                time.sleep(5)  # Simulate content processing time
 
                 # Step 4: extracting entities
                 set_task("extracting_entities", 70, "Extracting entities and normalizing text")
-                time.sleep(1)
+                time.sleep(4)  # Simulate entity extraction time
 
                 # Step 5: modeling topics
                 set_task("modeling_topics", 85, "Modeling topics and summarizing")
-                time.sleep(1)
+                time.sleep(5)  # Simulate topic modeling time
 
                 # Finalize
                 set_task("finalizing", 100, "Finalizing")
+                time.sleep(2)  # Brief pause before marking complete
 
                 # Mark campaign ready in DB
                 try:
