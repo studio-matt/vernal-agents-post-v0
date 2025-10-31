@@ -99,6 +99,7 @@ class CampaignCreate(BaseModel):
     urls: Optional[List[str]] = None
     trendingTopics: Optional[List[str]] = None
     topics: Optional[List[str]] = None
+    status: Optional[str] = "INCOMPLETE"  # Campaign status: INCOMPLETE, PROCESSING, READY_TO_ACTIVATE
     extractionSettings: Optional[Dict[str, Any]] = None
     preprocessingSettings: Optional[Dict[str, Any]] = None
     entitySettings: Optional[Dict[str, Any]] = None
@@ -218,6 +219,7 @@ def get_campaigns(request: Request, db: Session = Depends(get_db)):
                     "urls": campaign.urls.split(",") if campaign.urls else [],
                     "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
                     "topics": campaign.topics.split(",") if campaign.topics else [],
+                    "status": campaign.status or "INCOMPLETE",  # Include status field
                     "user_id": campaign.user_id,  # Include user_id in response for debugging
                     "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
                     "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
@@ -288,6 +290,7 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
             urls=urls_str,
             trending_topics=trending_topics_str,
             topics=topics_str,
+            status=campaign_data.status or "INCOMPLETE",  # Use provided status or default to INCOMPLETE
             user_id=user_id
         )
         
@@ -300,11 +303,12 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
         return {
             "status": "success",
             "message": {
+                "campaign_id": campaign_id,
                 "id": campaign_id,
                 "name": campaign_data.name,
                 "description": campaign_data.description,
                 "type": campaign_data.type,
-                "status": "created"
+                "status": campaign.status  # Return actual campaign status from database
             }
         }
         

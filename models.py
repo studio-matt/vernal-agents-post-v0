@@ -185,6 +185,7 @@ class Campaign(Base):
     urls = Column(Text, nullable=True)  # Comma-separated URLs
     trending_topics = Column(Text, nullable=True)  # Comma-separated topics
     topics = Column(Text, nullable=True)  # Comma-separated topics
+    status = Column(String(50), default="INCOMPLETE")  # Campaign status: INCOMPLETE, PROCESSING, READY_TO_ACTIVATE
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
