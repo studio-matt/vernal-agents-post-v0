@@ -778,10 +778,20 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                                 camp.topics = ",".join((data.keywords or [])[:10])
                                 logger.info(f"📝 Set topics to: {camp.topics}")
                             
+                            # CRITICAL: Set status to READY_TO_ACTIVATE and commit immediately
                             camp.status = "READY_TO_ACTIVATE"
                             camp.updated_at = datetime.utcnow()
                             session.commit()
                             logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE with {data_count} data rows")
+                            
+                            # Verify the status was saved correctly
+                            session.refresh(camp)
+                            if camp.status != "READY_TO_ACTIVATE":
+                                logger.error(f"❌ CRITICAL: Campaign {cid} status was not saved correctly! Expected READY_TO_ACTIVATE, got {camp.status}")
+                                # Force update again
+                                camp.status = "READY_TO_ACTIVATE"
+                                session.commit()
+                                logger.info(f"🔧 Force-updated campaign {cid} status to READY_TO_ACTIVATE")
                         else:
                             logger.warning(f"⚠️ Campaign {cid} has no scraped data, keeping status as INCOMPLETE")
                             camp.status = "INCOMPLETE"
@@ -993,9 +1003,11 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 logger.warning(f"⚠️ Found error row: {r.source_url} - {r.extracted_text[:100] if r.extracted_text else 'No message'}")
             else:
                 # Valid scraped data
-                if r.source_url:
+                if r.source_url and not r.source_url.startswith(("error:", "placeholder:")):
                     urls.append(r.source_url)
-                if r.extracted_text and len(r.extracted_text.strip()) > 10:
+                # More lenient text check - include text if it exists and has some content (even if short)
+                # This helps with campaigns that previously had data but might have shorter snippets
+                if r.extracted_text and len(r.extracted_text.strip()) > 0:
                     texts.append(r.extracted_text)
         
         logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs, {len(texts)} text samples, {len(errors)} error rows")

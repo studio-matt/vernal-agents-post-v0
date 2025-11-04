@@ -61,20 +61,46 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
         return []
     
     try:
-        # Combine keywords and query into search string
+        # Combine keywords and query into search string with better relevance
         search_terms = []
-        if query:
-            search_terms.append(query)
-        if keywords:
-            search_terms.extend(keywords[:5])  # Limit to 5 keywords to avoid overly long queries
         
+        # Expand common abbreviations and acronyms for better search results
+        keyword_expansions = {
+            "WW2": "World War 2",
+            "WWII": "World War 2",
+            "WW1": "World War 1",
+            "WWI": "World War 1",
+            "AI": "artificial intelligence",
+            "ML": "machine learning",
+            "API": "application programming interface",
+        }
+        
+        # Process query first
+        if query:
+            # Expand abbreviations in query
+            expanded_query = query
+            for abbrev, expansion in keyword_expansions.items():
+                if abbrev.lower() in query.lower():
+                    expanded_query = query.replace(abbrev, expansion).replace(abbrev.lower(), expansion)
+            search_terms.append(expanded_query)
+        
+        # Process keywords
+        if keywords:
+            expanded_keywords = []
+            for keyword in keywords[:5]:  # Limit to 5 keywords
+                # Expand abbreviations
+                expanded = keyword_expansions.get(keyword.upper(), keyword)
+                expanded_keywords.append(expanded)
+            search_terms.extend(expanded_keywords)
+        
+        # Combine into search query
         search_query = " ".join(search_terms[:10])  # Limit total terms
         
         if not search_query.strip():
             logger.warning("Empty search query, returning empty results")
             return []
         
-        logger.info(f"🔍 Searching DuckDuckGo for: '{search_query}' (max_results={max_results})")
+        logger.info(f"🔍 Searching DuckDuckGo for: '{search_query}' (max_results={max_results}, original keywords: {keywords})")
         
         results = []
         try:
