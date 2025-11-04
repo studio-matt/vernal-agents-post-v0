@@ -99,7 +99,7 @@ tweepy>=4.14.0
 playwright>=1.40.0
 beautifulsoup4>=4.12.3  # Required by browser-use
 lxml>=4.9.3
-ddgs>=2024.10.28  # DuckDuckGo search (renamed from duckduckgo-search)
+ddgs>=9.0.0  # DuckDuckGo search (renamed from duckduckgo-search)
 
 # =============================================================================
 # SYSTEM & NETWORKING
