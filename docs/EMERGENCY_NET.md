@@ -406,14 +406,33 @@ bash scripts/bulletproof_deploy_backend.sh
 17. ✅ Logs successful deployment
 
 **CRITICAL: Package Verification (Step 6)**
-The script now verifies that all critical packages can actually be imported:
-- Core: `fastapi`, `uvicorn`, `sqlalchemy`, `pymysql`, `pydantic`
-- Auth: `email_validator` (required for `/auth/login` to work)
-- Auth: `passlib`, `jose` (required for password hashing and JWT tokens)
-- Scraping: `ddgs` (required for web scraping)
-- Scraping: `playwright` (required for web scraping - Python package)
-- Research: `nltk` (required for research endpoint)
-- Local modules: `database`, `models`
+The script now uses a **dynamic dependency checker** that verifies ALL packages from `requirements.txt` are installed and importable, rather than checking specific packages one by one.
+
+**Dynamic Dependency Checker:**
+- Automatically parses `requirements.txt`
+- Checks if ALL packages are importable
+- Reports any missing packages with exact install commands
+- More robust - catches issues proactively, not reactively
+
+**Manual verification:**
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+source venv/bin/activate
+python3 scripts/check_all_dependencies.py
+```
+
+This will show:
+- ✅ All installed packages
+- ❌ Any missing packages with exact pip install commands
+
+**If packages are missing:**
+```bash
+# Install all missing packages
+pip install -r requirements.txt
+
+# Or use the fix script
+./scripts/fix_missing_dependencies.sh
+```
 
 **CRITICAL: Playwright Browser Installation (Step 7)**
 - Playwright requires TWO steps:
