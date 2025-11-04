@@ -79,6 +79,8 @@ critical_packages = {
     "pymysql": "MySQL driver",
     "pydantic": "Data validation",
     "email_validator": "Email validation (required for auth)",
+    "passlib": "Password hashing (required for auth)",
+    "jose": "JWT token creation (required for auth)",
     "ddgs": "DuckDuckGo search (required for scraping)",
     "nltk": "NLTK text processing (required for research)",
     "database": "Database manager (local module)",
