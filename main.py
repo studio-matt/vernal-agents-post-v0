@@ -711,12 +711,23 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             if images:
                                 meta["sample_images"] = images[:5]  # Store first 5 images
                             
+                            # Safety guard: Truncate text to MEDIUMTEXT limit (16MB) to prevent DB errors
+                            # MEDIUMTEXT max: 16,777,215 bytes (≈16 MB)
+                            MAX_TEXT_SIZE = 16_777_000  # Leave small buffer
+                            safe_text = text[:MAX_TEXT_SIZE] if text and len(text) > MAX_TEXT_SIZE else text
+                            
+                            # Log if truncation occurred
+                            if text and len(text) > MAX_TEXT_SIZE:
+                                logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text)} chars → {len(safe_text)} chars (exceeded MEDIUMTEXT limit)")
+                                meta["text_truncated"] = True
+                                meta["original_length"] = len(text)
+                            
                             row = CampaignRawData(
                                 campaign_id=cid,
                                 source_url=url,
                                 fetched_at=now,
-                                raw_html=(html[:65535] if html else None) if include_links else None,  # Truncate HTML to prevent DB errors (max TEXT size)
-                                extracted_text=text if text else (f"Error scraping {url}: {error}" if error else ""),
+                                raw_html=(html[:MAX_TEXT_SIZE] if html else None) if include_links else None,  # Truncate HTML to MEDIUMTEXT limit
+                                extracted_text=safe_text if safe_text else (f"Error scraping {url}: {error}" if error else ""),
                                 meta_json=json.dumps(meta)
                             )
                             session.add(row)
@@ -725,11 +736,14 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             created += 1
                             
                             # Enhanced per-URL logging with DB ID
-                            text_len = len(text) if text else 0
+                            text_len = len(safe_text) if safe_text else 0
+                            original_len = len(text) if text else 0
+                            truncation_note = f" (truncated from {original_len})" if original_len > MAX_TEXT_SIZE else ""
+                            
                             if error:
                                 logger.warning(f"⚠️ Scraped {url} (DB ID: {row.id}): ERROR - {error}")
                             else:
-                                logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars, {len(links)} links, {len(images)} images")
+                                logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars{truncation_note}, {len(links)} links, {len(images)} images")
                         
                         if created == 0:
                             logger.warning(f"⚠️ Web scraping returned no results for campaign {cid}")
