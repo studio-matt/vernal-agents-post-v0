@@ -48,19 +48,38 @@ LIMIT 10;
 EOF
 
 echo ""
-echo "📋 Step 3: Check ALL logs for this campaign (including older ones)..."
+echo "📋 Step 3: Find when this campaign was last scraped (from database)..."
 echo "---"
-echo "Searching for when this campaign was built..."
-sudo journalctl -u vernal-agents | \
-  grep -E "$CAMPAIGN_ID.*analyze|$CAMPAIGN_ID.*Starting web scraping|$CAMPAIGN_ID.*Keywords" | \
-  tail -20
+SCRAPE_TIME=$(mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" -Nse \
+  "SELECT MAX(fetched_at) FROM campaign_raw_data WHERE campaign_id = '$CAMPAIGN_ID';")
+
+if [ -n "$SCRAPE_TIME" ] && [ "$SCRAPE_TIME" != "NULL" ]; then
+    echo "✅ Last scraped: $SCRAPE_TIME"
+    # Convert to format for journalctl (YYYY-MM-DD HH:MM:SS)
+    SCRAPE_DATE=$(echo "$SCRAPE_TIME" | cut -d' ' -f1)
+    echo "   Searching logs around: $SCRAPE_DATE"
+    TIME_WINDOW="--since \"$SCRAPE_DATE\""
+else
+    echo "⚠️ No scrape time found, searching last 24 hours"
+    TIME_WINDOW="--since \"24 hours ago\""
+fi
 
 echo ""
-echo "📋 Step 4: Check what keywords were actually used when scraping..."
+echo "📋 Step 4: Check what keywords were used for THIS campaign..."
 echo "---"
-sudo journalctl -u vernal-agents | \
-  grep -E "$CAMPAIGN_ID.*CRITICAL.*Keywords|$CAMPAIGN_ID.*Searching DuckDuckGo|$CAMPAIGN_ID.*DuckDuckGo returned" | \
+sudo journalctl -u vernal-agents $TIME_WINDOW 2>/dev/null | \
+  grep -E "$CAMPAIGN_ID" | \
+  grep -E "CRITICAL.*Keywords|keywords received|keywords being used|Searching DuckDuckGo|DuckDuckGo returned|Starting web scraping" | \
   tail -20
+
+if [ $? -ne 0 ] || [ -z "$(sudo journalctl -u vernal-agents $TIME_WINDOW 2>/dev/null | grep -E "$CAMPAIGN_ID")" ]; then
+    echo "⚠️ No logs found for this campaign in that time window"
+    echo "   Trying last 7 days..."
+    sudo journalctl -u vernal-agents --since "7 days ago" 2>/dev/null | \
+      grep -E "$CAMPAIGN_ID" | \
+      grep -E "CRITICAL.*Keywords|keywords received|keywords being used" | \
+      tail -10
+fi
 
 echo ""
 echo "📋 Step 5: Check scraped URLs to infer what was searched..."
