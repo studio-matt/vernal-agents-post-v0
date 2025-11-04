@@ -1,4 +1,4 @@
-# Vernal Agents Backend — Emergency Net (v12)
+# Vernal Agents Backend — Emergency Net (v13)
 
 ## TL;DR
 - **App:** FastAPI served by Python (systemd)
