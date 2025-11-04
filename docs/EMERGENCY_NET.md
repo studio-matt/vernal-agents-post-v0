@@ -392,13 +392,27 @@ bash scripts/bulletproof_deploy_backend.sh
 3. ✅ Deletes old code completely
 4. ✅ Clones fresh from GitHub
 5. ✅ Sets up venv with chunked pip installation (prevents SIGKILL)
-6. ✅ Restores `.env` from backup
-7. ✅ Validates required environment variables (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)
-8. ✅ Validates no placeholder values (myuser, localhost, dummy, mypassword)
-9. ✅ Configures systemd service
-10. ✅ Starts service and waits
-11. ✅ Runs comprehensive health checks (local, version, database, external)
-12. ✅ Logs successful deployment
+6. ✅ **MANDATORY: Verifies critical packages are importable** (prevents silent failures)
+7. ✅ **MANDATORY: Verifies auth router can load** (prevents 404 regressions)
+8. ✅ Restores `.env` from backup
+9. ✅ Validates required environment variables (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)
+10. ✅ Validates no placeholder values (myuser, localhost, dummy, mypassword)
+11. ✅ Configures systemd service
+12. ✅ Starts service and waits
+13. ✅ Runs comprehensive health checks (local, version, database, external)
+14. ✅ **MANDATORY: Verifies auth endpoints are accessible** (not 404) before success
+15. ✅ Logs successful deployment
+
+**CRITICAL: Package Verification (Step 6)**
+The script now verifies that all critical packages can actually be imported:
+- Core: `fastapi`, `uvicorn`, `sqlalchemy`, `pymysql`, `pydantic`
+- Auth: `email_validator` (required for `/auth/login` to work)
+- Scraping: `ddgs` (required for web scraping)
+- Research: `nltk` (required for research endpoint)
+- Local modules: `database`, `models`
+
+**If any package fails to import, deployment EXITS with error code 1.**
+This prevents the regression where packages were "installed" but couldn't be imported, causing 404 errors.
 
 **Required Environment Variables:**
 - `DB_HOST` (must not be localhost)
