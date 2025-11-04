@@ -131,8 +131,8 @@ echo "---"
 python3 <<EOF
 import sys
 try:
-    from duckduckgo_search import DDGS
-    print("✅ DuckDuckGo Python package imported successfully")
+    from ddgs import DDGS  # Use correct package name
+    print("✅ DuckDuckGo Python package (ddgs) imported successfully")
     ddgs = DDGS()
     results = list(ddgs.text("test", max_results=1))
     if len(results) > 0:
@@ -141,6 +141,7 @@ try:
         print("⚠️  DuckDuckGo search returned 0 results (might be rate-limited)")
 except Exception as e:
     print(f"❌ DuckDuckGo error: {e}")
+    print("   Install with: pip install ddgs>=9.0.0")
     sys.exit(1)
 EOF
 

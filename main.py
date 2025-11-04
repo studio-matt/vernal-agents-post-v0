@@ -729,11 +729,25 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             else:
                                 safe_text = text
                             
+                            # Sanitize HTML to remove emojis/unicode that can't be stored in utf8mb3
+                            # Keep only ASCII + basic UTF-8, remove 4-byte UTF-8 (emojis)
+                            safe_html = None
+                            if html and include_links:
+                                try:
+                                    # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
+                                    # Keep only 1-3 byte UTF-8 characters (basic unicode)
+                                    safe_html = html[:MAX_TEXT_SIZE].encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                                    # Remove any remaining problematic characters
+                                    safe_html = ''.join(char for char in safe_html if ord(char) < 0x10000)
+                                except Exception as encode_err:
+                                    logger.warning(f"⚠️ Error encoding HTML for {url}: {encode_err}, storing as None")
+                                    safe_html = None
+                            
                             row = CampaignRawData(
                                 campaign_id=cid,
                                 source_url=url,
                                 fetched_at=now,
-                                raw_html=(html[:MAX_TEXT_SIZE] if html else None) if include_links else None,  # Truncate HTML to MEDIUMTEXT limit
+                                raw_html=safe_html,  # Sanitized HTML (no emojis)
                                 extracted_text=safe_text if safe_text else (f"Error scraping {url}: {error}" if error else ""),
                                 meta_json=json.dumps(meta)
                             )
