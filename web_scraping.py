@@ -61,35 +61,28 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
         return []
     
     try:
+        # Import keyword expansions (lazy import to avoid circular dependencies)
+        try:
+            from keyword_expansions import expand_keyword, expand_query
+        except ImportError:
+            # Fallback if module not available
+            def expand_keyword(k): return k
+            def expand_query(q): return q
+            logger.warning("keyword_expansions module not available, using keywords as-is")
+        
         # Combine keywords and query into search string with better relevance
         search_terms = []
         
-        # Expand common abbreviations and acronyms for better search results
-        keyword_expansions = {
-            "WW2": "World War 2",
-            "WWII": "World War 2",
-            "WW1": "World War 1",
-            "WWI": "World War 1",
-            "AI": "artificial intelligence",
-            "ML": "machine learning",
-            "API": "application programming interface",
-        }
-        
         # Process query first
         if query:
-            # Expand abbreviations in query
-            expanded_query = query
-            for abbrev, expansion in keyword_expansions.items():
-                if abbrev.lower() in query.lower():
-                    expanded_query = query.replace(abbrev, expansion).replace(abbrev.lower(), expansion)
+            expanded_query = expand_query(query)
             search_terms.append(expanded_query)
         
         # Process keywords
         if keywords:
             expanded_keywords = []
             for keyword in keywords[:5]:  # Limit to 5 keywords
-                # Expand abbreviations
-                expanded = keyword_expansions.get(keyword.upper(), keyword)
+                expanded = expand_keyword(keyword)
                 expanded_keywords.append(expanded)
             search_terms.extend(expanded_keywords)
         
@@ -100,7 +93,12 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
             logger.warning("Empty search query, returning empty results")
             return []
         
-        logger.info(f"🔍 Searching DuckDuckGo for: '{search_query}' (max_results={max_results}, original keywords: {keywords})")
+        # Log original vs expanded for debugging
+        original_query = " ".join([query] + (keywords[:5] if keywords else []))
+        if search_query != original_query:
+            logger.info(f"🔍 Expanded search query: '{original_query}' → '{search_query}'")
+        else:
+            logger.info(f"🔍 Searching DuckDuckGo for: '{search_query}' (max_results={max_results})")
         
         results = []
         try:
