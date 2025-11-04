@@ -23,6 +23,7 @@ mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" <<EOF
 SELECT 
     campaign_id,
     campaign_name,
+    query,
     keywords,
     type,
     description,

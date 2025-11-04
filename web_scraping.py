@@ -107,8 +107,9 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
             logger.warning("Empty search query, returning empty results")
             return []
         
-        # Log original vs expanded for debugging
+        # Log original vs expanded for debugging (CRITICAL for keyword tracking)
         original_query = " ".join([query] + (keywords[:5] if keywords else []))
+        logger.info(f"🔍 CRITICAL: Search input - query: '{query}', keywords: {keywords[:5] if keywords else []}")
         if search_query != original_query:
             logger.info(f"🔍 Expanded search query: '{original_query}' → '{search_query}'")
         else:
