@@ -397,13 +397,13 @@ bash scripts/bulletproof_deploy_backend.sh
 8. ✅ **MANDATORY: Verifies Playwright browsers work** (prevents scraping failures)
 9. ✅ **MANDATORY: Verifies auth router can load** (prevents 404 regressions)
 10. ✅ Restores `.env` from backup
-9. ✅ Validates required environment variables (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)
-10. ✅ Validates no placeholder values (myuser, localhost, dummy, mypassword)
-11. ✅ Configures systemd service
-12. ✅ Starts service and waits
-13. ✅ Runs comprehensive health checks (local, version, database, external)
-14. ✅ **MANDATORY: Verifies auth endpoints are accessible** (not 404) before success
-15. ✅ Logs successful deployment
+11. ✅ Validates required environment variables (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)
+12. ✅ Validates no placeholder values (myuser, localhost, dummy, mypassword)
+13. ✅ Configures systemd service
+14. ✅ Starts service and waits
+15. ✅ Runs comprehensive health checks (local, version, database, external)
+16. ✅ **MANDATORY: Verifies auth endpoints are accessible** (not 404) before success
+17. ✅ Logs successful deployment
 
 **CRITICAL: Package Verification (Step 6)**
 The script now verifies that all critical packages can actually be imported:
