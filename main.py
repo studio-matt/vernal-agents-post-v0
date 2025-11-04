@@ -832,9 +832,29 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             # No valid scraped data - check if we have errors
                             if error_count > 0:
                                 logger.error(f"❌ Campaign {cid} scraping failed: {error_count} error rows, 0 valid data rows")
-                                logger.error(f"❌ This indicates scraping did not succeed. Check logs for scraping errors.")
+                                logger.error(f"❌ This indicates scraping did not succeed. Check logs above for scraping errors.")
+                                
+                                # Extract error messages from error rows for better diagnostics
+                                error_messages = []
+                                for row in all_rows:
+                                    if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
+                                        error_msg = row.extracted_text or row.source_url
+                                        if error_msg not in error_messages:
+                                            error_messages.append(error_msg[:200])  # Limit length
+                                
+                                if error_messages:
+                                    logger.error(f"❌ Error details from database:")
+                                    for i, msg in enumerate(error_messages[:5], 1):  # Show first 5
+                                        logger.error(f"   [{i}] {msg}")
+                                
+                                logger.error(f"❌ Common causes:")
+                                logger.error(f"   1. Playwright not installed: Run 'python -m playwright install chromium'")
+                                logger.error(f"   2. DuckDuckGo search failing: Check 'ddgs' package is installed")
+                                logger.error(f"   3. Network/firewall blocking: Check server can access external URLs")
+                                logger.error(f"   4. Invalid keywords: Empty or malformed keywords return no results")
                             else:
                                 logger.warning(f"⚠️ Campaign {cid} has no scraped data (no rows at all), keeping status as INCOMPLETE")
+                                logger.warning(f"⚠️ This suggests scraping never ran or failed before creating any rows")
                             camp.status = "INCOMPLETE"
                             camp.updated_at = datetime.utcnow()
                             session.commit()
