@@ -61,7 +61,7 @@ echo ""
 echo "📋 Campaign status:"
 mysql -h "${DB_HOST}" -u "${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" <<EOF
 SELECT campaign_id, campaign_name, status, topics, created_at, updated_at
-FROM campaign
+FROM campaigns
 WHERE campaign_id = '${CAMPAIGN_ID}';
 EOF
 
