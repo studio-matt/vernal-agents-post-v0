@@ -947,12 +947,22 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
     """
     try:
         from models import CampaignRawData
-        # Import NLTK-based text processing
-        from text_processing import (
-            extract_entities as nltk_extract_entities,
-            remove_stopwords,
-            extract_keywords
-        )
+        # Import NLTK-based text processing (lazy import with fallback)
+        try:
+            from text_processing import (
+                extract_entities as nltk_extract_entities,
+                remove_stopwords,
+                extract_keywords
+            )
+        except ImportError as import_err:
+            logger.warning(f"⚠️ text_processing module not available: {import_err}")
+            # Define fallback functions
+            def nltk_extract_entities(text, **kwargs):
+                return {}
+            def remove_stopwords(text):
+                return text
+            def extract_keywords(text):
+                return []
 
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
         logger.info(f"🔍 Research endpoint: Found {len(rows)} rows for campaign {campaign_id}")
