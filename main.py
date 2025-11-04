@@ -526,6 +526,9 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
         
         logger.info(f"🔍 /analyze POST endpoint called for campaign: {campaign_name} (ID: {campaign_id}) by user {user_id}")
         logger.info(f"🔍 Request data: campaign_name={analyze_data.campaign_name}, type={analyze_data.type}, keywords={len(analyze_data.keywords or [])} keywords")
+        logger.info(f"🔍 CRITICAL: Keywords received from frontend: {analyze_data.keywords}")
+        if analyze_data.keywords:
+            logger.info(f"🔍 First keyword: '{analyze_data.keywords[0]}'")
         
         # Verify campaign exists (optional)
         try:
@@ -590,6 +593,11 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 logger.info(f"📝 Scraping settings: URLs={len(urls)}, Keywords={len(keywords)}, depth={depth}, max_pages={max_pages}")
                 logger.info(f"📝 URL list: {urls}")
                 logger.info(f"📝 Keywords list: {keywords}")
+                logger.info(f"🔍 CRITICAL: Keywords being used for scraping: {keywords}")
+                if not keywords or len(keywords) == 0:
+                    logger.error(f"❌ CRITICAL: No keywords provided! This will cause scraping to fail.")
+                elif keywords and keywords[0] != "pug" and "pug" in str(keywords):
+                    logger.warning(f"⚠️ WARNING: Keywords appear incorrect. Expected 'pug', got: {keywords}")
                 
                 # Import web scraping module
                 scrape_campaign_data = None
@@ -707,7 +715,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                                 campaign_id=cid,
                                 source_url=url,
                                 fetched_at=now,
-                                raw_html=html if include_links else None,  # Only store HTML if links were requested
+                                raw_html=(html[:65535] if html else None) if include_links else None,  # Truncate HTML to prevent DB errors (max TEXT size)
                                 extracted_text=text if text else (f"Error scraping {url}: {error}" if error else ""),
                                 meta_json=json.dumps(meta)
                             )
