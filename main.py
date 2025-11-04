@@ -632,7 +632,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     created = 1
                 else:
                     # Perform real web scraping
-                    logger.info(f"🚀 Starting web scraping (keywords={keywords}, urls={urls}, depth={depth}, max_pages={max_pages})")
+                    logger.info(f"🚀 Starting web scraping for campaign {cid}")
+                    logger.info(f"📋 Parameters: keywords={keywords}, urls={urls}, depth={depth}, max_pages={max_pages}, include_images={include_images}, include_links={include_links}")
                     
                     try:
                         scraped_results = scrape_campaign_data(
@@ -646,6 +647,21 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                         )
                         
                         logger.info(f"✅ Web scraping completed: {len(scraped_results)} pages scraped")
+                        
+                        # Log detailed results for diagnostics
+                        if len(scraped_results) == 0:
+                            logger.warning(f"⚠️ Scraping returned 0 results for campaign {cid}")
+                            logger.warning(f"⚠️ Keywords used: {keywords}")
+                            logger.warning(f"⚠️ URLs provided: {urls}")
+                        else:
+                            logger.info(f"📊 Scraping results breakdown:")
+                            for i, result in enumerate(scraped_results[:5]):  # Log first 5
+                                url = result.get("url", "unknown")
+                                text_len = len(result.get("text", ""))
+                                has_error = result.get("error") is not None
+                                logger.info(f"  [{i+1}] {url}: {text_len} chars, error={has_error}")
+                                if has_error:
+                                    logger.warning(f"      Error: {result.get('error')}")
                         
                         # Store scraped data in database
                         for result in scraped_results:
