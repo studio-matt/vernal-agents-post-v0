@@ -186,11 +186,15 @@ def expand_keyword(keyword: str, use_llm: bool = True) -> str:
         return expanded
     
     # Step 2: Check if keyword contains abbreviation (for queries like "WW2 history")
+    # CRITICAL: Use word boundaries to avoid partial matches
+    import re
     keyword_upper = keyword.upper()
     for abbrev, expansion in ALL_EXPANSIONS.items():
-        if abbrev in keyword_upper:
-            # Replace abbreviation in keyword
-            return keyword.replace(abbrev, expansion).replace(abbrev.lower(), expansion)
+        # Only replace if abbreviation is a complete word (not part of another word)
+        pattern = r'\b' + re.escape(abbrev) + r'\b'
+        if re.search(pattern, keyword_upper):
+            # Replace whole word only (case-insensitive)
+            return re.sub(pattern, expansion, keyword, flags=re.IGNORECASE)
     
     # Step 3: Try LLM expansion if enabled and keyword looks like an abbreviation
     # (all caps, short, no spaces = likely abbreviation)
@@ -220,12 +224,15 @@ def expand_query(query: str, use_llm: bool = True) -> str:
     query_upper = query.upper()
     
     # Step 1: Check manual dictionary (fast, free)
+    # CRITICAL: Use word boundaries to avoid partial matches (e.g., "CTO" in "collectors")
+    import re
     for abbrev, expansion in ALL_EXPANSIONS.items():
-        if abbrev in query_upper:
-            # Replace abbreviation (case-insensitive)
-            expanded_query = expanded_query.replace(abbrev, expansion)
-            expanded_query = expanded_query.replace(abbrev.lower(), expansion)
-            expanded_query = expanded_query.replace(abbrev.capitalize(), expansion)
+        # Only replace if abbreviation is a complete word (not part of another word)
+        # Use word boundaries (\b) to match whole words only
+        pattern = r'\b' + re.escape(abbrev) + r'\b'
+        if re.search(pattern, query_upper):
+            # Replace whole word only (case-insensitive)
+            expanded_query = re.sub(pattern, expansion, query_upper, flags=re.IGNORECASE)
     
     # Step 2: Try LLM for unknown abbreviations (if enabled)
     # Extract potential abbreviations (all caps, 2-10 chars, no spaces)
