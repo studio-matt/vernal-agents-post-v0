@@ -146,39 +146,16 @@ EOF
 
 echo ""
 
-# Step 6: Test scraping dependencies (beautifulsoup4 and gensim)
-echo "📋 Step 6: Testing scraping dependencies..."
+# Step 6: Check ALL dependencies dynamically
+echo "📋 Step 6: Checking ALL dependencies from requirements.txt..."
 echo "---"
 
-python3 <<EOF
-import sys
-errors = []
-
-# Test beautifulsoup4 (bs4)
-try:
-    from bs4 import BeautifulSoup
-    print("✅ beautifulsoup4 (bs4) installed - required for text/link extraction")
-except ImportError as e:
-    print(f"❌ beautifulsoup4 (bs4) NOT installed: {e}")
-    print("   Run: pip install beautifulsoup4>=4.12.3")
-    errors.append("beautifulsoup4")
-
-# Test gensim
-try:
-    import gensim
-    print("✅ gensim installed - required for topic processing")
-except ImportError as e:
-    print(f"❌ gensim NOT installed: {e}")
-    print("   Run: pip install gensim>=4.3.2")
-    errors.append("gensim")
-
-if errors:
-    print(f"\n⚠️  Missing dependencies: {', '.join(errors)}")
-    print("   Run: ./scripts/fix_missing_dependencies.sh")
-    sys.exit(1)
-else:
-    print("\n✅ All scraping dependencies installed")
-EOF
+python3 scripts/check_all_dependencies.py || {
+    echo ""
+    echo "⚠️  Some dependencies are missing!"
+    echo "   Run: ./scripts/fix_missing_dependencies.sh"
+    echo "   Or: pip install -r requirements.txt"
+}
 
 echo ""
 echo "=========================================="

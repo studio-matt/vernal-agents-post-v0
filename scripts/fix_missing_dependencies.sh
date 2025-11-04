@@ -1,10 +1,10 @@
 #!/bin/bash
-# Quick fix for missing dependencies (beautifulsoup4/bs4 and gensim)
-# These are causing scraping and topic processing to fail silently
+# Comprehensive fix for ALL missing dependencies
+# Checks requirements.txt and installs anything missing
 
 set -e
 
-echo "🔧 Fixing missing dependencies (beautifulsoup4/bs4 and gensim)..."
+echo "🔧 Checking and fixing ALL missing dependencies..."
 echo ""
 
 cd /home/ubuntu/vernal-agents-post-v0
@@ -12,24 +12,34 @@ cd /home/ubuntu/vernal-agents-post-v0
 # Activate venv
 source venv/bin/activate
 
-# Install beautifulsoup4 (required for web scraping text/link extraction)
-echo "📦 Installing beautifulsoup4 (required for scraping)..."
-pip install beautifulsoup4>=4.12.3
-
-# Install gensim (required for topic processing)
-echo "📦 Installing gensim (required for topic processing)..."
-pip install gensim>=4.3.2
-
-# Verify installations
+# Check which dependencies are missing
+echo "📋 Checking which dependencies are missing..."
 echo ""
-echo "✅ Verifying installations..."
-python3 -c "from bs4 import BeautifulSoup; print('✅ beautifulsoup4 (bs4) installed successfully')" || {
-    echo "❌ beautifulsoup4 installation failed!"
-    exit 1
-}
 
-python3 -c "import gensim; print('✅ gensim installed successfully')" || {
-    echo "❌ gensim installation failed!"
+python3 scripts/check_all_dependencies.py
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "✅ All dependencies are already installed!"
+    exit 0
+fi
+
+echo ""
+echo "📦 Installing missing dependencies from requirements.txt..."
+echo ""
+
+# Install all requirements (this will only install missing ones)
+pip install -r requirements.txt --no-cache-dir
+
+# Verify all are now installed
+echo ""
+echo "✅ Verifying all dependencies are now installed..."
+echo ""
+
+python3 scripts/check_all_dependencies.py || {
+    echo ""
+    echo "❌ Some dependencies still missing after installation!"
+    echo "   Check the output above for specific errors"
     exit 1
 }
 
