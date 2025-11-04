@@ -23,9 +23,32 @@ sleep 5
 
 # Verify
 echo "🔍 Verifying installation..."
-python3 -c "import ddgs; import nltk; print('✅ ddgs and nltk are available')" || { echo "❌ Import failed!"; exit 1; }
+python3 -c "
+import ddgs, nltk, email_validator, passlib, jose
+print('✅ All packages are available')
+print('  - ddgs: web scraping')
+print('  - nltk: text processing')
+print('  - email_validator: email validation')
+print('  - passlib: password hashing')
+print('  - jose: JWT tokens')
+" || { echo "❌ Import failed!"; exit 1; }
 
 curl -s http://127.0.0.1:8000/health | jq . || { echo "❌ Health check failed!"; exit 1; }
+
+# Test auth endpoint is accessible (not 404 or 500)
+echo "🔍 Testing auth endpoint..."
+AUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/auth/login -X POST -H "Content-Type: application/json" -d '{"username":"test","password":"test"}')
+if [ "$AUTH_STATUS" = "404" ]; then
+    echo "❌ Auth endpoint returned 404 - router not loaded!"
+    exit 1
+elif [ "$AUTH_STATUS" = "500" ]; then
+    echo "❌ Auth endpoint returned 500 - check backend logs!"
+    exit 1
+elif [ "$AUTH_STATUS" = "422" ] || [ "$AUTH_STATUS" = "401" ]; then
+    echo "✅ Auth endpoint accessible (returned $AUTH_STATUS - expected for invalid credentials)"
+else
+    echo "⚠️  Auth endpoint returned: $AUTH_STATUS"
+fi
 
 echo "🎉 Quick fix complete! Packages installed and service restarted."
 
