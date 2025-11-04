@@ -41,7 +41,19 @@ EOF
 # (it will prompt for password - paste from .env file)
 ```
 
-## Step 2: Pull Latest Code and Install Dependencies
+## Step 2: Fix Database Schema (CRITICAL - DO THIS FIRST)
+
+**This is blocking all data saves!**
+
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+git pull origin main
+./scripts/fix_database_schema.sh
+```
+
+This fixes both `raw_html` and `extracted_text` to MEDIUMTEXT (16MB limit).
+
+## Step 3: Pull Latest Code and Install Dependencies
 
 ```bash
 cd /home/ubuntu/vernal-agents-post-v0
@@ -58,7 +70,7 @@ python -c "import bs4; import gensim; import apscheduler; print('✅ All depende
 sudo systemctl restart vernal-agents
 ```
 
-## Step 3: Diagnose Keyword Issue
+## Step 4: Diagnose Keyword Issue
 
 The enhanced logging will now show exactly what keywords are being used. 
 
