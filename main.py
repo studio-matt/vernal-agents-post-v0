@@ -1279,13 +1279,15 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             "topics": topics,
             "entities": entities,
             "total_raw": len(texts),
+            "truncation_info": truncation_info if truncation_info else None,  # Info about truncated texts
             "diagnostics": {
                 "total_rows": len(rows),
                 "valid_urls": len(urls),
                 "valid_texts": len(texts),
                 "errors": errors,
                 "has_errors": len(errors) > 0,
-                "has_data": len(urls) > 0 or len(texts) > 0
+                "has_data": len(urls) > 0 or len(texts) > 0,
+                "truncated_count": len(truncation_info)
             }
         }
     except Exception as e:
