@@ -115,6 +115,32 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             elif entity_type == 'FACILITY' and extract_facility:
                 entities['facility'].append(entity_text)
     
+    # Pattern-based extraction for better coverage (especially for titles and short texts)
+    if extract_persons:
+        # Pattern: Capitalized word(s) that look like names (First Last, First Middle Last)
+        # Common name patterns: "John Smith", "Mary-Jane Watson", "O'Brien"
+        name_pattern = r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\b'
+        # Exclude common capitalized words that aren't names
+        exclude_words = {'The', 'A', 'An', 'In', 'On', 'At', 'For', 'With', 'From', 'To', 'Of', 'And', 'Or', 'But', 'As', 'By', 'War', 'Prisoner', 'Escape', 'Camp', 'Life', 'Liberation'}
+        name_matches = re.findall(name_pattern, text)
+        for match in name_matches:
+            # Exclude if it's a common word or if it's already found by NLTK
+            words_in_match = match.split()
+            if match not in exclude_words and match not in entities['persons']:
+                # If it's two words (First Last), it's likely a name
+                if len(words_in_match) >= 2:
+                    entities['persons'].append(match)
+    
+    if extract_locations:
+        # Pattern: Common nationality/country adjectives (British, American, etc.)
+        nationality_pattern = r'\b(British|American|French|German|Italian|Spanish|Chinese|Japanese|Russian|Indian|Canadian|Australian|Brazilian|Mexican|South African|New Zealand|Irish|Scottish|Welsh|English|Dutch|Belgian|Swiss|Swedish|Norwegian|Danish|Finnish|Polish|Greek|Turkish|Egyptian|Israeli|Saudi|Pakistani|Bangladeshi|Vietnamese|Thai|Indonesian|Malaysian|Filipino|Singaporean|Taiwanese)\b'
+        nationality_matches = re.findall(nationality_pattern, text, re.IGNORECASE)
+        for match in nationality_matches:
+            # Capitalize properly
+            match = match.title() if match.islower() else match
+            if match not in entities['locations']:
+                entities['locations'].append(match)
+    
     # Extract money values using regex
     if extract_money:
         money_pattern = r'\$[\d,]+(?:\.\d{2})?|[\d,]+(?:\.\d{2})?\s*(?:dollars|USD|EUR|€|£|GBP|yen|JPY)'
