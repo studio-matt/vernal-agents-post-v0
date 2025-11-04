@@ -244,12 +244,17 @@ echo "🔍 Testing external access..."
 curl -f https://themachine.vernalcontentum.com/health || { echo "❌ External health check failed!"; exit 1; }
 curl -f https://themachine.vernalcontentum.com/version || { echo "❌ External version check failed!"; exit 1; }
 
-# CRITICAL: Verify auth endpoints are accessible (prevents 404 regressions)
-echo "🔍 Testing auth endpoints (CRITICAL - prevents 404 regressions)..."
+# CRITICAL: Verify auth endpoints are accessible AND functional (prevents 404/500 regressions)
+echo "🔍 Testing auth endpoints (CRITICAL - prevents 404/500 regressions)..."
 AUTH_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://themachine.vernalcontentum.com/auth/login -X POST -H "Content-Type: application/json" -d '{"username":"test","password":"test"}')
 if [ "$AUTH_HEALTH" = "404" ]; then
     echo "❌ Auth endpoint returned 404 - router not loaded!"
     echo "   Check backend logs for 'Failed to include authentication router'"
+    exit 1
+elif [ "$AUTH_HEALTH" = "500" ]; then
+    echo "❌ Auth endpoint returned 500 - endpoint exists but is broken!"
+    echo "   This indicates database connection, missing dependencies, or code errors"
+    echo "   Check backend logs: sudo journalctl -u vernal-agents --since '5 minutes ago' | grep -i error"
     exit 1
 elif [ "$AUTH_HEALTH" = "422" ] || [ "$AUTH_HEALTH" = "401" ]; then
     echo "✅ Auth endpoint accessible (returned $AUTH_HEALTH - expected for invalid credentials)"
