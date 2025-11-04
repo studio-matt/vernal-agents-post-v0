@@ -713,14 +713,21 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             
                             # Safety guard: Truncate text to MEDIUMTEXT limit (16MB) to prevent DB errors
                             # MEDIUMTEXT max: 16,777,215 bytes (≈16 MB)
-                            MAX_TEXT_SIZE = 16_777_000  # Leave small buffer
-                            safe_text = text[:MAX_TEXT_SIZE] if text and len(text) > MAX_TEXT_SIZE else text
+                            # Note: Truncation at 16MB is extremely rare - most web pages are <100KB
+                            # If truncation occurs, it's likely mostly noise (ads, scripts, duplicate content)
+                            MAX_TEXT_SIZE = 16_777_000  # Leave small buffer (≈16 MB)
                             
-                            # Log if truncation occurred
+                            # Smart truncation: Keep first portion (usually most important content)
+                            # If text is too large, keep the beginning and log warning
                             if text and len(text) > MAX_TEXT_SIZE:
-                                logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text)} chars → {len(safe_text)} chars (exceeded MEDIUMTEXT limit)")
+                                safe_text = text[:MAX_TEXT_SIZE]
+                                logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
+                                logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
                                 meta["text_truncated"] = True
                                 meta["original_length"] = len(text)
+                                meta["truncation_reason"] = "exceeded_mediumtext_limit"
+                            else:
+                                safe_text = text
                             
                             row = CampaignRawData(
                                 campaign_id=cid,
@@ -1148,6 +1155,7 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         texts = []
         errors = []  # Collect error diagnostics
         error_meta = []  # Collect error metadata
+        truncation_info = []  # Track which texts were truncated
         
         for r in rows:
             # Check if this is an error/placeholder row
@@ -1176,7 +1184,21 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 # More lenient text check - include text if it exists and has some content (even if short)
                 # This helps with campaigns that previously had data but might have shorter snippets
                 if r.extracted_text and len(r.extracted_text.strip()) > 0:
-                    texts.append(r.extracted_text)
+                    texts.append(r.extracted_text)  # Keep as string for backward compatibility
+                    
+                    # Check if this text was truncated (from metadata)
+                    if r.meta_json:
+                        try:
+                            meta = json.loads(r.meta_json)
+                            if meta.get("text_truncated", False):
+                                truncation_info.append({
+                                    "url": r.source_url,
+                                    "stored_length": len(r.extracted_text),
+                                    "original_length": meta.get("original_length"),
+                                    "truncated_by": meta.get("original_length", 0) - len(r.extracted_text) if meta.get("original_length") else 0
+                                })
+                        except:
+                            pass
         
         logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs, {len(texts)} text samples, {len(errors)} error rows")
 
