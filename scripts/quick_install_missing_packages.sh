@@ -11,8 +11,8 @@ cd /home/ubuntu/vernal-agents-post-v0
 # Activate venv
 source venv/bin/activate
 
-echo "📦 Installing missing packages (ddgs, nltk, email-validator, passlib, python-jose)..."
-pip install ddgs>=9.0.0 nltk>=3.8.1 "email-validator>=2.1.0" "passlib[bcrypt]>=1.7.4" "python-jose[cryptography]>=3.3.0" --no-cache-dir
+echo "📦 Installing missing packages (ddgs, nltk, email-validator, passlib, python-jose, playwright)..."
+pip install ddgs>=9.0.0 nltk>=3.8.1 "email-validator>=2.1.0" "passlib[bcrypt]>=1.7.4" "python-jose[cryptography]>=3.3.0" "playwright>=1.40.0" --no-cache-dir
 
 echo "📦 Installing Playwright browsers (required for web scraping)..."
 python -m playwright install chromium || { echo "⚠️ Playwright browser installation failed - scraping will not work"; }
@@ -27,14 +27,25 @@ sleep 5
 # Verify
 echo "🔍 Verifying installation..."
 python3 -c "
-import ddgs, nltk, email_validator, passlib, jose
+import ddgs, nltk, email_validator, passlib, jose, playwright
 print('✅ All packages are available')
 print('  - ddgs: web scraping')
 print('  - nltk: text processing')
 print('  - email_validator: email validation')
 print('  - passlib: password hashing')
 print('  - jose: JWT tokens')
+print('  - playwright: web scraping')
 " || { echo "❌ Import failed!"; exit 1; }
+
+# Verify Playwright browsers are installed
+echo "🔍 Verifying Playwright browsers..."
+python3 -c "
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    browser.close()
+print('✅ Playwright browsers installed and working')
+" || { echo "⚠️ Playwright browsers not working - scraping will fail"; }
 
 curl -s http://127.0.0.1:8000/health | jq . || { echo "❌ Health check failed!"; exit 1; }
 
