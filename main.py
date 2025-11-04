@@ -769,10 +769,30 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                         logger.info(f"📝 Current status: {camp.status}, current topics: {camp.topics}")
                         
                         # Check if we have scraped data before marking as ready
-                        data_count = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).count()
-                        logger.info(f"📝 Scraped data rows in DB: {data_count}")
+                        # IMPORTANT: Only count valid scraped data (exclude error/placeholder rows)
+                        all_rows = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).all()
+                        valid_data_count = 0
+                        valid_text_count = 0
+                        error_count = 0
                         
-                        if data_count > 0:
+                        for row in all_rows:
+                            if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
+                                error_count += 1
+                                logger.debug(f"⚠️ Skipping error/placeholder row: {row.source_url}")
+                            else:
+                                # Valid scraped data - check if it has meaningful content
+                                if row.source_url and row.extracted_text and len(row.extracted_text.strip()) > 10:
+                                    valid_data_count += 1
+                                    valid_text_count += 1
+                                    logger.debug(f"✅ Valid data row: {row.source_url} ({len(row.extracted_text)} chars)")
+                                elif row.source_url:
+                                    # Has URL but no/minimal text (might be a valid page with no extractable text)
+                                    valid_data_count += 1
+                                    logger.debug(f"⚠️ Data row with URL but minimal text: {row.source_url}")
+                        
+                        logger.info(f"📊 Data validation: {valid_data_count} valid rows, {valid_text_count} with text, {error_count} error/placeholder rows")
+                        
+                        if valid_data_count > 0:
                             # Store coarse topics from keywords as a ready signal
                             if (data.keywords or []) and not camp.topics:
                                 camp.topics = ",".join((data.keywords or [])[:10])
@@ -782,7 +802,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             camp.status = "READY_TO_ACTIVATE"
                             camp.updated_at = datetime.utcnow()
                             session.commit()
-                            logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE with {data_count} data rows")
+                            logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE with {valid_data_count} valid data rows ({valid_text_count} with text)")
                             
                             # Verify the status was saved correctly
                             session.refresh(camp)
@@ -793,7 +813,12 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                                 session.commit()
                                 logger.info(f"🔧 Force-updated campaign {cid} status to READY_TO_ACTIVATE")
                         else:
-                            logger.warning(f"⚠️ Campaign {cid} has no scraped data, keeping status as INCOMPLETE")
+                            # No valid scraped data - check if we have errors
+                            if error_count > 0:
+                                logger.error(f"❌ Campaign {cid} scraping failed: {error_count} error rows, 0 valid data rows")
+                                logger.error(f"❌ This indicates scraping did not succeed. Check logs for scraping errors.")
+                            else:
+                                logger.warning(f"⚠️ Campaign {cid} has no scraped data (no rows at all), keeping status as INCOMPLETE")
                             camp.status = "INCOMPLETE"
                             camp.updated_at = datetime.utcnow()
                             session.commit()
