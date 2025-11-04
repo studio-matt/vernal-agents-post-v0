@@ -20,11 +20,27 @@ except ImportError:
     logger.error("ddgs package not available. Install with: pip install ddgs")
     DDGS = None
 
-try:
-    from playwright.sync_api import sync_playwright, Browser, Page
-except ImportError:
-    logging.warning("playwright not available - scraping will be disabled")
-    sync_playwright = None
+# Dynamic import to allow reloading after installation
+sync_playwright = None
+Browser = None
+Page = None
+
+def _reload_playwright():
+    """Reload Playwright imports - useful after installation"""
+    global sync_playwright, Browser, Page
+    try:
+        from playwright.sync_api import sync_playwright, Browser, Page
+        logger.info("✅ Playwright imported successfully")
+        return True
+    except ImportError:
+        logger.warning("playwright not available - scraping will be disabled")
+        sync_playwright = None
+        Browser = None
+        Page = None
+        return False
+
+# Try initial import
+_reload_playwright()
 
 logger = logging.getLogger(__name__)
 
@@ -174,14 +190,17 @@ def scrape_with_playwright(
         - links: List of extracted links (if include_links=True)
         - error: Error message if scraping failed
     """
+    # Try to reload Playwright if not available (in case it was installed after module import)
     if sync_playwright is None:
-        return {
-            "text": "",
-            "html": None,
-            "images": [],
-            "links": [],
-            "error": "Playwright not available"
-        }
+        logger.info("🔄 Attempting to reload Playwright...")
+        if not _reload_playwright():
+            return {
+                "text": "",
+                "html": None,
+                "images": [],
+                "links": [],
+                "error": "Playwright not available - install with: pip install playwright && playwright install chromium"
+            }
     
     result = {
         "text": "",
