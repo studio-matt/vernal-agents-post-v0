@@ -942,13 +942,37 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         logger.info(f"🔍 Research endpoint: Found {len(rows)} rows for campaign {campaign_id}")
         urls = []
         texts = []
-        for r in rows:
-            if r.source_url and r.source_url not in ("error:no_results", "error:scrape_failed", "error:module_import_failed", "placeholder:no_data"):
-                urls.append(r.source_url)
-            if r.extracted_text and len(r.extracted_text.strip()) > 10:
-                texts.append(r.extracted_text)
+        errors = []  # Collect error diagnostics
+        error_meta = []  # Collect error metadata
         
-        logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs and {len(texts)} text samples")
+        for r in rows:
+            # Check if this is an error/placeholder row
+            is_error = r.source_url and r.source_url.startswith(("error:", "placeholder:"))
+            
+            if is_error:
+                # Extract error information
+                error_info = {
+                    "type": r.source_url,
+                    "message": r.extracted_text or "Unknown error",
+                    "fetched_at": r.fetched_at.isoformat() if r.fetched_at else None
+                }
+                # Try to parse meta_json for additional error details
+                if r.meta_json:
+                    try:
+                        meta = json.loads(r.meta_json)
+                        error_info["meta"] = meta
+                    except:
+                        pass
+                errors.append(error_info)
+                logger.warning(f"⚠️ Found error row: {r.source_url} - {r.extracted_text[:100] if r.extracted_text else 'No message'}")
+            else:
+                # Valid scraped data
+                if r.source_url:
+                    urls.append(r.source_url)
+                if r.extracted_text and len(r.extracted_text.strip()) > 10:
+                    texts.append(r.extracted_text)
+        
+        logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs, {len(texts)} text samples, {len(errors)} error rows")
 
         # Build simple word frequency
         stop = set(
@@ -1027,6 +1051,14 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             "topics": topics,
             "entities": entities,
             "total_raw": len(texts),
+            "diagnostics": {
+                "total_rows": len(rows),
+                "valid_urls": len(urls),
+                "valid_texts": len(texts),
+                "errors": errors,
+                "has_errors": len(errors) > 0,
+                "has_data": len(urls) > 0 or len(texts) > 0
+            }
         }
     except Exception as e:
         import traceback
