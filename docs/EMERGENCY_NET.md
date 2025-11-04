@@ -806,6 +806,9 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | Service won't start     | Port conflict        | Kill processes on port 8000 |
 | **JWT creation error**  | **expires_delta param** | **Remove expires_delta from create_access_token** |
 | **OTP verification fails** | **Missing DB table** | **Check otp table exists and accessible** |
+| **Campaign status reverts from READY_TO_ACTIVATE to INCOMPLETE** | **Scraping failed, only error rows saved** | **Check backend logs for scraping errors** |
+| **Campaign shows READY_TO_ACTIVATE but no data in frontend** | **Only error/placeholder rows in database** | **Check backend logs: `sudo journalctl -u vernal-agents -f \| grep scraping`** |
+| **Scraping returns 0 results** | **Playwright/DuckDuckGo unavailable or keywords invalid** | **Check logs for `❌ CRITICAL: Scraping returned 0 results`** |
 
 ---
 
@@ -817,6 +820,178 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | **JWT "Invalid credentials"** | **User not verified** | **Set `is_verified = 1` or complete OTP verification** |
 | **Frontend 401 errors** | **Token expired/not stored** | **Log out and log back in, check user verification** |
 | **Database delete fails** | **Foreign key constraints** | **Delete related records first, or disable FK checks** |
+
+---
+
+## 🚨 CRITICAL: Campaign Status & Scraping Validation (v13)
+
+### **THE #1 CAUSE OF FALSE POSITIVE READY_TO_ACTIVATE STATUS**
+
+**PROBLEM:** Campaigns show as `READY_TO_ACTIVATE` but have no actual scraped data, then revert to `INCOMPLETE`.
+
+**ROOT CAUSE:** Backend was counting error/placeholder rows (`error:no_results`, `error:scrape_failed`, `placeholder:no_data`) as valid scraped data.
+
+**SYMPTOMS:**
+- Campaign completes and shows `READY_TO_ACTIVATE` status
+- Few moments later, status reverts to `INCOMPLETE`
+- Data tab shows empty/blank
+- Frontend polls for data but gets nothing
+- Backend logs show `📊 Data validation: 0 valid rows, 0 with text, X error/placeholder rows`
+
+### **MANDATORY VALIDATION LOGIC**
+
+**Campaigns are only marked as `READY_TO_ACTIVATE` if:**
+1. ✅ Has valid scraped data rows (non-error URLs with text >10 chars)
+2. ✅ Excludes error rows (`error:*` URLs)
+3. ✅ Excludes placeholder rows (`placeholder:*` URLs)
+4. ✅ Validates `extracted_text` has meaningful content
+
+**Backend code (main.py) now:**
+```python
+# Only count valid scraped data (exclude error/placeholder rows)
+all_rows = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).all()
+valid_data_count = 0
+error_count = 0
+
+for row in all_rows:
+    if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
+        error_count += 1  # Skip error/placeholder rows
+    else:
+        # Valid scraped data - check if it has meaningful content
+        if row.source_url and row.extracted_text and len(row.extracted_text.strip()) > 10:
+            valid_data_count += 1  # Only count rows with actual content
+
+if valid_data_count > 0:
+    camp.status = "READY_TO_ACTIVATE"  # ✅ Only if valid data exists
+else:
+    camp.status = "INCOMPLETE"  # ❌ No valid data = incomplete
+```
+
+### **ENHANCED SCRAPING DIAGNOSTICS**
+
+**Backend now logs comprehensive scraping diagnostics:**
+
+**Check logs for scraping status:**
+```bash
+sudo journalctl -u vernal-agents -f | grep -E "scraping|CRITICAL|Summary"
+```
+
+**Expected log patterns:**
+- ✅ `✅ Web scraping completed: X pages scraped`
+- ✅ `📊 Summary: X successful, Y errors, Z total chars`
+- ❌ `❌ CRITICAL: Scraping returned 0 results` - Indicates scraping didn't run
+- ❌ `❌ CRITICAL: All X scraping attempts failed!` - All URLs returned errors
+
+**Diagnostic log entries:**
+```
+🚀 Starting web scraping for campaign {cid}
+📋 Parameters: keywords=[...], urls=[...], depth=1, max_pages=10
+🚀 Calling scrape_campaign_data with: keywords=[...], urls=[...], query='...'
+✅ Web scraping completed: X pages scraped
+📊 Scraping results breakdown:
+  [1] ✅ https://example.com: 1234 chars
+  [2] ❌ https://bad-url.com: ERROR - Connection timeout
+📊 Summary: X successful, Y errors, Z total chars
+📊 Data validation: X valid rows, Y with text, Z error/placeholder rows
+```
+
+**If scraping fails:**
+1. **Check Playwright availability:** `python -m playwright --version`
+2. **Check DuckDuckGo search:** Look for `ddgs package not available` in logs
+3. **Check network connectivity:** URLs might be blocked or unreachable
+4. **Check keywords:** Invalid or empty keywords return no search results
+
+### **KEYWORD EXPANSION FOR BETTER SEARCH RELEVANCE**
+
+**PROBLEM:** Abbreviations (e.g., "WW2", "AI", "ML") return irrelevant search results.
+
+**SOLUTION:** Keyword expansion system expands common abbreviations before searching.
+
+**Features:**
+- **Manual dictionary:** Fast, free expansions for common abbreviations (WW2, AI, ML, etc.)
+- **LLM-based expansion:** Uses `gpt-4o-mini` for unknown abbreviations (if `OPENAI_API_KEY` available)
+- **Result caching:** Avoids repeated API calls for same abbreviations
+- **Graceful fallback:** Uses original keyword if LLM unavailable
+
+**How it works:**
+1. Check manual dictionary first (instant, free)
+2. If not found and keyword looks like abbreviation (all caps, 2-10 chars), try LLM
+3. Cache LLM results to avoid duplicate API calls
+4. Fall back to original keyword if all else fails
+
+**Adding new abbreviations:**
+Edit `backend-repo/keyword_expansions.py`:
+```python
+HISTORICAL = {
+    "WW2": "World War 2",
+    "WWII": "World War 2",
+    # Add more here...
+}
+
+TECHNOLOGY = {
+    "AI": "artificial intelligence",
+    "ML": "machine learning",
+    # Add more here...
+}
+```
+
+**LLM expansion:**
+- Only runs if `OPENAI_API_KEY` is set
+- Only expands abbreviations (all caps, 2-10 chars, no spaces)
+- Very low cost (~$0.0001 per expansion, cached after first use)
+- Uses `gpt-4o-mini` for fast, cheap expansion
+
+### **TROUBLESHOOTING CAMPAIGN STATUS ISSUES**
+
+**Campaign stuck in INCOMPLETE:**
+```bash
+# 1. Check backend logs for scraping errors
+sudo journalctl -u vernal-agents -f | grep -E "campaign.*INCOMPLETE|scraping.*failed"
+
+# 2. Check if valid data exists in database
+mysql -h 50.6.198.220 -u [user] -p [database] -e "
+  SELECT 
+    campaign_id,
+    source_url,
+    CASE 
+      WHEN source_url LIKE 'error:%' THEN 'ERROR'
+      WHEN source_url LIKE 'placeholder:%' THEN 'PLACEHOLDER'
+      ELSE 'VALID'
+    END as row_type,
+    LENGTH(extracted_text) as text_length
+  FROM campaign_raw_data
+  WHERE campaign_id = 'YOUR_CAMPAIGN_ID';
+"
+
+# 3. Check campaign status
+mysql -h 50.6.198.220 -u [user] -p [database] -e "
+  SELECT campaign_id, campaign_name, status, topics
+  FROM campaign
+  WHERE campaign_id = 'YOUR_CAMPAIGN_ID';
+"
+```
+
+**Campaign shows READY_TO_ACTIVATE but no data:**
+- Check if only error rows exist: `source_url LIKE 'error:%'`
+- Check backend logs for validation summary: `📊 Data validation: 0 valid rows, X error rows`
+- Verify scraping actually ran: Look for `✅ Web scraping completed` in logs
+
+**All scraping attempts fail:**
+- **Playwright not available:** Run `python -m playwright install chromium`
+- **DuckDuckGo search failing:** Check `ddgs` package is installed: `pip list | grep ddgs`
+- **Network issues:** URLs might be blocked or unreachable
+- **Invalid keywords:** Empty or malformed keywords return no results
+
+### **VALIDATION CHECKLIST**
+
+Before marking a campaign as `READY_TO_ACTIVATE`, verify:
+- [ ] At least one row with valid `source_url` (not starting with `error:` or `placeholder:`)
+- [ ] At least one row with `extracted_text` >10 characters
+- [ ] Backend logs show `📊 Data validation: X valid rows, Y with text, Z error rows` where X > 0
+- [ ] Backend logs show `✅ Campaign {cid} marked as READY_TO_ACTIVATE with X valid data rows`
+- [ ] Frontend can fetch data from `/campaigns/{campaign_id}/research` endpoint
+
+**This prevents false-positive `READY_TO_ACTIVATE` status and ensures campaigns only show as ready when they actually have scrapable content.**
 
 ---
 
