@@ -9,11 +9,10 @@
 
 **Option 2: From Database**
 ```bash
-# SSH to backend server
-ssh ubuntu@18.235.104.132
-
 # Get most recent campaign ID
-mysql -h 50.6.198.220 -u [DB_USER] -p[DB_PASSWORD] [DB_NAME] -e "
+cd /home/ubuntu/vernal-agents-post-v0
+source .env 2>/dev/null || true
+mysql -h "${DB_HOST}" -u "${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" -e "
   SELECT campaign_id, campaign_name, status, created_at 
   FROM campaign 
   ORDER BY created_at DESC 
@@ -23,7 +22,6 @@ mysql -h 50.6.198.220 -u [DB_USER] -p[DB_PASSWORD] [DB_NAME] -e "
 
 **Option 3: From Backend Logs**
 ```bash
-# SSH to backend server
 sudo journalctl -u vernal-agents --since "1 hour ago" | \
   grep -E "campaign.*marked|Campaign.*created" | \
   tail -10
@@ -32,9 +30,6 @@ sudo journalctl -u vernal-agents --since "1 hour ago" | \
 ## Run Diagnostic Script
 
 ```bash
-# SSH to backend server
-ssh ubuntu@18.235.104.132
-
 # Navigate to repo
 cd /home/ubuntu/vernal-agents-post-v0
 
@@ -70,6 +65,7 @@ git pull origin main
 cd /home/ubuntu/vernal-agents-post-v0
 source venv/bin/activate
 python -m playwright install chromium
+sudo systemctl restart vernal-agents
 ```
 
 ### If DuckDuckGo Test Fails:
@@ -77,6 +73,7 @@ python -m playwright install chromium
 cd /home/ubuntu/vernal-agents-post-v0
 source venv/bin/activate
 pip install --upgrade duckduckgo-search
+sudo systemctl restart vernal-agents
 ```
 
 ### If Database Shows 0 Rows:

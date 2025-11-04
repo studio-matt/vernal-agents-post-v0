@@ -3,9 +3,6 @@
 ## Quick Command (Copy & Paste)
 
 ```bash
-# SSH to backend server
-ssh ubuntu@18.235.104.132
-
 # Navigate to repo and pull latest
 cd /home/ubuntu/vernal-agents-post-v0
 git pull origin main
@@ -39,9 +36,6 @@ The script will output:
 If you can't run the full script right now, at least check the database:
 
 ```bash
-# SSH to backend server
-ssh ubuntu@18.235.104.132
-
 # Load environment (if needed)
 cd /home/ubuntu/vernal-agents-post-v0
 source .env 2>/dev/null || true
