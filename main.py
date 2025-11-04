@@ -712,8 +712,16 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                                 meta_json=json.dumps(meta)
                             )
                             session.add(row)
+                            # Flush to get DB ID immediately for logging
+                            session.flush()
                             created += 1
-                            logger.debug(f"✅ Stored scraped data for: {url} ({len(text)} chars)")
+                            
+                            # Enhanced per-URL logging with DB ID
+                            text_len = len(text) if text else 0
+                            if error:
+                                logger.warning(f"⚠️ Scraped {url} (DB ID: {row.id}): ERROR - {error}")
+                            else:
+                                logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars, {len(links)} links, {len(images)} images")
                         
                         if created == 0:
                             logger.warning(f"⚠️ Web scraping returned no results for campaign {cid}")
