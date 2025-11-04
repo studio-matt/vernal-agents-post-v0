@@ -392,9 +392,11 @@ bash scripts/bulletproof_deploy_backend.sh
 3. ✅ Deletes old code completely
 4. ✅ Clones fresh from GitHub
 5. ✅ Sets up venv with chunked pip installation (prevents SIGKILL)
-6. ✅ **MANDATORY: Verifies critical packages are importable** (prevents silent failures)
-7. ✅ **MANDATORY: Verifies auth router can load** (prevents 404 regressions)
-8. ✅ Restores `.env` from backup
+6. ✅ **MANDATORY: Installs Playwright browsers** (`playwright install chromium`)
+7. ✅ **MANDATORY: Verifies critical packages are importable** (prevents silent failures)
+8. ✅ **MANDATORY: Verifies Playwright browsers work** (prevents scraping failures)
+9. ✅ **MANDATORY: Verifies auth router can load** (prevents 404 regressions)
+10. ✅ Restores `.env` from backup
 9. ✅ Validates required environment variables (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME)
 10. ✅ Validates no placeholder values (myuser, localhost, dummy, mypassword)
 11. ✅ Configures systemd service
@@ -407,9 +409,19 @@ bash scripts/bulletproof_deploy_backend.sh
 The script now verifies that all critical packages can actually be imported:
 - Core: `fastapi`, `uvicorn`, `sqlalchemy`, `pymysql`, `pydantic`
 - Auth: `email_validator` (required for `/auth/login` to work)
+- Auth: `passlib`, `jose` (required for password hashing and JWT tokens)
 - Scraping: `ddgs` (required for web scraping)
+- Scraping: `playwright` (required for web scraping - Python package)
 - Research: `nltk` (required for research endpoint)
 - Local modules: `database`, `models`
+
+**CRITICAL: Playwright Browser Installation (Step 7)**
+- Playwright requires TWO steps:
+  1. ✅ Python package: `pip install playwright` (included in requirements.txt)
+  2. ✅ Browser binaries: `playwright install chromium` (MUST run separately)
+- Without browser binaries, scraping fails with "Playwright not available" error
+- Deployment script now installs browsers and verifies they work
+- This prevents the regression where scraping fails silently
 
 **If any package fails to import, deployment EXITS with error code 1.**
 This prevents the regression where packages were "installed" but couldn't be imported, causing 404 errors.
@@ -455,6 +467,15 @@ python3 validate_dependencies.py || {
 source venv/bin/activate
 pip install -r requirements.txt --no-cache-dir
 ```
+
+**CRITICAL: Install Playwright Browsers (REQUIRED for web scraping)**
+```bash
+# Playwright requires TWO steps:
+# 1. Python package (already installed via requirements.txt)
+# 2. Browser binaries (MUST run separately)
+playwright install chromium
+```
+**Without browser binaries, scraping fails with "Playwright not available" error.**
 
 **Note:** If installing new dependencies (e.g., spaCy), also download required models:
 ```bash
