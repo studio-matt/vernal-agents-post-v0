@@ -799,6 +799,9 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     valid_count = 0
                     error_count = 0
                     
+                    total_text_size = 0
+                    max_text_size = 0
+                    
                     for row in all_saved_rows:
                         if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
                             error_count += 1
@@ -806,12 +809,22 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             # Valid row - check if it has meaningful text
                             if row.extracted_text and len(row.extracted_text.strip()) > 10:
                                 valid_count += 1
-                                logger.debug(f"✅ Valid data row: {row.source_url} ({len(row.extracted_text)} chars)")
+                                text_size = len(row.extracted_text)
+                                total_text_size += text_size
+                                max_text_size = max(max_text_size, text_size)
+                                logger.debug(f"✅ Valid data row: {row.source_url} ({text_size} chars)")
+                    
+                    avg_text_size = total_text_size // valid_count if valid_count > 0 else 0
                     
                     logger.info(f"📊 Post-commit verification for campaign {cid}:")
                     logger.info(f"   Total rows: {total_count}")
                     logger.info(f"   Valid rows (with text): {valid_count}")
                     logger.info(f"   Error/placeholder rows: {error_count}")
+                    logger.info(f"   Storage: {total_text_size:,} total chars, {avg_text_size:,} avg, {max_text_size:,} max")
+                    
+                    # Warn if approaching MEDIUMTEXT limit
+                    if max_text_size > 15_000_000:
+                        logger.warning(f"⚠️ Large page detected: {max_text_size:,} chars (close to MEDIUMTEXT 16MB limit)")
                     
                     # CRITICAL: If only error rows exist, log a warning
                     if valid_count == 0 and error_count > 0:
