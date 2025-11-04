@@ -746,17 +746,31 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                 # Mark campaign ready in DB
                 logger.info(f"📝 Step 6: Finalizing campaign {cid}")
                 try:
+                    # Use a fresh query to ensure we get the latest campaign state
                     camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
                     if camp:
                         logger.info(f"📝 Found campaign {cid} in database, updating status...")
-                        # Store coarse topics from keywords as a ready signal
-                        if (data.keywords or []) and not camp.topics:
-                            camp.topics = ",".join((data.keywords or [])[:10])
-                            logger.info(f"📝 Set topics to: {camp.topics}")
-                        camp.status = "READY_TO_ACTIVATE"
-                        camp.updated_at = datetime.utcnow()
-                        session.commit()
-                        logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE")
+                        logger.info(f"📝 Current status: {camp.status}, current topics: {camp.topics}")
+                        
+                        # Check if we have scraped data before marking as ready
+                        data_count = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).count()
+                        logger.info(f"📝 Scraped data rows in DB: {data_count}")
+                        
+                        if data_count > 0:
+                            # Store coarse topics from keywords as a ready signal
+                            if (data.keywords or []) and not camp.topics:
+                                camp.topics = ",".join((data.keywords or [])[:10])
+                                logger.info(f"📝 Set topics to: {camp.topics}")
+                            
+                            camp.status = "READY_TO_ACTIVATE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE with {data_count} data rows")
+                        else:
+                            logger.warning(f"⚠️ Campaign {cid} has no scraped data, keeping status as INCOMPLETE")
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
                     else:
                         logger.warning(f"⚠️ Campaign {cid} not found in database when trying to finalize")
                 except Exception as finalize_err:
@@ -764,6 +778,16 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     import traceback
                     logger.error(traceback.format_exc())
                     session.rollback()
+                    # Try to set status to INCOMPLETE as fallback
+                    try:
+                        camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                        if camp:
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.info(f"⚠️ Set campaign {cid} to INCOMPLETE due to finalization error")
+                    except:
+                        pass
                     
                 logger.info(f"✅ Background analysis completed successfully for campaign {cid}")
             except Exception as e:
@@ -915,13 +939,16 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         )
 
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+        logger.info(f"🔍 Research endpoint: Found {len(rows)} rows for campaign {campaign_id}")
         urls = []
         texts = []
         for r in rows:
-            if r.source_url:
+            if r.source_url and r.source_url not in ("error:no_results", "error:scrape_failed", "error:module_import_failed", "placeholder:no_data"):
                 urls.append(r.source_url)
-            if r.extracted_text:
+            if r.extracted_text and len(r.extracted_text.strip()) > 10:
                 texts.append(r.extracted_text)
+        
+        logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs and {len(texts)} text samples")
 
         # Build simple word frequency
         stop = set(
