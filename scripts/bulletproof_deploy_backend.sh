@@ -63,10 +63,10 @@ echo "📦 Installing core dependencies..."
 pip install fastapi uvicorn sqlalchemy pymysql python-multipart python-dotenv pydantic --no-cache-dir --progress-bar off || { echo "❌ Core dependencies failed!"; exit 1; }
 
 echo "📦 Installing AI/ML dependencies (this may take 5-10 minutes)..."
-pip install openai anthropic transformers torch --no-cache-dir --progress-bar off || { echo "⚠️ Some AI packages failed, continuing..." || true; }
+pip install openai anthropic transformers torch --no-cache-dir --progress-bar off || { echo "❌ AI packages installation FAILED!"; exit 1; }
 
 echo "📦 Installing remaining dependencies..."
-pip install -r requirements.txt --no-cache-dir --progress-bar off || { echo "⚠️ Some packages failed to install"; }
+pip install -r requirements.txt --no-cache-dir --progress-bar off || { echo "❌ Package installation FAILED! Check requirements.txt for issues."; exit 1; }
 
 # 4. Restore and validate environment variables (EMERGENCY_NET.md v7)
 echo "🔐 Setting up environment..."
