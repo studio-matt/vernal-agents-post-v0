@@ -717,17 +717,30 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             # If truncation occurs, it's likely mostly noise (ads, scripts, duplicate content)
                             MAX_TEXT_SIZE = 16_777_000  # Leave small buffer (≈16 MB)
                             
-                            # Smart truncation: Keep first portion (usually most important content)
-                            # If text is too large, keep the beginning and log warning
-                            if text and len(text) > MAX_TEXT_SIZE:
-                                safe_text = text[:MAX_TEXT_SIZE]
-                                logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
-                                logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
-                                meta["text_truncated"] = True
-                                meta["original_length"] = len(text)
-                                meta["truncation_reason"] = "exceeded_mediumtext_limit"
+                            # Sanitize extracted_text to remove emojis/unicode that can't be stored in utf8mb3
+                            # Keep only ASCII + basic UTF-8, remove 4-byte UTF-8 (emojis)
+                            safe_text = None
+                            if text:
+                                try:
+                                    # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
+                                    # Keep only 1-3 byte UTF-8 characters (basic unicode)
+                                    safe_text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                                    # Remove any remaining problematic characters (emojis are >0xFFFF)
+                                    safe_text = ''.join(char for char in safe_text if ord(char) < 0x10000)
+                                except Exception as encode_err:
+                                    logger.warning(f"⚠️ Error encoding extracted_text for {url}: {encode_err}, using empty string")
+                                    safe_text = ""
+                                
+                                # Smart truncation: Keep first portion if too large
+                                if len(safe_text) > MAX_TEXT_SIZE:
+                                    safe_text = safe_text[:MAX_TEXT_SIZE]
+                                    logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
+                                    logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
+                                    meta["text_truncated"] = True
+                                    meta["original_length"] = len(text)
+                                    meta["truncation_reason"] = "exceeded_mediumtext_limit"
                             else:
-                                safe_text = text
+                                safe_text = ""
                             
                             # Sanitize HTML to remove emojis/unicode that can't be stored in utf8mb3
                             # Keep only ASCII + basic UTF-8, remove 4-byte UTF-8 (emojis)
