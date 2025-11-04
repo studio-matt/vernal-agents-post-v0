@@ -68,18 +68,40 @@ fi
 echo ""
 echo "📋 Step 4: Check what keywords were used for THIS campaign..."
 echo "---"
-sudo journalctl -u vernal-agents $TIME_WINDOW 2>/dev/null | \
+# Try multiple time windows to find logs
+echo "Searching recent logs (last 2 hours)..."
+RECENT_LOGS=$(sudo journalctl -u vernal-agents --since "2 hours ago" 2>/dev/null | \
   grep -E "$CAMPAIGN_ID" | \
-  grep -E "CRITICAL.*Keywords|keywords received|keywords being used|Searching DuckDuckGo|DuckDuckGo returned|Starting web scraping" | \
-  tail -20
+  grep -E "CRITICAL.*Keywords|keywords received|keywords being used|Searching DuckDuckGo|DuckDuckGo returned|Starting web scraping|CRITICAL: Search input" | \
+  tail -30)
 
-if [ $? -ne 0 ] || [ -z "$(sudo journalctl -u vernal-agents $TIME_WINDOW 2>/dev/null | grep -E "$CAMPAIGN_ID")" ]; then
-    echo "⚠️ No logs found for this campaign in that time window"
-    echo "   Trying last 7 days..."
-    sudo journalctl -u vernal-agents --since "7 days ago" 2>/dev/null | \
-      grep -E "$CAMPAIGN_ID" | \
-      grep -E "CRITICAL.*Keywords|keywords received|keywords being used" | \
-      tail -10
+if [ -n "$RECENT_LOGS" ]; then
+    echo "$RECENT_LOGS"
+else
+    echo "⚠️ No logs found in last 2 hours"
+    echo "   Searching by date: $SCRAPE_DATE..."
+    if [ -n "$SCRAPE_DATE" ] && [ "$SCRAPE_DATE" != "NULL" ]; then
+        DATE_LOGS=$(sudo journalctl -u vernal-agents --since "$SCRAPE_DATE" --until "$(date -d "$SCRAPE_DATE +1 day" +%Y-%m-%d 2>/dev/null || echo "$(date +%Y-%m-%d)")" 2>/dev/null | \
+          grep -E "$CAMPAIGN_ID" | \
+          grep -E "CRITICAL.*Keywords|keywords received|keywords being used|Searching DuckDuckGo|DuckDuckGo returned" | \
+          tail -20)
+        if [ -n "$DATE_LOGS" ]; then
+            echo "$DATE_LOGS"
+        else
+            echo "   ⚠️ No logs found for that date either"
+            echo "   Trying last 24 hours..."
+            sudo journalctl -u vernal-agents --since "24 hours ago" 2>/dev/null | \
+              grep -E "$CAMPAIGN_ID" | \
+              grep -E "CRITICAL.*Keywords|keywords received|keywords being used|Searching DuckDuckGo|DuckDuckGo returned" | \
+              tail -15
+        fi
+    else
+        echo "   Trying last 24 hours..."
+        sudo journalctl -u vernal-agents --since "24 hours ago" 2>/dev/null | \
+          grep -E "$CAMPAIGN_ID" | \
+          grep -E "CRITICAL.*Keywords|keywords received|keywords being used|Searching DuckDuckGo|DuckDuckGo returned" | \
+          tail -15
+    fi
 fi
 
 echo ""
