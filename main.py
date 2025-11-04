@@ -636,6 +636,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     logger.info(f"📋 Parameters: keywords={keywords}, urls={urls}, depth={depth}, max_pages={max_pages}, include_images={include_images}, include_links={include_links}")
                     
                     try:
+                        logger.info(f"🚀 Calling scrape_campaign_data with: keywords={keywords}, urls={urls}, query={data.query or ''}, depth={depth}, max_pages={max_pages}")
                         scraped_results = scrape_campaign_data(
                             keywords=keywords,
                             urls=urls,
@@ -650,18 +651,33 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                         
                         # Log detailed results for diagnostics
                         if len(scraped_results) == 0:
-                            logger.warning(f"⚠️ Scraping returned 0 results for campaign {cid}")
-                            logger.warning(f"⚠️ Keywords used: {keywords}")
-                            logger.warning(f"⚠️ URLs provided: {urls}")
+                            logger.error(f"❌ CRITICAL: Scraping returned 0 results for campaign {cid}")
+                            logger.error(f"❌ Keywords used: {keywords}")
+                            logger.error(f"❌ URLs provided: {urls}")
+                            logger.error(f"❌ Query: {data.query or '(empty)'}")
+                            logger.error(f"❌ This likely means scraping failed - check Playwright/DuckDuckGo availability")
                         else:
                             logger.info(f"📊 Scraping results breakdown:")
-                            for i, result in enumerate(scraped_results[:5]):  # Log first 5
+                            success_count = 0
+                            error_count = 0
+                            total_text_length = 0
+                            for i, result in enumerate(scraped_results):
                                 url = result.get("url", "unknown")
-                                text_len = len(result.get("text", ""))
+                                text = result.get("text", "")
+                                text_len = len(text)
                                 has_error = result.get("error") is not None
-                                logger.info(f"  [{i+1}] {url}: {text_len} chars, error={has_error}")
                                 if has_error:
-                                    logger.warning(f"      Error: {result.get('error')}")
+                                    error_count += 1
+                                    logger.warning(f"  [{i+1}] ❌ {url}: ERROR - {result.get('error')}")
+                                else:
+                                    success_count += 1
+                                    total_text_length += text_len
+                                    if i < 5:  # Log first 5 successful results
+                                        logger.info(f"  [{i+1}] ✅ {url}: {text_len} chars")
+                            logger.info(f"📊 Summary: {success_count} successful, {error_count} errors, {total_text_length} total chars")
+                            
+                            if success_count == 0:
+                                logger.error(f"❌ CRITICAL: All {len(scraped_results)} scraping attempts failed!")
                         
                         # Store scraped data in database
                         for result in scraped_results:
