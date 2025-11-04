@@ -732,15 +732,28 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     except Exception as scrape_error:
                         logger.error(f"❌ Web scraping failed for campaign {cid}: {scrape_error}")
                         import traceback
-                        logger.error(traceback.format_exc())
-                        # Create error row
+                        error_trace = traceback.format_exc()
+                        logger.error(f"❌ Traceback: {error_trace}")
+                        
+                        # Check if this is a missing dependency error
+                        error_msg = str(scrape_error)
+                        if "No module named" in error_msg or "ImportError" in error_msg:
+                            logger.error(f"❌ CRITICAL: Missing dependency detected: {error_msg}")
+                            logger.error(f"❌ This will cause silent failures. Install missing packages immediately.")
+                        
+                        # Create error row with full error details
                         row = CampaignRawData(
                             campaign_id=cid,
                             source_url="error:scrape_failed",
                             fetched_at=now,
                             raw_html=None,
-                            extracted_text=f"Web scraping error: {str(scrape_error)}",
-                            meta_json=json.dumps({"type": "error", "reason": "scrape_exception", "error": str(scrape_error)})
+                            extracted_text=f"Web scraping error: {error_msg}",
+                            meta_json=json.dumps({
+                                "type": "error", 
+                                "reason": "scrape_exception", 
+                                "error": error_msg,
+                                "traceback": error_trace[:500]  # Store first 500 chars of traceback
+                            })
                         )
                         session.add(row)
                         created = 1
@@ -750,9 +763,43 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                     session.commit()
                     logger.info(f"✅ Successfully committed {created} rows to database for campaign {cid}")
                     
-                    # Verify data was saved
-                    verify_count = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).count()
-                    logger.info(f"✅ Verification: {verify_count} rows now exist in database for campaign {cid}")
+                    # CRITICAL: Verify data was saved and check for valid (non-error) rows
+                    all_saved_rows = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).all()
+                    total_count = len(all_saved_rows)
+                    valid_count = 0
+                    error_count = 0
+                    
+                    for row in all_saved_rows:
+                        if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
+                            error_count += 1
+                        else:
+                            # Valid row - check if it has meaningful text
+                            if row.extracted_text and len(row.extracted_text.strip()) > 10:
+                                valid_count += 1
+                                logger.debug(f"✅ Valid data row: {row.source_url} ({len(row.extracted_text)} chars)")
+                    
+                    logger.info(f"📊 Post-commit verification for campaign {cid}:")
+                    logger.info(f"   Total rows: {total_count}")
+                    logger.info(f"   Valid rows (with text): {valid_count}")
+                    logger.info(f"   Error/placeholder rows: {error_count}")
+                    
+                    # CRITICAL: If only error rows exist, log a warning
+                    if valid_count == 0 and error_count > 0:
+                        logger.error(f"❌ CRITICAL: Campaign {cid} has {error_count} error rows but 0 valid data rows!")
+                        logger.error(f"❌ This indicates scraping failed. Check logs above for ImportError or missing dependencies.")
+                        # Extract error messages for diagnostics
+                        error_messages = []
+                        for row in all_saved_rows:
+                            if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
+                                error_text = row.extracted_text or row.source_url
+                                if error_text not in error_messages:
+                                    error_messages.append(error_text[:200])
+                        if error_messages:
+                            logger.error(f"❌ Error details from saved rows:")
+                            for i, msg in enumerate(error_messages[:5], 1):
+                                logger.error(f"   [{i}] {msg}")
+                    elif valid_count == 0:
+                        logger.warning(f"⚠️ Campaign {cid} has no rows saved at all - scraping may not have run")
                 else:
                     logger.warning(f"⚠️ No rows to commit for campaign {cid}")
 
@@ -836,11 +883,21 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                                 
                                 # Extract error messages from error rows for better diagnostics
                                 error_messages = []
+                                missing_deps = []
                                 for row in all_rows:
                                     if row.source_url and row.source_url.startswith(("error:", "placeholder:")):
                                         error_msg = row.extracted_text or row.source_url
                                         if error_msg not in error_messages:
                                             error_messages.append(error_msg[:200])  # Limit length
+                                        # Check for missing dependency errors
+                                        if "No module named" in error_msg or "ImportError" in error_msg:
+                                            missing_deps.append(error_msg)
+                                
+                                if missing_deps:
+                                    logger.error(f"❌ CRITICAL: Missing dependencies detected:")
+                                    for dep_error in missing_deps:
+                                        logger.error(f"   - {dep_error[:150]}")
+                                    logger.error(f"❌ Fix: Run './scripts/fix_missing_deps_now.sh' or 'pip install beautifulsoup4 gensim'")
                                 
                                 if error_messages:
                                     logger.error(f"❌ Error details from database:")
@@ -848,16 +905,23 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                                         logger.error(f"   [{i}] {msg}")
                                 
                                 logger.error(f"❌ Common causes:")
-                                logger.error(f"   1. Playwright not installed: Run 'python -m playwright install chromium'")
-                                logger.error(f"   2. DuckDuckGo search failing: Check 'ddgs' package is installed")
-                                logger.error(f"   3. Network/firewall blocking: Check server can access external URLs")
-                                logger.error(f"   4. Invalid keywords: Empty or malformed keywords return no results")
+                                logger.error(f"   1. Missing dependencies (bs4, gensim): Run 'pip install beautifulsoup4 gensim'")
+                                logger.error(f"   2. Playwright not installed: Run 'python -m playwright install chromium'")
+                                logger.error(f"   3. DuckDuckGo search failing: Check 'ddgs' package is installed")
+                                logger.error(f"   4. Network/firewall blocking: Check server can access external URLs")
+                                logger.error(f"   5. Invalid keywords: Empty or malformed keywords return no results")
+                                
+                                # Set status with diagnostic message
+                                camp.status = "INCOMPLETE"
+                                if missing_deps:
+                                    camp.description = (camp.description or "") + f"\n[ERROR: Missing dependencies - check logs]"
                             else:
                                 logger.warning(f"⚠️ Campaign {cid} has no scraped data (no rows at all), keeping status as INCOMPLETE")
                                 logger.warning(f"⚠️ This suggests scraping never ran or failed before creating any rows")
                             camp.status = "INCOMPLETE"
                             camp.updated_at = datetime.utcnow()
                             session.commit()
+                            logger.info(f"⚠️ Campaign {cid} marked as INCOMPLETE due to no valid data")
                     else:
                         logger.warning(f"⚠️ Campaign {cid} not found in database when trying to finalize")
                 except Exception as finalize_err:

@@ -11,6 +11,20 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# CRITICAL: Check for required dependencies at module load
+# Fail fast if dependencies are missing rather than silently failing during scraping
+_MISSING_DEPS = []
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    _MISSING_DEPS.append("beautifulsoup4 (bs4)")
+    logger.error("❌ CRITICAL: beautifulsoup4 (bs4) is not installed! Text/link extraction will fail.")
+    logger.error("   Install with: pip install beautifulsoup4>=4.12.3")
+
+if _MISSING_DEPS:
+    logger.error(f"❌ CRITICAL: Missing required dependencies: {', '.join(_MISSING_DEPS)}")
+    logger.error("   Scraping will fail silently. Install missing packages before proceeding.")
+
 # Use new ddgs package (duckduckgo_search is deprecated and causes warnings)
 DDGS = None
 try:
@@ -167,6 +181,10 @@ def extract_links_from_html(html: str, base_url: str, max_links: int = 10) -> Li
         List of absolute URLs
     """
     try:
+        # Check if bs4 is available (checked at module load, but double-check here)
+        if "beautifulsoup4 (bs4)" in _MISSING_DEPS:
+            raise ImportError("beautifulsoup4 (bs4) is not installed. Install with: pip install beautifulsoup4>=4.12.3")
+        
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
         links = []
