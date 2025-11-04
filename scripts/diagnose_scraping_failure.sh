@@ -145,12 +145,48 @@ except Exception as e:
 EOF
 
 echo ""
+
+# Step 6: Test scraping dependencies (beautifulsoup4 and gensim)
+echo "📋 Step 6: Testing scraping dependencies..."
+echo "---"
+
+python3 <<EOF
+import sys
+errors = []
+
+# Test beautifulsoup4 (bs4)
+try:
+    from bs4 import BeautifulSoup
+    print("✅ beautifulsoup4 (bs4) installed - required for text/link extraction")
+except ImportError as e:
+    print(f"❌ beautifulsoup4 (bs4) NOT installed: {e}")
+    print("   Run: pip install beautifulsoup4>=4.12.3")
+    errors.append("beautifulsoup4")
+
+# Test gensim
+try:
+    import gensim
+    print("✅ gensim installed - required for topic processing")
+except ImportError as e:
+    print(f"❌ gensim NOT installed: {e}")
+    print("   Run: pip install gensim>=4.3.2")
+    errors.append("gensim")
+
+if errors:
+    print(f"\n⚠️  Missing dependencies: {', '.join(errors)}")
+    print("   Run: ./scripts/fix_missing_dependencies.sh")
+    sys.exit(1)
+else:
+    print("\n✅ All scraping dependencies installed")
+EOF
+
+echo ""
 echo "=========================================="
 echo "✅ Diagnostic complete!"
 echo ""
 echo "Next steps:"
 echo "1. Review database results - if 0 valid_text_rows, scraping failed"
 echo "2. Check logs for specific error messages"
-echo "3. If Playwright/DuckDuckGo tests failed, fix those first"
+echo "3. If any dependencies failed, run: ./scripts/fix_missing_dependencies.sh"
 echo "4. Re-run campaign and check logs again"
 
