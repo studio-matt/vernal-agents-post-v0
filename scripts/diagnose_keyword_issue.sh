@@ -48,19 +48,36 @@ LIMIT 10;
 EOF
 
 echo ""
-echo "📋 Step 3: Check recent backend logs for keyword usage..."
+echo "📋 Step 3: Check ALL logs for this campaign (including older ones)..."
 echo "---"
-sudo journalctl -u vernal-agents --since "2 hours ago" | \
-  grep -E "$CAMPAIGN_ID|CRITICAL.*Keywords|keywords received|keywords being used|First keyword|Searching DuckDuckGo" | \
-  tail -30
+echo "Searching for when this campaign was built..."
+sudo journalctl -u vernal-agents | \
+  grep -E "$CAMPAIGN_ID.*analyze|$CAMPAIGN_ID.*Starting web scraping|$CAMPAIGN_ID.*Keywords" | \
+  tail -20
 
 echo ""
-echo "📋 Step 4: Check if 'pug' or 'looking' appears in logs..."
+echo "📋 Step 4: Check what keywords were actually used when scraping..."
 echo "---"
-sudo journalctl -u vernal-agents --since "2 hours ago" | \
-  grep -iE "pug|looking" | \
-  grep -E "$CAMPAIGN_ID|keywords|CRITICAL" | \
+sudo journalctl -u vernal-agents | \
+  grep -E "$CAMPAIGN_ID.*CRITICAL.*Keywords|$CAMPAIGN_ID.*Searching DuckDuckGo|$CAMPAIGN_ID.*DuckDuckGo returned" | \
   tail -20
+
+echo ""
+echo "📋 Step 5: Check scraped URLs to infer what was searched..."
+echo "---"
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" <<EOF
+SELECT 
+    source_url,
+    CASE 
+        WHEN source_url LIKE '%looking%' OR source_url LIKE '%Looking%' THEN 'LOOKING (TV series)'
+        WHEN source_url LIKE '%pug%' OR source_url LIKE '%Pug%' THEN 'PUG (dog)'
+        ELSE 'OTHER'
+    END as content_type,
+    fetched_at
+FROM campaign_raw_data
+WHERE campaign_id = '$CAMPAIGN_ID'
+ORDER BY fetched_at DESC;
+EOF
 
 echo ""
 echo "✅ Diagnostic complete!"
