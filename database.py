@@ -9,8 +9,22 @@ from urllib.parse import quote_plus
 from dotenv import load_dotenv
 from typing import List, Dict, Optional, Union
 from sqlalchemy.orm import joinedload
-from crewai import Agent as CrewAgent, Task as CrewTask
 from sqlalchemy.orm import Session
+
+# Lazy import for crewai - only import when needed
+CrewAgent = None
+CrewTask = None
+
+def _get_crewai_imports():
+    """Lazy import crewai - returns (CrewAgent, CrewTask) or None if not available"""
+    global CrewAgent, CrewTask
+    if CrewAgent is None and CrewTask is None:
+        try:
+            from crewai import Agent as CrewAgent, Task as CrewTask
+            return CrewAgent, CrewTask
+        except ImportError:
+            return None, None
+    return CrewAgent, CrewTask
 
 load_dotenv()
 
@@ -230,8 +244,11 @@ class DatabaseManager:
     
     
 
-def get_crewai_agent(name: str, session: Session) -> CrewAgent:
+def get_crewai_agent(name: str, session: Session):
     """Fetch an agent from the database and return a crewai.Agent object."""
+    CrewAgent, _ = _get_crewai_imports()
+    if CrewAgent is None:
+        raise ImportError("crewai is not installed. Install with: pip install crewai")
     db_agent = session.query(Agent).filter(Agent.name == name).first()
     if not db_agent:
         raise ValueError(f"Agent {name} not found in database")
@@ -246,8 +263,11 @@ def get_crewai_agent(name: str, session: Session) -> CrewAgent:
         allow_delegation=True
     )
 
-def get_crewai_task(name: str, session: Session) -> CrewTask:
+def get_crewai_task(name: str, session: Session):
     """Fetch a task from the database and return a crewai.Task object."""
+    _, CrewTask = _get_crewai_imports()
+    if CrewTask is None:
+        raise ImportError("crewai is not installed. Install with: pip install crewai")
     db_task = session.query(Task).filter(Task.name == name).first()
     if not db_task:
         raise ValueError(f"Task {name} not found in database")
