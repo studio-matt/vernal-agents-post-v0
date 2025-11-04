@@ -14,6 +14,9 @@ source venv/bin/activate
 echo "📦 Installing missing packages (ddgs, nltk, email-validator, passlib, python-jose)..."
 pip install ddgs>=9.0.0 nltk>=3.8.1 "email-validator>=2.1.0" "passlib[bcrypt]>=1.7.4" "python-jose[cryptography]>=3.3.0" --no-cache-dir
 
+echo "📦 Installing Playwright browsers (required for web scraping)..."
+playwright install chromium || { echo "⚠️ Playwright browser installation failed - scraping will not work"; }
+
 echo "✅ Packages installed successfully"
 
 # Restart service

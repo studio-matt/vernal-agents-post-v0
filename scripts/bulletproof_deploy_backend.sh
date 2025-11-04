@@ -68,6 +68,10 @@ pip install openai anthropic transformers torch --no-cache-dir --progress-bar of
 echo "📦 Installing remaining dependencies..."
 pip install -r requirements.txt --no-cache-dir --progress-bar off || { echo "❌ Package installation FAILED! Check requirements.txt for issues."; exit 1; }
 
+# Install Playwright browsers (required for web scraping)
+echo "📦 Installing Playwright browsers (required for web scraping)..."
+playwright install chromium || { echo "⚠️ Playwright browser installation failed - scraping will not work"; }
+
 # CRITICAL: Verify critical packages are actually importable (prevents silent failures)
 echo "🔍 Verifying critical package imports (MANDATORY)..."
 python3 << 'VERIFY_EOF'
@@ -83,6 +87,7 @@ critical_packages = {
     "jose": "JWT token creation (required for auth)",
     "ddgs": "DuckDuckGo search (required for scraping)",
     "nltk": "NLTK text processing (required for research)",
+    "playwright": "Web scraping (required for scraping)",
     "database": "Database manager (local module)",
     "models": "Database models (local module)",
 }
@@ -106,6 +111,18 @@ if failed_imports:
     sys.exit(1)
 
 print("\n✅ All critical packages verified successfully!")
+
+# Verify Playwright browsers are installed
+try:
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        browser.close()
+    print("✅ Playwright browsers installed and working")
+except Exception as e:
+    print(f"❌ Playwright browsers not installed: {e}")
+    print("   Run 'playwright install chromium' to install browsers")
+    sys.exit(1)
 VERIFY_EOF
 
 if [ $? -ne 0 ]; then
