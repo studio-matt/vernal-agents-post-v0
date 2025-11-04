@@ -68,6 +68,67 @@ pip install openai anthropic transformers torch --no-cache-dir --progress-bar of
 echo "📦 Installing remaining dependencies..."
 pip install -r requirements.txt --no-cache-dir --progress-bar off || { echo "❌ Package installation FAILED! Check requirements.txt for issues."; exit 1; }
 
+# CRITICAL: Verify critical packages are actually importable (prevents silent failures)
+echo "🔍 Verifying critical package imports (MANDATORY)..."
+python3 << 'VERIFY_EOF'
+import sys
+critical_packages = {
+    "fastapi": "FastAPI web framework",
+    "uvicorn": "ASGI server",
+    "sqlalchemy": "Database ORM",
+    "pymysql": "MySQL driver",
+    "pydantic": "Data validation",
+    "email_validator": "Email validation (required for auth)",
+    "ddgs": "DuckDuckGo search (required for scraping)",
+    "nltk": "NLTK text processing (required for research)",
+    "database": "Database manager (local module)",
+    "models": "Database models (local module)",
+}
+
+failed_imports = []
+for package, description in critical_packages.items():
+    try:
+        __import__(package)
+        print(f"✅ {package} - OK")
+    except ImportError as e:
+        print(f"❌ {package} - FAILED: {e}")
+        print(f"   Required for: {description}")
+        failed_imports.append((package, description, str(e)))
+
+if failed_imports:
+    print("\n❌ CRITICAL PACKAGES FAILED TO IMPORT!")
+    print("   This deployment will FAIL if service starts.")
+    print("   Missing packages:")
+    for pkg, desc, err in failed_imports:
+        print(f"   - {pkg}: {desc} ({err})")
+    sys.exit(1)
+
+print("\n✅ All critical packages verified successfully!")
+VERIFY_EOF
+
+if [ $? -ne 0 ]; then
+    echo "❌ Package verification FAILED! Fix missing packages before deploying."
+    exit 1
+fi
+
+# Verify auth router can load (catches email-validator issues early)
+echo "🔍 Verifying auth router can load..."
+python3 << 'AUTH_VERIFY_EOF'
+import sys
+try:
+    from auth_api import auth_router
+    print("✅ Auth router loaded successfully")
+except Exception as e:
+    print(f"❌ Auth router failed to load: {e}")
+    print("   This will cause 404 errors on /auth/login and /auth/signup")
+    sys.exit(1)
+AUTH_VERIFY_EOF
+
+if [ $? -ne 0 ]; then
+    echo "❌ Auth router verification FAILED! Fix dependencies before deploying."
+    exit 1
+fi
+
 # 4. Restore and validate environment variables (EMERGENCY_NET.md v7)
 echo "🔐 Setting up environment..."
 
@@ -182,6 +243,21 @@ echo "✅ Port 8000 is listening"
 echo "🔍 Testing external access..."
 curl -f https://themachine.vernalcontentum.com/health || { echo "❌ External health check failed!"; exit 1; }
 curl -f https://themachine.vernalcontentum.com/version || { echo "❌ External version check failed!"; exit 1; }
+
+# CRITICAL: Verify auth endpoints are accessible (prevents 404 regressions)
+echo "🔍 Testing auth endpoints (CRITICAL - prevents 404 regressions)..."
+AUTH_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://themachine.vernalcontentum.com/auth/login -X POST -H "Content-Type: application/json" -d '{"username":"test","password":"test"}')
+if [ "$AUTH_HEALTH" = "404" ]; then
+    echo "❌ Auth endpoint returned 404 - router not loaded!"
+    echo "   Check backend logs for 'Failed to include authentication router'"
+    exit 1
+elif [ "$AUTH_HEALTH" = "422" ] || [ "$AUTH_HEALTH" = "401" ]; then
+    echo "✅ Auth endpoint accessible (returned $AUTH_HEALTH - expected for invalid credentials)"
+else
+    echo "⚠️  Auth endpoint returned unexpected status: $AUTH_HEALTH"
+    echo "   Endpoint exists but may have issues"
+fi
+
 echo "✅ External access working"
 
 # 9. Log successful deployment
