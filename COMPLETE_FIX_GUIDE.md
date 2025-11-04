@@ -10,18 +10,35 @@
 
 **This is blocking all data saves!**
 
+**RECOMMENDED: Use the automated script (reads password from .env):**
+
 ```bash
-# Connect to MySQL and run:
-mysql -h 50.6.198.220 -u vernalcontentum_vernaluse -p[password] vernalcontentum_contentMachine <<EOF
+cd /home/ubuntu/vernal-agents-post-v0
+./scripts/fix_database_schema.sh
+```
+
+**OR manually (you'll be prompted for password):**
+
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+# Get password from .env file
+source .env
+mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" <<EOF
 ALTER TABLE campaign_raw_data
 MODIFY COLUMN raw_html MEDIUMTEXT;
 EOF
 ```
 
-Or use the SQL file:
+**OR if you prefer to type password interactively:**
+
 ```bash
 cd /home/ubuntu/vernal-agents-post-v0
-mysql -h 50.6.198.220 -u vernalcontentum_vernaluse -p[password] vernalcontentum_contentMachine < scripts/fix_database_schema.sql
+source .env
+mysql -h "$DB_HOST" -u "$DB_USER" -p "$DB_NAME" <<EOF
+ALTER TABLE campaign_raw_data
+MODIFY COLUMN raw_html MEDIUMTEXT;
+EOF
+# (it will prompt for password - paste from .env file)
 ```
 
 ## Step 2: Pull Latest Code and Install Dependencies
