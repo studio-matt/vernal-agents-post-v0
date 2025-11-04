@@ -177,10 +177,6 @@ def preprocess_text(text: str, aggressive: bool = False) -> List[str]:
     filtered_words = [lemmatizer.lemmatize(word) for word in words if word.isalnum() and (not aggressive or word not in stop_words)]
     return filtered_words if filtered_words else ['empty']
 
-def extract_entities(text: str, extract_persons: bool, extract_organizations: bool, extract_locations: bool, extract_dates: bool) -> dict:
-    # Placeholder for extract_entities function
-    return {}
-
 def extract_keywords(texts: List[str], num_keywords: int) -> List[str]:
     all_words = []
     for text in texts:
