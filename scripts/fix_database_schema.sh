@@ -29,10 +29,15 @@ echo ""
 
 # Run the SQL command
 mysql -h "$DB_HOST" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" <<EOF
+-- Fix raw_html column (if not already fixed)
 ALTER TABLE campaign_raw_data
 MODIFY COLUMN raw_html MEDIUMTEXT;
 
--- Verify the change
+-- Fix extracted_text column (also needs to be larger)
+ALTER TABLE campaign_raw_data
+MODIFY COLUMN extracted_text MEDIUMTEXT;
+
+-- Verify the changes
 DESCRIBE campaign_raw_data;
 EOF
 
@@ -40,6 +45,7 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "✅ Database schema updated successfully!"
     echo "   raw_html column is now MEDIUMTEXT (can store up to 16MB)"
+    echo "   extracted_text column is now MEDIUMTEXT (can store up to 16MB)"
 else
     echo ""
     echo "❌ Failed to update database schema"
