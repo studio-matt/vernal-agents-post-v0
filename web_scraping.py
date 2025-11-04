@@ -465,17 +465,25 @@ def scrape_campaign_data(
     
     # Search for keywords if provided
     if keywords:
+        logger.info(f"🔍 Searching DuckDuckGo for keywords: {keywords} (query: '{query}')")
         search_urls = search_duckduckgo(keywords, query=query, max_results=max_pages)
+        logger.info(f"🔍 DuckDuckGo returned {len(search_urls)} URLs: {search_urls[:5]}")  # Show first 5
         all_urls.extend(search_urls)
+    else:
+        logger.info(f"⚠️ No keywords provided for DuckDuckGo search")
     
     # Deduplicate URLs
     unique_urls = list(dict.fromkeys(all_urls))[:max_pages]
     
+    logger.info(f"📋 Total URLs to scrape: {len(unique_urls)} (from {len(urls)} direct URLs + {len(search_urls) if keywords else 0} search results)")
+    
     if not unique_urls:
-        logger.warning("No URLs to scrape")
+        logger.error(f"❌ CRITICAL: No URLs to scrape! Keywords: {keywords}, Direct URLs: {urls}, Query: '{query}'")
+        logger.error(f"❌ This means either DuckDuckGo search failed or no URLs/keywords were provided")
         return []
     
     logger.info(f"🚀 Starting scraping for {len(unique_urls)} URLs (depth={depth}, max_pages={max_pages})")
+    logger.info(f"📋 URLs to scrape: {unique_urls[:10]}")  # Show first 10 URLs
     
     # Scrape URLs recursively
     results = scrape_urls_recursive(
