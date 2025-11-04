@@ -1090,7 +1090,35 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         import traceback
         logger.error(f"Error aggregating research for {campaign_id}: {e}")
         logger.debug(traceback.format_exc())
-        raise HTTPException(status_code=500, detail="Failed to get research data")
+        # Return partial data even if processing fails
+        return {
+            "urls": [],
+            "raw": [],
+            "wordCloud": [],
+            "topics": [],
+            "entities": {
+                "persons": [],
+                "organizations": [],
+                "locations": [],
+                "dates": [],
+                "money": [],
+                "percent": [],
+                "time": [],
+                "facility": []
+            },
+            "diagnostics": {
+                "total_rows": 0,
+                "valid_urls": 0,
+                "valid_texts": 0,
+                "errors": [{
+                    "type": "processing_error",
+                    "message": str(e),
+                    "meta": {"traceback": traceback.format_exc()}
+                }],
+                "has_errors": True,
+                "has_data": False
+            }
+        }
 
 # Author Personalities endpoints
 @app.get("/author_personalities")
