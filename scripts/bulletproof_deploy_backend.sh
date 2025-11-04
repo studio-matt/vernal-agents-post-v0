@@ -70,7 +70,7 @@ pip install -r requirements.txt --no-cache-dir --progress-bar off || { echo "❌
 
 # Install Playwright browsers (required for web scraping)
 echo "📦 Installing Playwright browsers (required for web scraping)..."
-playwright install chromium || { echo "⚠️ Playwright browser installation failed - scraping will not work"; }
+python -m playwright install chromium || { echo "⚠️ Playwright browser installation failed - scraping will not work"; }
 
 # CRITICAL: Verify critical packages are actually importable (prevents silent failures)
 echo "🔍 Verifying critical package imports (MANDATORY)..."

@@ -418,9 +418,10 @@ The script now verifies that all critical packages can actually be imported:
 **CRITICAL: Playwright Browser Installation (Step 7)**
 - Playwright requires TWO steps:
   1. ✅ Python package: `pip install playwright` (included in requirements.txt)
-  2. ✅ Browser binaries: `playwright install chromium` (MUST run separately)
+  2. ✅ Browser binaries: `python -m playwright install chromium` (MUST run separately)
 - Without browser binaries, scraping fails with "Playwright not available" error
 - Deployment script now installs browsers and verifies they work
+- **Note:** Use `python -m playwright` (not just `playwright`) since the command may not be in PATH
 - This prevents the regression where scraping fails silently
 
 **If any package fails to import, deployment EXITS with error code 1.**
@@ -473,9 +474,10 @@ pip install -r requirements.txt --no-cache-dir
 # Playwright requires TWO steps:
 # 1. Python package (already installed via requirements.txt)
 # 2. Browser binaries (MUST run separately)
-playwright install chromium
+python -m playwright install chromium
 ```
 **Without browser binaries, scraping fails with "Playwright not available" error.**
+**Note:** Use `python -m playwright` (not just `playwright`) since the command may not be in PATH.
 
 **Note:** If installing new dependencies (e.g., spaCy), also download required models:
 ```bash
