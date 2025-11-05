@@ -474,10 +474,16 @@ git fetch origin && git switch main && git pull --ff-only origin main
 ### 2. **MANDATORY: Validate Dependencies (PREVENTS DEPENDENCY HELL)**
 ```bash
 # Run dependency validation BEFORE installing
-python3 validate_dependencies.py || {
+source venv/bin/activate  # CRITICAL: Must activate venv first!
+python3 validate_dependencies.py
+VALIDATION_EXIT=$?
+
+if [ $VALIDATION_EXIT -ne 0 ]; then
     echo "❌ Dependency validation FAILED. Fix issues before proceeding."
-    exit 1
-}
+    # Don't exit - just stop here (prevents shell logout)
+else
+    echo "✅ Validation passed, continuing with deployment..."
+fi
 ```
 
 **This catches ALL dependency conflicts before they cause deployment loops.**
