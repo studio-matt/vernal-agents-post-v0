@@ -163,8 +163,23 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                     continue
                 
                 # Skip if it's a common phrase pattern (not a name)
-                common_phrases = ['edit view', 'tool word', 'type word', 'license trialware', 'microsoft word', 'apple macintosh']
+                common_phrases = [
+                    'edit view', 'tool word', 'type word', 'license trialware', 'microsoft word', 'apple macintosh',
+                    # UI instruction phrases
+                    'to how', 'duplicate pages', 'page document if', 'press ctrl', 'blank page', 'page break',
+                    'different document you', 'sub duplicate', 'enter number', 'place your cursor', 'want to duplicate',
+                    'min read', 'page you want', 'select all', 'copy paste'
+                ]
                 if entity_lower in common_phrases:
+                    continue
+                
+                # Additional check: skip if it contains instruction words that make it clearly not a name
+                instruction_words = ['to', 'how', 'duplicate', 'page', 'pages', 'document', 'if', 'press', 'ctrl', 'blank',
+                                   'break', 'different', 'you', 'sub', 'enter', 'number', 'place', 'your', 'cursor',
+                                   'want', 'min', 'read', 'select', 'copy', 'paste', 'open', 'close', 'save', 'print']
+                # If more than half the words are instruction words, it's probably not a name
+                instruction_count = sum(1 for word in entity_words if word.lower() in instruction_words)
+                if instruction_count > len(entity_words) * 0.5:
                     continue
                 
                 entities['persons'].append(entity_text)
@@ -359,7 +374,11 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                             'edit', 'view', 'file', 'insert', 'format', 'table', 'help', 'developer', 'initial',
                             'predecessor', 'multi', 'type', 'license', 'trialware', 'website', 'tool', 'office',
                             'media', 'unix', 'independent', 'wikimedia', 'foundation', 'project', 'regular', 'guys',
-                            'built', 'wordperfect', 'eclectic', 'light'
+                            'built', 'wordperfect', 'eclectic', 'light',
+                            # UI instruction words
+                            'to', 'how', 'duplicate', 'page', 'pages', 'document', 'if', 'press', 'ctrl', 'blank',
+                            'break', 'different', 'you', 'sub', 'enter', 'number', 'place', 'your', 'cursor',
+                            'want', 'min', 'read', 'select', 'copy', 'paste', 'open', 'close', 'save', 'print'
                         }
                         if not any(word.lower() in common_non_names for word in words_in_match):
                             entities['persons'].append(match)
