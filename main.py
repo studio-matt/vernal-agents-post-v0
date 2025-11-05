@@ -1256,8 +1256,14 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         facility = []
         
         # Process texts with NLTK entity extraction
+        texts_processed = 0
+        texts_skipped = 0
+        extraction_errors = 0
+        logger.info(f"🔍 Starting entity extraction for {len(texts)} texts (processing up to 100)")
+        
         for t in texts[:100]:
             if not t or len(t.strip()) < 10:
+                texts_skipped += 1
                 continue
             try:
                 entity_result = nltk_extract_entities(
@@ -1271,6 +1277,14 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     extract_time=True,
                     extract_facility=True
                 )
+                texts_processed += 1
+                
+                # Log entities found in this text (first few texts only)
+                if texts_processed <= 3:
+                    found_entities = {k: len(v) for k, v in entity_result.items() if v}
+                    if found_entities:
+                        logger.info(f"📝 Text {texts_processed}: Found {found_entities}")
+                
                 persons.extend(entity_result.get('persons', []))
                 organizations.extend(entity_result.get('organizations', []))
                 locations.extend(entity_result.get('locations', []))
@@ -1280,11 +1294,16 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 time.extend(entity_result.get('time', []))
                 facility.extend(entity_result.get('facility', []))
             except Exception as e:
-                logger.warning(f"Error extracting entities from text: {e}")
+                extraction_errors += 1
+                logger.warning(f"⚠️ Error extracting entities from text (length {len(t) if t else 0}): {e}")
+                import traceback
+                logger.debug(f"Traceback: {traceback.format_exc()}")
                 # Fallback to regex for dates if NLTK fails
                 date_regex = re.compile(r"\b(\d{4}|\d{1,2}/\d{1,2}/\d{2,4}|Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b", re.I)
                 date_matches = date_regex.findall(t)
                 dates.extend([d[0] if isinstance(d, tuple) else d for d in date_matches])
+        
+        logger.info(f"✅ Entity extraction complete: {texts_processed} processed, {texts_skipped} skipped, {extraction_errors} errors")
         
         entities = {
             "persons": list(dict.fromkeys(persons))[:20],
@@ -1296,6 +1315,14 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             "time": list(dict.fromkeys(time))[:20],
             "facility": list(dict.fromkeys(facility))[:20],
         }
+        
+        # Log summary of extracted entities
+        total_entities = sum(len(v) for v in entities.values())
+        logger.info(f"📊 Extracted {total_entities} total entities: "
+                   f"{len(entities['persons'])} persons, "
+                   f"{len(entities['organizations'])} organizations, "
+                   f"{len(entities['locations'])} locations, "
+                   f"{len(entities['dates'])} dates")
 
         return {
             "status": "success",
