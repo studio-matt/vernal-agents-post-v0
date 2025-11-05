@@ -141,6 +141,74 @@ def check_known_conflicts(file_path):
         print("✅ No known conflict patterns detected")
         return True
 
+def verify_critical_imports():
+    """
+    Verify that critical modules used in the codebase can actually be imported.
+    This catches missing packages in production environments.
+    """
+    print("🔍 Verifying critical imports can be loaded...")
+    
+    # Critical imports from text_processing.py and main.py
+    critical_imports = [
+        # Core framework
+        ('fastapi', 'fastapi'),
+        ('uvicorn', 'uvicorn'),
+        ('sqlalchemy', 'sqlalchemy'),
+        ('pymysql', 'pymysql'),
+        
+        # Text processing (CRITICAL - these are failing in production)
+        ('sklearn', 'scikit-learn'),  # Package name vs import name
+        ('langchain_openai', 'langchain-openai'),  # Package name vs import name
+        ('nltk', 'nltk'),
+        ('gensim', 'gensim'),
+        ('bertopic', 'bertopic'),
+        ('numpy', 'numpy'),
+        
+        # AI/ML
+        ('openai', 'openai'),
+        ('crewai', 'crewai'),
+        
+        # Web scraping
+        ('playwright', 'playwright'),
+        ('bs4', 'beautifulsoup4'),  # Package name vs import name
+        ('ddgs', 'ddgs'),
+        
+        # Other critical
+        ('pydantic', 'pydantic'),
+        ('dotenv', 'python-dotenv'),  # Package name vs import name
+        ('langdetect', 'langdetect'),
+    ]
+    
+    missing = []
+    failed = []
+    
+    for import_name, package_name in critical_imports:
+        try:
+            __import__(import_name)
+            print(f"   ✅ {package_name} ({import_name})")
+        except ImportError as e:
+            missing.append((package_name, import_name, str(e)))
+            print(f"   ❌ {package_name} ({import_name}) - MISSING")
+        except Exception as e:
+            failed.append((package_name, import_name, str(e)))
+            print(f"   ⚠️  {package_name} ({import_name}) - ERROR: {e}")
+    
+    if missing:
+        print(f"\n❌ {len(missing)} critical packages are MISSING:")
+        for package_name, import_name, error in missing:
+            print(f"   - {package_name} (import: {import_name})")
+            print(f"     Install with: pip install {package_name}")
+        return False
+    
+    if failed:
+        print(f"\n⚠️  {len(failed)} packages failed to import (may have dependency issues):")
+        for package_name, import_name, error in failed:
+            print(f"   - {package_name} ({import_name}): {error}")
+        return False
+    
+    print(f"\n✅ All {len(critical_imports)} critical imports verified")
+    return True
+
 def main():
     print("🔍 DEPENDENCY VALIDATION SCRIPT")
     print("=" * 50)
@@ -156,6 +224,7 @@ def main():
         ("requirements.in best practices", lambda: validate_requirements_in(requirements_in)),
         ("Known conflict patterns", lambda: check_known_conflicts(requirements_in)),
         ("Dependency resolution", lambda: test_dependency_resolution(requirements_in)),
+        ("Critical imports verification", verify_critical_imports),  # NEW: Verify packages are actually installed
     ]
     
     results = []

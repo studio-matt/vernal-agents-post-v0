@@ -758,8 +758,23 @@ python3 validate_dependencies.py
 - ✅ requirements.in follows best practices (lower bounds only)
 - ✅ No known conflict patterns
 - ✅ Dependency resolution succeeds without conflicts
+- ✅ **CRITICAL: All critical imports can be loaded** (verifies packages are actually installed)
 
 **If validation fails: DO NOT DEPLOY. Fix issues first.**
+
+**🚨 CRITICAL: Import Verification**
+The validation script now verifies that all critical packages (sklearn, langchain-openai, nltk, etc.) can actually be imported. This catches cases where:
+- Packages are in `requirements.txt` but not installed in the venv
+- Deployment scripts skipped installing dependencies
+- Packages were removed or corrupted
+
+**If imports fail, run:**
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+source venv/bin/activate
+pip install -r requirements.txt --no-cache-dir
+bash scripts/verify_and_fix_imports.sh
+```
 
 **Additional manual checks:**
 - **Test all critical imports** (`python3 -c "import main; print('✅ All imports successful')"`)
