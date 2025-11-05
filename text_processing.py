@@ -390,8 +390,52 @@ def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int,
             logger.warning("All models failed; using keyword extraction")
             return extract_keywords(texts, num_keywords=num_topics)
 
-        # Aggregate frequent words
-        word_counts = Counter(all_topic_words)
-        top_words = [word for word, _ in word_counts.most_common(num_topics)]
-        logger.info(f"Generated {len(top_words)} topics: {top_words}")
-        return top_words if top_words else extract_keywords(texts, num_keywords=num_topics)
+        # Generate topic phrases instead of single words
+        # Extract bigrams and trigrams from original texts that contain the top words
+        from collections import defaultdict
+        import re
+        
+        # Find bigrams and trigrams containing the top topic words
+        topic_words_set = set(all_topic_words[:20])  # Use top 20 words for context
+        phrases = []
+        
+        for text in raw_texts[:50]:  # Limit to first 50 texts for performance
+            words = text.lower().split()
+            # Extract bigrams
+            for i in range(len(words) - 1):
+                bigram = f"{words[i]} {words[i+1]}"
+                # Check if bigram contains any topic word
+                if any(word in bigram for word in topic_words_set):
+                    phrases.append(bigram)
+            # Extract trigrams
+            for i in range(len(words) - 2):
+                trigram = f"{words[i]} {words[i+1]} {words[i+2]}"
+                # Check if trigram contains any topic word
+                if any(word in trigram for word in topic_words_set):
+                    phrases.append(trigram)
+        
+        # Count phrase frequencies
+        phrase_counts = Counter(phrases)
+        
+        # Get top phrases, ensuring they're meaningful (at least 2 words, not too common stopwords)
+        stopwords_set = set(stopwords.words('english'))
+        top_phrases = []
+        for phrase, count in phrase_counts.most_common(num_topics * 3):  # Get more candidates
+            # Filter out phrases that are just stopwords
+            phrase_words = phrase.split()
+            meaningful_words = [w for w in phrase_words if w not in stopwords_set and len(w) > 2]
+            if len(meaningful_words) >= 2:  # At least 2 meaningful words
+                top_phrases.append(phrase)
+                if len(top_phrases) >= num_topics:
+                    break
+        
+        # If we have good phrases, use them; otherwise fall back to single words
+        if top_phrases:
+            logger.info(f"Generated {len(top_phrases)} topic phrases: {top_phrases}")
+            return top_phrases[:num_topics]
+        else:
+            # Fallback to single words
+            word_counts = Counter(all_topic_words)
+            top_words = [word for word, _ in word_counts.most_common(num_topics)]
+            logger.info(f"Generated {len(top_words)} topics (single words): {top_words}")
+            return top_words if top_words else extract_keywords(texts, num_keywords=num_topics)
