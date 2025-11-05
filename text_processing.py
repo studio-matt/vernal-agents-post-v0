@@ -103,9 +103,14 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
         return entities
 
     # Extract NLTK entities (PERSON, ORGANIZATION, GPE, DATE)
-    words = word_tokenize(text)
-    pos_tags = pos_tag(words)
-    chunks = ne_chunk(pos_tags)
+    try:
+        words = word_tokenize(text)
+        pos_tags = pos_tag(words)
+        # Use binary=False to get detailed entity types (PERSON, ORGANIZATION, GPE, etc.)
+        chunks = ne_chunk(pos_tags, binary=False)
+    except Exception as e:
+        logger.warning(f"NLTK entity extraction failed: {e}, using regex fallback only")
+        chunks = []
 
     for chunk in chunks:
         if hasattr(chunk, 'label'):
