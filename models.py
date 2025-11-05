@@ -189,6 +189,11 @@ class Campaign(Base):
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    # Settings stored as JSON in Text columns (MySQL doesn't have native JSON type in older versions)
+    extraction_settings_json = Column(Text, nullable=True)  # JSON string for extractionSettings
+    preprocessing_settings_json = Column(Text, nullable=True)  # JSON string for preprocessingSettings
+    entity_settings_json = Column(Text, nullable=True)  # JSON string for entitySettings
+    modeling_settings_json = Column(Text, nullable=True)  # JSON string for modelingSettings
     
     def __repr__(self):
         return f"<Campaign(id={self.id}, campaign_id={self.campaign_id}, name={self.campaign_name})>"

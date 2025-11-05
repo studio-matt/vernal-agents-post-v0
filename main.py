@@ -113,6 +113,10 @@ class CampaignUpdate(BaseModel):
     urls: Optional[List[str]] = None
     status: Optional[str] = None
     topics: Optional[List[str]] = None
+    extractionSettings: Optional[Dict[str, Any]] = None
+    preprocessingSettings: Optional[Dict[str, Any]] = None
+    entitySettings: Optional[Dict[str, Any]] = None
+    modelingSettings: Optional[Dict[str, Any]] = None
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
@@ -288,6 +292,24 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
         trending_topics_str = ",".join(campaign_data.trendingTopics) if campaign_data.trendingTopics else None
         topics_str = ",".join(campaign_data.topics) if campaign_data.topics else None
         
+        # Save settings as JSON strings
+        import json
+        extraction_settings_json = None
+        if campaign_data.extractionSettings:
+            extraction_settings_json = json.dumps(campaign_data.extractionSettings)
+        
+        preprocessing_settings_json = None
+        if campaign_data.preprocessingSettings:
+            preprocessing_settings_json = json.dumps(campaign_data.preprocessingSettings)
+        
+        entity_settings_json = None
+        if campaign_data.entitySettings:
+            entity_settings_json = json.dumps(campaign_data.entitySettings)
+        
+        modeling_settings_json = None
+        if campaign_data.modelingSettings:
+            modeling_settings_json = json.dumps(campaign_data.modelingSettings)
+        
         # Create campaign directly using SQLAlchemy
         campaign = Campaign(
             campaign_id=campaign_id,
@@ -300,7 +322,11 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
             trending_topics=trending_topics_str,
             topics=topics_str,
             status=campaign_data.status or "INCOMPLETE",  # Use provided status or default to INCOMPLETE
-            user_id=user_id
+            user_id=user_id,
+            extraction_settings_json=extraction_settings_json,
+            preprocessing_settings_json=preprocessing_settings_json,
+            entity_settings_json=entity_settings_json,
+            modeling_settings_json=modeling_settings_json
         )
         
         db.add(campaign)
@@ -342,6 +368,37 @@ def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
                 detail="Campaign not found"
             )
         
+        import json
+        
+        # Parse settings from JSON strings
+        extraction_settings = None
+        if campaign.extraction_settings_json:
+            try:
+                extraction_settings = json.loads(campaign.extraction_settings_json)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(f"Failed to parse extraction_settings_json for campaign {campaign_id}")
+        
+        preprocessing_settings = None
+        if campaign.preprocessing_settings_json:
+            try:
+                preprocessing_settings = json.loads(campaign.preprocessing_settings_json)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(f"Failed to parse preprocessing_settings_json for campaign {campaign_id}")
+        
+        entity_settings = None
+        if campaign.entity_settings_json:
+            try:
+                entity_settings = json.loads(campaign.entity_settings_json)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(f"Failed to parse entity_settings_json for campaign {campaign_id}")
+        
+        modeling_settings = None
+        if campaign.modeling_settings_json:
+            try:
+                modeling_settings = json.loads(campaign.modeling_settings_json)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(f"Failed to parse modeling_settings_json for campaign {campaign_id}")
+        
         return {
             "status": "success",
             "campaign": {
@@ -358,7 +415,11 @@ def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
                 "status": campaign.status or "INCOMPLETE",  # Include status field
                 "user_id": campaign.user_id,
                 "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
-                "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+                "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None,
+                "extractionSettings": extraction_settings,
+                "preprocessingSettings": preprocessing_settings,
+                "entitySettings": entity_settings,
+                "modelingSettings": modeling_settings
             }
         }
     except HTTPException:
@@ -411,6 +472,21 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, request: Re
             campaign.urls = ",".join(campaign_data.urls) if campaign_data.urls else None
         if campaign_data.topics is not None:
             campaign.topics = ",".join(campaign_data.topics) if campaign_data.topics else None
+        
+        # Save settings as JSON strings in Text columns
+        import json
+        if campaign_data.extractionSettings is not None:
+            campaign.extraction_settings_json = json.dumps(campaign_data.extractionSettings)
+            logger.info(f"Saved extractionSettings for campaign {campaign_id}: {campaign_data.extractionSettings}")
+        if campaign_data.preprocessingSettings is not None:
+            campaign.preprocessing_settings_json = json.dumps(campaign_data.preprocessingSettings)
+            logger.info(f"Saved preprocessingSettings for campaign {campaign_id}: {campaign_data.preprocessingSettings}")
+        if campaign_data.entitySettings is not None:
+            campaign.entity_settings_json = json.dumps(campaign_data.entitySettings)
+            logger.info(f"Saved entitySettings for campaign {campaign_id}: {campaign_data.entitySettings}")
+        if campaign_data.modelingSettings is not None:
+            campaign.modeling_settings_json = json.dumps(campaign_data.modelingSettings)
+            logger.info(f"Saved modelingSettings for campaign {campaign_id}: {campaign_data.modelingSettings}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
