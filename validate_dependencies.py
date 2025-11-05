@@ -166,7 +166,8 @@ def verify_critical_imports():
         
         # AI/ML
         ('openai', 'openai'),
-        ('crewai', 'crewai'),
+        # CrewAI is optional - only needed for content generation workflows (not yet active in main.py)
+        # ('crewai', 'crewai'),  # Optional: for writing agents and QC workflows
         
         # Web scraping
         ('playwright', 'playwright'),
@@ -193,12 +194,26 @@ def verify_critical_imports():
             failed.append((package_name, import_name, str(e)))
             print(f"   ⚠️  {package_name} ({import_name}) - ERROR: {e}")
     
-    if missing:
-        print(f"\n❌ {len(missing)} critical packages are MISSING:")
-        for package_name, import_name, error in missing:
+    # Optional packages (warn but don't fail)
+    optional_packages = ['crewai', 'bertopic']  # These are nice-to-have but not critical
+    
+    critical_missing = [pkg for pkg in missing if pkg[0] not in optional_packages]
+    optional_missing = [pkg for pkg in missing if pkg[0] in optional_packages]
+    
+    if critical_missing:
+        print(f"\n❌ {len(critical_missing)} critical packages are MISSING:")
+        for package_name, import_name, error in critical_missing:
             print(f"   - {package_name} (import: {import_name})")
             print(f"     Install with: pip install {package_name}")
         return False
+    
+    if optional_missing:
+        print(f"\n⚠️  {len(optional_missing)} optional packages are missing (not critical):")
+        for package_name, import_name, error in optional_missing:
+            print(f"   - {package_name} (import: {import_name})")
+            print(f"     Install with: pip install {package_name}")
+        print("   Note: These are for future features (content generation, advanced topic modeling)")
+        # Don't return False for optional packages
     
     if failed:
         print(f"\n⚠️  {len(failed)} packages failed to import (may have dependency issues):")
