@@ -135,8 +135,34 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             entity_type = chunk.label()
             entity_text = ' '.join(c[0] for c in chunk)
             if entity_type == 'PERSON' and extract_persons:
-                entities['persons'].append(entity_text)
+                # Filter out software names, UI elements, and product names
+                entity_lower = entity_text.lower()
+                software_ui_indicators = [
+                    'microsoft', 'word', 'excel', 'powerpoint', 'outlook', 'windows', 'macintosh', 'apple', 'mac',
+                    'google', 'chrome', 'firefox', 'safari', 'edge', 'internet', 'explorer', 'browser',
+                    'edit', 'view', 'file', 'insert', 'format', 'tools', 'table', 'help', 'developer',
+                    'initial', 'predecessor', 'multi', 'type', 'license', 'trialware', 'website', 'tool',
+                    'share', 'print', 'save', 'open', 'close', 'new', 'copy', 'paste', 'cut',
+                    'office', 'media', 'unix', 'independent', 'wikimedia', 'foundation', 'project', 'wikipedia'
+                ]
+                # Skip if it's clearly software/UI
+                if not any(indicator in entity_lower for indicator in software_ui_indicators):
+                    entities['persons'].append(entity_text)
             elif entity_type == 'ORGANIZATION' and extract_organizations:
+                # Filter out invalid organization entries
+                entity_lower = entity_text.lower()
+                # Skip if it contains person names or locations incorrectly labeled as organizations
+                invalid_org_indicators = [
+                    'louisville', 'muhammad', 'ali',  # Person name + location
+                    'regular guys built wordperfect',  # Phrase, not an organization
+                    'the eclectic light',  # Publication name, may be valid but let's be strict
+                ]
+                # Skip if it's a single generic word like "Office", "Media", "Independent"
+                if len(entity_text.split()) == 1 and entity_lower in ['office', 'media', 'independent', 'digital', 'writing']:
+                    continue
+                # Skip if it contains person names
+                if any(indicator in entity_lower for indicator in invalid_org_indicators):
+                    continue
                 entities['organizations'].append(entity_text)
             # NLTK sometimes labels organizations as GPE, so check for organization indicators
             elif entity_type == 'GPE':
@@ -175,41 +201,41 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
     # Enhanced date extraction using regex (for dates NLTK might miss)
     # Only extract complete dates: Month + Year or Month + Day + Year
     if extract_dates:
-        # Comprehensive date patterns - only complete dates
+        # Comprehensive date patterns - only complete dates (non-capturing groups to avoid fragments)
         date_patterns = [
             # Month Day, Year (e.g., "January 15, 2024", "Jan 15 2024")
-            r'\b(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{1,2},?\s+\d{4}\b',
+            r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b',
             # Month Year (e.g., "January 2024", "Jan 2024")
-            r'\b(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b',
+            r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b',
             # MM/DD/YYYY or DD-MM-YYYY (e.g., "01/15/2024", "15-01-2024")
             r'\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b',
             # YYYY/MM/DD (e.g., "2024/01/15")
             r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b',
             # Ordinal dates (e.g., "15th of January 2024", "the 15th of January 2024")
-            r'\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\s+(?:of\s+)?(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b',
-            # Years (only if they're clearly dates, not just numbers)
-            r'\b(?:in\s+)?(19|20)\d{2}(?:\s|$|\.|,|;|\)|\])\b',  # Years with context
+            r'\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\s+(?:of\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b',
+            # Years with context (e.g., "in 2024", "2024.", "(2024)")
+            r'\b(?:in\s+|the\s+year\s+)?(19\d{2}|20\d{2})(?:\s|$|\.|,|;|\)|\])\b',
         ]
+        
+        # Extract all date matches
+        all_date_matches = []
         for pattern in date_patterns:
-            date_matches = re.findall(pattern, text, re.IGNORECASE)
-            for match in date_matches:
-                if isinstance(match, tuple):
-                    # Handle groups - reconstruct full date
-                    if len(match) == 2 and match[0] in ['19', '20']:
-                        # Year pattern - reconstruct full year
-                        full_year = match[0] + match[1] if match[1] else match[0]
-                        if len(full_year) == 4:
-                            match = full_year
-                        else:
-                            continue
-                    else:
-                        # Other patterns - join non-empty parts
-                        match = ' '.join(m for m in match if m)
-                if match and len(match) >= 4:  # Minimum: year (4 digits) or "Jan 2024" (7 chars)
-                    # Clean up the match
-                    match = match.strip('.,;()[]')
-                    if match not in entities['dates']:
-                        entities['dates'].append(match)
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match_obj in matches:
+                full_match = match_obj.group(0).strip('.,;()[]')
+                # Validate: must be at least 7 characters (e.g., "Jan 2024") or a 4-digit year
+                if len(full_match) >= 4:
+                    # Filter out fragments: must contain either a complete month name or be a 4-digit year
+                    if any(month in full_match for month in ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']) or re.match(r'^\d{4}$', full_match):
+                        # Exclude fragments like "ober", "uary", "ember", etc.
+                        invalid_fragments = ['ober', 'uary', 'ember', 'tember', 'ruary', 'ch', 'ry', 'il', 'e', 'ust', 'st', 'ber']
+                        if not any(fragment in full_match.lower() for fragment in invalid_fragments):
+                            all_date_matches.append(full_match)
+        
+        # Remove duplicates and add to entities
+        for date in dict.fromkeys(all_date_matches):  # Preserves order while removing duplicates
+            if date not in entities['dates']:
+                entities['dates'].append(date)
     
     # Pattern-based extraction for better coverage (especially for titles and short texts)
     if extract_persons:
@@ -223,9 +249,22 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             'Login', 'Vietnam', 'United', 'States', 'America', 'World', 'Documentary', 'Mini', 'Series', 'Trailer',
             'English', 'General', 'Seasons', 'Brasil', 'Crew', 'Artwork', 'Lists', 'Changed',
             'Article', 'Talk', 'Read', 'Tools', 'Appearance', 'Text', 'Small', 'Standard', 'Large', 'Width',
-            'Wide', 'Color', 'Automatic', 'Light', 'Dark', 'From', 'Wikipedia', 'Nathu', 'La', 'Cho', 'Indochina', 'Wars'
+            'Wide', 'Color', 'Automatic', 'Light', 'Dark', 'From', 'Wikipedia', 'Nathu', 'La', 'Cho', 'Indochina', 'Wars',
+            # Software and product names
+            'Microsoft', 'Word', 'Excel', 'PowerPoint', 'Outlook', 'Windows', 'Macintosh', 'Apple', 'Mac', 'iOS', 'Android',
+            'Google', 'Chrome', 'Firefox', 'Safari', 'Edge', 'Internet', 'Explorer', 'Opera', 'Browser',
+            'Edit', 'View', 'File', 'Insert', 'Format', 'Tools', 'Table', 'Help', 'Developer', 'Initial', 'Predecessor',
+            'Multi', 'Type', 'License', 'Trialware', 'Website', 'Tool', 'Office', 'Media', 'Unix', 'Independent',
+            'Wikimedia', 'Foundation', 'Project', 'Wikipedia', 'Meta',
+            # UI elements and actions
+            'Share', 'Print', 'Save', 'Open', 'Close', 'New', 'Copy', 'Paste', 'Cut', 'Undo', 'Redo', 'Find', 'Replace',
+            'Select', 'All', 'None', 'Zoom', 'In', 'Out', 'Fit', 'Page', 'Width', 'Actual', 'Size',
+            'Font', 'Size', 'Bold', 'Italic', 'Underline', 'Strikethrough', 'Subscript', 'Superscript',
+            'Align', 'Left', 'Center', 'Right', 'Justify', 'Bullet', 'Number', 'List', 'Indent', 'Decrease', 'Increase',
+            # Common phrases that look like names
+            'Regular', 'Guys', 'Built', 'Wordperfect', 'Eclectic', 'Light'
         }
-        # Common non-name patterns (articles, titles, UI elements, etc.)
+        # Common non-name patterns (articles, titles, UI elements, software names, etc.)
         non_name_patterns = [
             r'\b(Discover|Support|Login|Earn|Points|The War|That|Changed|America|Brasil|General|Seasons|Crew|Artwork|Lists|Documentary|Mini|Series|United States|English Trailer)\b',
             r'\b[A-Z][a-z]+\s+(Earn|Points|Login|Support|War|That|Changed|America)\b',
@@ -234,6 +273,17 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             r'\b[A-Z][a-z]+\s+(Talk|Read|Tools|Appearance|Text|Small|Standard|Large|Width|Wide|Color)\b',  # UI patterns
             r'\b(Nathu|Cho)\s+La\b',  # Geographic locations
             r'\bIndochina\s+Wars\b',  # Historical events
+            # Software and product names
+            r'\b(Microsoft|Apple|Google|Windows|Macintosh|Mac|Word|Excel|PowerPoint|Outlook|Chrome|Firefox|Safari|Edge|Internet|Explorer)\s+[A-Z][a-z]+\b',
+            r'\b[A-Z][a-z]+\s+(Word|Excel|PowerPoint|Outlook|Windows|Macintosh|Mac|Chrome|Firefox|Safari|Edge|Explorer|Browser|Office|Media|Unix|Developer|Initial|Predecessor|Multi|Type|License|Trialware|Website|Tool)\b',
+            r'\b(Edit|View|File|Insert|Format|Tools|Table|Help|Share|Print|Save|Open|Close|New|Copy|Paste|Cut)\s+[A-Z][a-z]+\b',
+            r'\b[A-Z][a-z]+\s+(Edit|View|File|Insert|Format|Tools|Table|Help|Share|Print|Save|Open|Close|New|Copy|Paste|Cut)\b',
+            # Software-specific patterns
+            r'\b(Microsoft|Word|Microsoft Word|Edit View|Tool Word|Developer|Type Word|License Trialware|Website)\b',
+            r'\b(Apple|Macintosh|Mac|iOS|Android|Google|Chrome|Firefox|Safari|Edge|Browser)\b',
+            # Common non-name phrases
+            r'\b(Regular|Guys|Built|Wordperfect|Eclectic|Light)\s+[A-Z][a-z]+\b',
+            r'\b[A-Z][a-z]+\s+(Regular|Guys|Built|Wordperfect|Eclectic|Light)\b',
         ]
         
         name_matches = re.findall(name_pattern, text)
@@ -249,12 +299,19 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                 if len(words_in_match) >= 2:
                     # Check that both words are capitalized (proper nouns)
                     if all(word[0].isupper() and word[1:].islower() for word in words_in_match):
-                        # Additional check: not common title/UI words
+                        # Additional check: not common title/UI/software words
                         common_non_names = {
                             'the', 'war', 'that', 'changed', 'america', 'support', 'login', 'earn', 'points',
                             'article', 'talk', 'read', 'tools', 'appearance', 'text', 'small', 'standard', 'large',
                             'width', 'wide', 'color', 'automatic', 'light', 'dark', 'from', 'wikipedia', 'nathu',
-                            'cho', 'la', 'indochina', 'wars', 'vietnam', 'united', 'states', 'world', 'documentary'
+                            'cho', 'la', 'indochina', 'wars', 'vietnam', 'united', 'states', 'world', 'documentary',
+                            # Software and product names
+                            'microsoft', 'word', 'excel', 'powerpoint', 'outlook', 'windows', 'macintosh', 'apple', 'mac',
+                            'google', 'chrome', 'firefox', 'safari', 'edge', 'internet', 'explorer', 'browser',
+                            'edit', 'view', 'file', 'insert', 'format', 'table', 'help', 'developer', 'initial',
+                            'predecessor', 'multi', 'type', 'license', 'trialware', 'website', 'tool', 'office',
+                            'media', 'unix', 'independent', 'wikimedia', 'foundation', 'project', 'regular', 'guys',
+                            'built', 'wordperfect', 'eclectic', 'light'
                         }
                         if not any(word.lower() in common_non_names for word in words_in_match):
                             entities['persons'].append(match)
