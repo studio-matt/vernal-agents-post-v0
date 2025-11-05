@@ -298,9 +298,12 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             'Font', 'Size', 'Bold', 'Italic', 'Underline', 'Strikethrough', 'Subscript', 'Superscript',
             'Align', 'Left', 'Center', 'Right', 'Justify', 'Bullet', 'Number', 'List', 'Indent', 'Decrease', 'Increase',
             # Common phrases that look like names
-            'Regular', 'Guys', 'Built', 'Wordperfect', 'Eclectic', 'Light'
+            'Regular', 'Guys', 'Built', 'Wordperfect', 'Eclectic', 'Light',
+            # UI instruction words
+            'To', 'How', 'Duplicate', 'Pages', 'Page', 'Document', 'If', 'Press', 'Ctrl', 'Blank', 'Break',
+            'Different', 'You', 'Sub', 'Enter', 'Number', 'Select', 'Place', 'Your', 'Cursor', 'Want', 'Min', 'Read'
         }
-        # Common non-name patterns (articles, titles, UI elements, software names, etc.)
+        # Common non-name patterns (articles, titles, UI elements, software names, instructions, etc.)
         non_name_patterns = [
             r'\b(Discover|Support|Login|Earn|Points|The War|That|Changed|America|Brasil|General|Seasons|Crew|Artwork|Lists|Documentary|Mini|Series|United States|English Trailer)\b',
             r'\b[A-Z][a-z]+\s+(Earn|Points|Login|Support|War|That|Changed|America)\b',
@@ -320,6 +323,15 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             # Common non-name phrases
             r'\b(Regular|Guys|Built|Wordperfect|Eclectic|Light)\s+[A-Z][a-z]+\b',
             r'\b[A-Z][a-z]+\s+(Regular|Guys|Built|Wordperfect|Eclectic|Light)\b',
+            # UI instruction patterns (common in tutorials)
+            r'\b(To|How)\s+[A-Z][a-z]+\b',  # "To How", "To Duplicate"
+            r'\b(To|How)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # "To Duplicate Pages"
+            r'\b(Duplicate|Select|Enter|Press|Place|Want)\s+(Pages?|Ctrl|Number|Cursor|Your|To)\b',  # "Duplicate Pages", "Press Ctrl", "Enter Number"
+            r'\b(Blank|Page|Document|Break|Different)\s+(Page|Document|You|If)\b',  # "Blank Page", "Page Document", "Page Break"
+            r'\b(Page|Document|Press|Ctrl|Enter|Place|Cursor|Select)\s+(Document|If|Ctrl|Number|Your|All|Text)\b',  # "Page Document", "Press Ctrl", "Place Your"
+            r'\b(Min|Read|Sub|Duplicate)\s+(Read|Duplicate|Enter)\b',  # "Min Read", "Sub Duplicate"
+            r'\b[A-Z][a-z]+\s+(Page|Document|Ctrl|Number|Cursor|Read|Duplicate)\b',  # "Want To Duplicate", "Place Your Cursor"
+            r'\b(Windows|Command)\s+(Or|Command)\b',  # "(windows) or command"
         ]
         
         name_matches = re.findall(name_pattern, text)
@@ -594,7 +606,7 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
                                 else:
                                     logger.warning(f"⚠️ Rejected topic '{topic}' - has {word_count} word(s), need 2-4 words")
                         
-                        # Additional filtering: remove topics with URLs, file extensions, or technical identifiers
+                        # Additional filtering: remove topics with URLs, file extensions, technical identifiers, or UI instructions
                         filtered_topics = []
                         invalid_patterns = [
                             r'\.(com|org|net|edu|gov|io|isbn|doi|pdf|html|xml|json)',  # URLs, file extensions, identifiers
@@ -602,10 +614,34 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
                             r'^\d+$',  # Pure numbers
                             r'^[a-z]+\.[a-z]+',  # Domain-like patterns (press.isbn)
                         ]
+                        # UI instruction patterns (common in tutorials/help content)
+                        ui_instruction_patterns = [
+                            r'^(press|enter|select|place|click|duplicate|copy|paste|open|close|save|print)\s+',  # Command verbs
+                            r'\s+(ctrl|cmd|shift|alt|enter|space|tab|escape|delete|backspace)\b',  # Keyboard keys
+                            r'\b(press|enter|select|place|click|duplicate|copy|paste|open|close|save|print)\s+(ctrl|cmd|shift|alt|enter|space|tab|escape|delete|backspace|your|cursor|number|pages?|document|text|all)\b',  # Full instructions
+                            r'\b(blank|page|document|break|min|read|want|to|how|if|or)\s+(page|document|break|read|duplicate|pages?|document|if|command)\b',  # Common UI phrases
+                            r'^(windows|command)\s+(or|command)\b',  # "(windows) or command"
+                            r'\b(place|your|cursor|want|to|duplicate|min|read)\b',  # Common instruction words
+                            r'^(page|document|ctrl|number|cursor|read|duplicate)\s+',  # Starting with UI terms
+                        ]
                         for topic in valid_topics:
+                            topic_lower = topic.lower()
                             # Skip if matches invalid patterns
                             if any(re.search(pattern, topic, re.IGNORECASE) for pattern in invalid_patterns):
                                 logger.warning(f"⚠️ Filtered out invalid topic pattern: {topic}")
+                                continue
+                            # Skip if it's a UI instruction/command
+                            if any(re.search(pattern, topic_lower) for pattern in ui_instruction_patterns):
+                                logger.warning(f"⚠️ Filtered out UI instruction topic: {topic}")
+                                continue
+                            # Skip common UI instruction phrases
+                            ui_phrases = [
+                                'press ctrl', 'press ctrl +', 'place your cursor', 'min read', 'want to duplicate',
+                                'blank page', 'page you want', 'duplicate pages', 'windows or command', 'page break',
+                                'enter number', 'select all', 'copy paste', 'open file', 'save document'
+                            ]
+                            if any(phrase in topic_lower for phrase in ui_phrases):
+                                logger.warning(f"⚠️ Filtered out UI instruction phrase: {topic}")
                                 continue
                             # Skip if it's too short or too long (meaningless)
                             if len(topic.split()) < 2 or len(topic) > 50:
