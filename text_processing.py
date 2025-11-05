@@ -7,7 +7,6 @@ from nltk.corpus import stopwords
 from nltk import pos_tag, ne_chunk
 import gensim
 from gensim import corpora, models
-from bertopic import BERTopic
 from sklearn.decomposition import NMF, TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import Counter
@@ -20,6 +19,15 @@ import json
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# BERTopic is optional - only needed for bertopic_model function
+try:
+    from bertopic import BERTopic
+    BERTOPIC_AVAILABLE = True
+except ImportError:
+    BERTopic = None
+    BERTOPIC_AVAILABLE = False
+    logger.warning("⚠️ BERTopic not available - bertopic_model function will not work")
 
 # Ensure NLTK resources are downloaded
 try:
@@ -212,6 +220,9 @@ def lda_model(texts: List[List[str]], num_topics: int, iterations: int) -> List[
         return []
 
 def bertopic_model(texts: List[str], num_topics: int) -> List[List[str]]:
+    if not BERTOPIC_AVAILABLE:
+        logger.error("BERTopic is not available - cannot use bertopic_model")
+        return []
     try:
         model = BERTopic(nr_topics=num_topics, min_topic_size=1, embedding_model="all-MiniLM-L6-v2")
         topics, probs = model.fit_transform(texts)
