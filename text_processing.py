@@ -272,13 +272,24 @@ def lsa_model(texts: List[str], num_topics: int, iterations: int) -> List[List[s
 import re
 def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List[str] = [], urls: List[str] = []) -> List[str]:
     try:
+        logger.info(f"🔍 llm_model called with {len(texts)} texts, num_topics={num_topics}, query='{query}', keywords={keywords[:3]}")
+        
+        # Check API key
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            logger.error("❌ OPENAI_API_KEY not found in environment")
+            return []
+        logger.info(f"✅ OPENAI_API_KEY found (length: {len(api_key)})")
+        
         # Initialize the OpenAI model
+        logger.info("🔍 Initializing ChatOpenAI model...")
         llm = ChatOpenAI(
             model="gpt-4o-mini",
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=api_key,
             temperature=0.4,  # Slightly higher temperature for creative phrasing
             max_tokens=500    # Limit tokens to keep responses concise
         )
+        logger.info("✅ ChatOpenAI model initialized")
 
         # Prepare the input context with explicit inclusion of scraped texts
         context = "Scraped Texts:\n"
@@ -304,31 +315,52 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
 
         max_attempts = 3
         for attempt in range(max_attempts):
-            # Call the LLM
-            response = llm.invoke(prompt)
-            response_text = response.content.strip()
-
-            # Robustly strip markdown formatting and extra whitespace
-            response_text = re.sub(r'^```json\s*|\s*```$', '', response_text, flags=re.MULTILINE)
-            response_text = re.sub(r'^\s*|\s*$', '', response_text)  # Remove leading/trailing whitespace
-
-            # Parse the JSON response
+            logger.info(f"🔍 LLM attempt {attempt + 1}/{max_attempts}: Calling OpenAI API...")
             try:
-                topics = json.loads(response_text)
-                # Validate that topics are a list of strings, each with 2-4 words
-                if (isinstance(topics, list) and 
-                    all(isinstance(topic, str) and 2 <= len(topic.split()) <= 4 for topic in topics) and
-                    len(topics) >= num_topics):
-                    topics = topics[:num_topics]  # Trim to exactly num_topics
-                    logger.info(f"LLM extracted {len(topics)} topics: {topics}")
-                    return topics
+                # Call the LLM
+                response = llm.invoke(prompt)
+                response_text = response.content.strip()
+                logger.info(f"✅ LLM API call successful, response length: {len(response_text)}")
+                logger.debug(f"🔍 Raw LLM response: {response_text[:200]}...")
+
+                # Robustly strip markdown formatting and extra whitespace
+                response_text = re.sub(r'^```json\s*|\s*```$', '', response_text, flags=re.MULTILINE)
+                response_text = re.sub(r'^\s*|\s*$', '', response_text)  # Remove leading/trailing whitespace
+
+                # Parse the JSON response
+                try:
+                    topics = json.loads(response_text)
+                    logger.info(f"✅ JSON parsed successfully, got {len(topics) if isinstance(topics, list) else 'non-list'} items")
+                    
+                    # Validate that topics are a list of strings, each with 2-4 words
+                    if (isinstance(topics, list) and 
+                        all(isinstance(topic, str) and 2 <= len(topic.split()) <= 4 for topic in topics) and
+                        len(topics) >= num_topics):
+                        topics = topics[:num_topics]  # Trim to exactly num_topics
+                        logger.info(f"✅ LLM extracted {len(topics)} valid topics: {topics}")
+                        return topics
+                    else:
+                        logger.warning(f"⚠️ LLM attempt {attempt + 1} returned invalid topic format")
+                        logger.warning(f"⚠️ Response was: {response_text[:500]}")
+                        if isinstance(topics, list):
+                            logger.warning(f"⚠️ Topics list length: {len(topics)}, expected >= {num_topics}")
+                            logger.warning(f"⚠️ Sample topics: {topics[:3]}")
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"❌ LLM attempt {attempt + 1} response is not valid JSON: {json_err}")
+                    logger.error(f"❌ Response text: {response_text[:500]}")
+            except Exception as api_err:
+                logger.error(f"❌ LLM API call failed on attempt {attempt + 1}: {str(api_err)}")
+                logger.error(f"❌ Error type: {type(api_err).__name__}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                if attempt < max_attempts - 1:
+                    logger.info("🔄 Retrying LLM call...")
+                    continue
                 else:
-                    logger.warning(f"LLM attempt {attempt + 1} returned invalid topic format: {response_text}")
-            except json.JSONDecodeError:
-                logger.error(f"LLM attempt {attempt + 1} response is not valid JSON: {response_text}")
+                    raise  # Re-raise on final attempt
             
             if attempt < max_attempts - 1:
-                logger.info("Retrying LLM with adjusted prompt")
+                logger.info("🔄 Retrying LLM with adjusted prompt")
 
         # Fallback if LLM fails to produce valid phrases
         logger.warning("LLM failed to produce valid phrases; generating fallback topics")
@@ -346,7 +378,10 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
         return fallback_topics[:num_topics]
 
     except Exception as e:
-        logger.error(f"LLM model error: {str(e)}")
+        logger.error(f"❌ LLM model error: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return []
 
 def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int, iterations: int, query: str = "", keywords: List[str] = [], urls: List[str] = []) -> List[str]:
@@ -373,10 +408,15 @@ def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int,
 
     if topic_tool == 'llm':
         # For LLM, return the topic phrases directly
+        logger.info("🔍 Calling llm_model function...")
         topics = models['llm']()
+        logger.info(f"🔍 llm_model returned: {topics} (type: {type(topics)}, length: {len(topics) if topics else 0})")
         if not topics:
-            logger.warning("LLM model failed; using keyword extraction")
-            return extract_keywords(texts, num_keywords=num_topics)
+            logger.warning("⚠️ LLM model returned empty result; falling back to keyword extraction")
+            fallback_keywords = extract_keywords(texts, num_keywords=num_topics)
+            logger.warning(f"⚠️ Using keyword extraction fallback: {fallback_keywords}")
+            return fallback_keywords
+        logger.info(f"✅ LLM model returned {len(topics)} topics: {topics}")
         return topics
     else:
         # For other models, aggregate words as before
