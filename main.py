@@ -1352,8 +1352,16 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         # Use extract_topics for phrase-based topics instead of single words
         if texts and len(texts) > 0:
             try:
-                # Use LLM model for better phrase generation, fallback to LDA if needed
-                topic_tool = "llm"  # Use LLM for phrase generation
+                # Check if OpenAI API key is available for LLM model
+                import os
+                openai_key = os.getenv("OPENAI_API_KEY")
+                if openai_key and len(openai_key.strip()) > 0:
+                    topic_tool = "llm"  # Use LLM for phrase generation
+                    logger.info("✅ OPENAI_API_KEY found, using LLM model for topics")
+                else:
+                    topic_tool = "lda"  # Use LDA (generates phrases via bigrams/trigrams)
+                    logger.warning("⚠️ OPENAI_API_KEY not found, using LDA model (will generate phrases from bigrams/trigrams)")
+                
                 num_topics = 10
                 iterations = 25
                 
