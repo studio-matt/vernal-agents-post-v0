@@ -226,11 +226,27 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                 # Validate: must be at least 7 characters (e.g., "Jan 2024") or a 4-digit year
                 if len(full_match) >= 4:
                     # Filter out fragments: must contain either a complete month name or be a 4-digit year
-                    if any(month in full_match for month in ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']) or re.match(r'^\d{4}$', full_match):
-                        # Exclude fragments like "ober", "uary", "ember", etc.
-                        invalid_fragments = ['ober', 'uary', 'ember', 'tember', 'ruary', 'ch', 'ry', 'il', 'e', 'ust', 'st', 'ber']
-                        if not any(fragment in full_match.lower() for fragment in invalid_fragments):
+                    full_match_lower = full_match.lower()
+                    valid_months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+                    
+                    # Check if it contains a valid month name or is a 4-digit year
+                    has_valid_month = any(month in full_match_lower for month in valid_months)
+                    is_year_only = re.match(r'^\d{4}$', full_match)
+                    
+                    if has_valid_month or is_year_only:
+                        # Exclude fragments: only reject if it's a standalone fragment (not part of a valid month)
+                        invalid_fragments = ['ober', 'uary', 'ember', 'tember', 'ruary']
+                        # Only reject if the match IS a fragment (not if it contains a valid month)
+                        if has_valid_month:
+                            # If it contains a valid month, it's not a fragment - accept it
                             all_date_matches.append(full_match)
+                        elif is_year_only:
+                            # Standalone year - accept it
+                            all_date_matches.append(full_match)
+                        else:
+                            # Check if it's a standalone fragment (not part of a valid date)
+                            if not any(fragment == full_match_lower for fragment in invalid_fragments):
+                                all_date_matches.append(full_match)
         
         # Remove duplicates and add to entities
         for date in dict.fromkeys(all_date_matches):  # Preserves order while removing duplicates
