@@ -570,19 +570,44 @@ def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int,
         'bertopic': lambda: bertopic_model(raw_texts, num_topics),
         'nmf': lambda: nmf_model(raw_texts, num_topics, iterations),
         'lsa': lambda: lsa_model(raw_texts, num_topics, iterations),
-        'llm': lambda: llm_model(raw_texts, num_topics, query, keywords, urls)
     }
 
     if topic_tool == 'llm':
-        # For LLM, return the topic phrases directly
+        # For LLM, call llm_model directly with texts (not preprocessed)
         logger.info("🔍 Calling llm_model function...")
-        topics = models['llm']()
+        topics = llm_model(texts, num_topics, query, keywords, urls)
         logger.info(f"🔍 llm_model returned: {topics} (type: {type(topics)}, length: {len(topics) if topics else 0})")
         if not topics:
-            logger.warning("⚠️ LLM model returned empty result; falling back to keyword extraction")
-            fallback_keywords = extract_keywords(texts, num_keywords=num_topics)
-            logger.warning(f"⚠️ Using keyword extraction fallback: {fallback_keywords}")
-            return fallback_keywords
+            logger.warning("⚠️ LLM model returned empty result; falling back to phrase extraction from bigrams/trigrams")
+            # Fallback to phrase extraction instead of single-word keywords
+            # Extract meaningful phrases from texts (same logic as non-LLM fallback)
+            from collections import Counter
+            stopwords_set = set(stopwords.words('english'))
+            phrases = []
+            
+            for text in texts[:50]:  # Limit to first 50 texts for performance
+                words = text.lower().split()
+                # Extract bigrams
+                for i in range(len(words) - 1):
+                    bigram = f"{words[i]} {words[i+1]}"
+                    phrase_words = bigram.split()
+                    meaningful_words = [w for w in phrase_words if w not in stopwords_set and len(w) > 2]
+                    if len(meaningful_words) >= 2:  # At least 2 meaningful words
+                        phrases.append(bigram)
+                # Extract trigrams
+                for i in range(len(words) - 2):
+                    trigram = f"{words[i]} {words[i+1]} {words[i+2]}"
+                    phrase_words = trigram.split()
+                    meaningful_words = [w for w in phrase_words if w not in stopwords_set and len(w) > 2]
+                    if len(meaningful_words) >= 2:  # At least 2 meaningful words
+                        phrases.append(trigram)
+            
+            # Count phrase frequencies and get top phrases
+            phrase_counts = Counter(phrases)
+            top_phrases = [phrase for phrase, _ in phrase_counts.most_common(num_topics)]
+            
+            logger.warning(f"⚠️ Using phrase extraction fallback: {top_phrases}")
+            return top_phrases if top_phrases else extract_keywords(texts, num_keywords=num_topics)
         logger.info(f"✅ LLM model returned {len(topics)} topics: {topics}")
         return topics
     else:
