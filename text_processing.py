@@ -173,23 +173,43 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                     entities['organizations'].append(match)
     
     # Enhanced date extraction using regex (for dates NLTK might miss)
+    # Only extract complete dates: Month + Year or Month + Day + Year
     if extract_dates:
-        # Comprehensive date patterns
+        # Comprehensive date patterns - only complete dates
         date_patterns = [
-            r'\b(19|20)\d{2}\b',  # Years: 1900-2099
-            r'\b(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{1,2},?\s+\d{4}\b',  # Month Day, Year
-            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',  # MM/DD/YYYY or DD-MM-YYYY
-            r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b',  # YYYY/MM/DD
-            r'\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b',  # "the 15th of January 2024"
+            # Month Day, Year (e.g., "January 15, 2024", "Jan 15 2024")
+            r'\b(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{1,2},?\s+\d{4}\b',
+            # Month Year (e.g., "January 2024", "Jan 2024")
+            r'\b(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b',
+            # MM/DD/YYYY or DD-MM-YYYY (e.g., "01/15/2024", "15-01-2024")
+            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b',
+            # YYYY/MM/DD (e.g., "2024/01/15")
+            r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b',
+            # Ordinal dates (e.g., "15th of January 2024", "the 15th of January 2024")
+            r'\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\s+(?:of\s+)?(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b',
+            # Years (only if they're clearly dates, not just numbers)
+            r'\b(?:in\s+)?(19|20)\d{2}(?:\s|$|\.|,|;|\)|\])\b',  # Years with context
         ]
         for pattern in date_patterns:
             date_matches = re.findall(pattern, text, re.IGNORECASE)
             for match in date_matches:
                 if isinstance(match, tuple):
-                    # Handle groups - take the full match
-                    match = ' '.join(m for m in match if m)
-                if match and match not in entities['dates']:
-                    entities['dates'].append(match)
+                    # Handle groups - reconstruct full date
+                    if len(match) == 2 and match[0] in ['19', '20']:
+                        # Year pattern - reconstruct full year
+                        full_year = match[0] + match[1] if match[1] else match[0]
+                        if len(full_year) == 4:
+                            match = full_year
+                        else:
+                            continue
+                    else:
+                        # Other patterns - join non-empty parts
+                        match = ' '.join(m for m in match if m)
+                if match and len(match) >= 4:  # Minimum: year (4 digits) or "Jan 2024" (7 chars)
+                    # Clean up the match
+                    match = match.strip('.,;()[]')
+                    if match not in entities['dates']:
+                        entities['dates'].append(match)
     
     # Pattern-based extraction for better coverage (especially for titles and short texts)
     if extract_persons:
@@ -201,13 +221,19 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             'The', 'A', 'An', 'In', 'On', 'At', 'For', 'With', 'From', 'To', 'Of', 'And', 'Or', 'But', 'As', 'By',
             'War', 'Prisoner', 'Escape', 'Camp', 'Life', 'Liberation', 'Discover', 'Earn', 'Points', 'Support',
             'Login', 'Vietnam', 'United', 'States', 'America', 'World', 'Documentary', 'Mini', 'Series', 'Trailer',
-            'English', 'General', 'Seasons', 'Brasil', 'Crew', 'Artwork', 'Lists', 'Changed'
+            'English', 'General', 'Seasons', 'Brasil', 'Crew', 'Artwork', 'Lists', 'Changed',
+            'Article', 'Talk', 'Read', 'Tools', 'Appearance', 'Text', 'Small', 'Standard', 'Large', 'Width',
+            'Wide', 'Color', 'Automatic', 'Light', 'Dark', 'From', 'Wikipedia', 'Nathu', 'La', 'Cho', 'Indochina', 'Wars'
         }
-        # Common non-name patterns (articles, titles, etc.)
+        # Common non-name patterns (articles, titles, UI elements, etc.)
         non_name_patterns = [
             r'\b(Discover|Support|Login|Earn|Points|The War|That|Changed|America|Brasil|General|Seasons|Crew|Artwork|Lists|Documentary|Mini|Series|United States|English Trailer)\b',
             r'\b[A-Z][a-z]+\s+(Earn|Points|Login|Support|War|That|Changed|America)\b',
             r'\b(The|A|An)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Articles before capitalized words
+            r'\b(Article|Talk|Read|Tools|Appearance|Text|Small|Standard|Large|Width|Wide|Color|Automatic|Light|Dark|From|Wikipedia)\s+[A-Z][a-z]+\b',  # UI elements
+            r'\b[A-Z][a-z]+\s+(Talk|Read|Tools|Appearance|Text|Small|Standard|Large|Width|Wide|Color)\b',  # UI patterns
+            r'\b(Nathu|Cho)\s+La\b',  # Geographic locations
+            r'\bIndochina\s+Wars\b',  # Historical events
         ]
         
         name_matches = re.findall(name_pattern, text)
@@ -223,9 +249,14 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                 if len(words_in_match) >= 2:
                     # Check that both words are capitalized (proper nouns)
                     if all(word[0].isupper() and word[1:].islower() for word in words_in_match):
-                        # Additional check: not common title words
-                        if not any(word.lower() in ['the', 'war', 'that', 'changed', 'america', 'support', 'login', 'earn', 'points'] 
-                                  for word in words_in_match):
+                        # Additional check: not common title/UI words
+                        common_non_names = {
+                            'the', 'war', 'that', 'changed', 'america', 'support', 'login', 'earn', 'points',
+                            'article', 'talk', 'read', 'tools', 'appearance', 'text', 'small', 'standard', 'large',
+                            'width', 'wide', 'color', 'automatic', 'light', 'dark', 'from', 'wikipedia', 'nathu',
+                            'cho', 'la', 'indochina', 'wars', 'vietnam', 'united', 'states', 'world', 'documentary'
+                        }
+                        if not any(word.lower() in common_non_names for word in words_in_match):
                             entities['persons'].append(match)
     
     if extract_locations:
@@ -414,10 +445,22 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
 
         # Craft the prompt for topic extraction
         prompt = f"""
-        You are an expert in topic modeling. Given the following scraped texts, query, keywords, and URLs, identify exactly {num_topics} key topics that are highly relevant to all provided inputs. Each topic must be a concise 3-4 word phrase that is meaningful, stands alone as an important theme, and captures the essence of the content. Topics must not be single words or vague terms; they should form coherent phrases that reflect specific themes. Ensure the topics are distinct and prioritize relevance to the scraped texts, query, keywords, and URLs. Return the result as a JSON array of strings, where each string is a 3-4 word topic phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
+        You are an expert in topic modeling. Given the following scraped texts, query, keywords, and URLs, identify exactly {num_topics} key topics that are highly relevant to all provided inputs. 
 
-        Example output:
-        ["whale communication research", "humpback whale behavior", "AI in marine biology"]
+        CRITICAL REQUIREMENTS:
+        - Each topic MUST be a 2-4 word phrase (e.g., "vietnam war history", "military strategy analysis")
+        - NEVER return single words (e.g., "war", "vietnam", "history" are INVALID)
+        - Each phrase must be meaningful and stand alone as an important theme
+        - Phrases should reflect specific themes, not vague terms
+        - Ensure topics are distinct and prioritize relevance to the scraped texts
+
+        Return ONLY a JSON array of strings, where each string is a 2-4 word topic phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
+
+        Example VALID output:
+        ["vietnam war history", "military strategy analysis", "cold war politics", "southeast asia conflict"]
+
+        Example INVALID output (DO NOT DO THIS):
+        ["war", "vietnam", "history", "military"]  ← These are single words, NOT valid
 
         Context:
         {context}
@@ -442,19 +485,30 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
                     topics = json.loads(response_text)
                     logger.info(f"✅ JSON parsed successfully, got {len(topics) if isinstance(topics, list) else 'non-list'} items")
                     
-                    # Validate that topics are a list of strings, each with 2-4 words
-                    if (isinstance(topics, list) and 
-                        all(isinstance(topic, str) and 2 <= len(topic.split()) <= 4 for topic in topics) and
-                        len(topics) >= num_topics):
-                        topics = topics[:num_topics]  # Trim to exactly num_topics
-                        logger.info(f"✅ LLM extracted {len(topics)} valid topics: {topics}")
-                        return topics
+                    # Validate that topics are a list of strings, each with 2-4 words (NOT single words)
+                    if isinstance(topics, list):
+                        # Filter out single-word topics and validate
+                        valid_topics = []
+                        for topic in topics:
+                            if isinstance(topic, str):
+                                word_count = len(topic.split())
+                                # Must be 2-4 words, not a single word
+                                if 2 <= word_count <= 4:
+                                    valid_topics.append(topic)
+                                else:
+                                    logger.warning(f"⚠️ Rejected topic '{topic}' - has {word_count} word(s), need 2-4 words")
+                        
+                        if len(valid_topics) >= num_topics:
+                            topics = valid_topics[:num_topics]  # Trim to exactly num_topics
+                            logger.info(f"✅ LLM extracted {len(topics)} valid topic phrases: {topics}")
+                            return topics
+                        else:
+                            logger.warning(f"⚠️ LLM attempt {attempt + 1} returned only {len(valid_topics)} valid phrases, need {num_topics}")
+                            logger.warning(f"⚠️ Valid topics: {valid_topics}")
+                            logger.warning(f"⚠️ All topics: {topics}")
                     else:
-                        logger.warning(f"⚠️ LLM attempt {attempt + 1} returned invalid topic format")
+                        logger.warning(f"⚠️ LLM attempt {attempt + 1} returned non-list response")
                         logger.warning(f"⚠️ Response was: {response_text[:500]}")
-                        if isinstance(topics, list):
-                            logger.warning(f"⚠️ Topics list length: {len(topics)}, expected >= {num_topics}")
-                            logger.warning(f"⚠️ Sample topics: {topics[:3]}")
                 except json.JSONDecodeError as json_err:
                     logger.error(f"❌ LLM attempt {attempt + 1} response is not valid JSON: {json_err}")
                     logger.error(f"❌ Response text: {response_text[:500]}")
