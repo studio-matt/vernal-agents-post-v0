@@ -445,22 +445,25 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
 
         # Craft the prompt for topic extraction
         prompt = f"""
-        You are an expert in topic modeling. Given the following scraped texts, query, keywords, and URLs, identify exactly {num_topics} key topics that are highly relevant to all provided inputs. 
+        You are an expert in topic modeling. Your task is to review the scraped information and extract a list of salient topic names as short, descriptive phrases.
 
         CRITICAL REQUIREMENTS:
-        - Each topic MUST be a 2-4 word phrase (e.g., "vietnam war history", "military strategy analysis")
-        - NEVER return single words (e.g., "war", "vietnam", "history" are INVALID)
-        - Each phrase must be meaningful and stand alone as an important theme
-        - Phrases should reflect specific themes, not vague terms
-        - Ensure topics are distinct and prioritize relevance to the scraped texts
+        - Each topic MUST be a short, descriptive phrase (2-4 words) that captures a distinct concept
+        - Each topic name should be a multi-word phrase if that improves clarity
+        - Examples of good topics: 'football offense', 'public health policy', 'gun violence', 'vietnam war history', 'military strategy analysis'
+        - NEVER return single words (e.g., "war", "vietnam", "football", "health" are INVALID)
+        - Each phrase must be meaningful, descriptive, and stand alone as an important theme
+        - Phrases should reflect specific concepts found in the scraped content, not vague terms
+        - Ensure topics are distinct and capture different aspects of the content
+        - Prioritize topics that are most relevant to the scraped texts, query, keywords, and URLs
 
-        Return ONLY a JSON array of strings, where each string is a 2-4 word topic phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
+        Return EXACTLY {num_topics} topics as a JSON array of strings. Each string must be a 2-4 word descriptive phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
 
         Example VALID output:
-        ["vietnam war history", "military strategy analysis", "cold war politics", "southeast asia conflict"]
+        ["vietnam war history", "military strategy analysis", "cold war politics", "southeast asia conflict", "combat operations planning"]
 
         Example INVALID output (DO NOT DO THIS):
-        ["war", "vietnam", "history", "military"]  ← These are single words, NOT valid
+        ["war", "vietnam", "history", "military", "strategy"]  ← These are single words, NOT valid
 
         Context:
         {context}
