@@ -10,13 +10,21 @@ from gensim import corpora, models
 from collections import Counter
 import numpy as np
 import logging
-from langchain_openai import ChatOpenAI
 import os
 import json
 
 # Set up logging first
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# langchain_openai is optional - only needed for LLM model
+try:
+    from langchain_openai import ChatOpenAI
+    LANGCHAIN_OPENAI_AVAILABLE = True
+except ImportError:
+    ChatOpenAI = None
+    LANGCHAIN_OPENAI_AVAILABLE = False
+    logger.warning("⚠️ langchain_openai not available - LLM model will not work")
 
 # sklearn is optional - only needed for NMF and LSA models
 try:
@@ -289,6 +297,11 @@ import re
 def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List[str] = [], urls: List[str] = []) -> List[str]:
     try:
         logger.info(f"🔍 llm_model called with {len(texts)} texts, num_topics={num_topics}, query='{query}', keywords={keywords[:3]}")
+        
+        # Check if langchain_openai is available
+        if not LANGCHAIN_OPENAI_AVAILABLE:
+            logger.error("❌ langchain_openai is not installed. Install it with: pip install langchain-openai")
+            return []
         
         # Check API key
         api_key = os.getenv("OPENAI_API_KEY")
