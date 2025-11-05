@@ -1357,6 +1357,9 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 num_topics = 10
                 iterations = 25
                 
+                logger.info(f"🔍 Calling extract_topics with {len(texts)} texts, tool={topic_tool}, num_topics={num_topics}")
+                logger.info(f"🔍 Campaign context: query='{campaign_query}', keywords={campaign_keywords[:3]}, urls={len(campaign_urls)}")
+                
                 topic_phrases = extract_topics(
                     texts,
                     topic_tool=topic_tool,
@@ -1366,6 +1369,8 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     keywords=campaign_keywords,
                     urls=campaign_urls
                 )
+                
+                logger.info(f"🔍 extract_topics returned {len(topic_phrases) if topic_phrases else 0} topics: {topic_phrases[:5] if topic_phrases else 'NONE'}")
                 
                 # If we got phrases, use them; otherwise fall back to word frequency
                 if topic_phrases and len(topic_phrases) > 0:
@@ -1378,7 +1383,10 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     raise Exception("No topics from extract_topics")
                     
             except Exception as topic_err:
-                logger.warning(f"⚠️ Error extracting topics with extract_topics: {topic_err}, falling back to word frequency")
+                logger.error(f"❌ Error extracting topics with extract_topics: {topic_err}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                logger.warning(f"⚠️ Falling back to word frequency due to error")
                 # Fallback to simple word frequency
                 stop = set(
                     "the a an and or of for to in on at from by with as is are was were be been being this that those these it its into over under about after before above below between across can will would should could may might not no yes you your we our their them they he she his her him i me my do does did done have has had having".split()
