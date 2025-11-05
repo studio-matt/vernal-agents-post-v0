@@ -574,10 +574,32 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
                                 else:
                                     logger.warning(f"⚠️ Rejected topic '{topic}' - has {word_count} word(s), need 2-4 words")
                         
-                        if len(valid_topics) >= num_topics:
-                            topics = valid_topics[:num_topics]  # Trim to exactly num_topics
+                        # Additional filtering: remove topics with URLs, file extensions, or technical identifiers
+                        filtered_topics = []
+                        invalid_patterns = [
+                            r'\.(com|org|net|edu|gov|io|isbn|doi|pdf|html|xml|json)',  # URLs, file extensions, identifiers
+                            r'^https?://',  # URLs
+                            r'^\d+$',  # Pure numbers
+                            r'^[a-z]+\.[a-z]+',  # Domain-like patterns (press.isbn)
+                        ]
+                        for topic in valid_topics:
+                            # Skip if matches invalid patterns
+                            if any(re.search(pattern, topic, re.IGNORECASE) for pattern in invalid_patterns):
+                                logger.warning(f"⚠️ Filtered out invalid topic pattern: {topic}")
+                                continue
+                            # Skip if it's too short or too long (meaningless)
+                            if len(topic.split()) < 2 or len(topic) > 50:
+                                continue
+                            filtered_topics.append(topic)
+                        
+                        if len(filtered_topics) >= num_topics:
+                            topics = filtered_topics[:num_topics]  # Trim to exactly num_topics
                             logger.info(f"✅ LLM extracted {len(topics)} valid topic phrases: {topics}")
                             return topics
+                        elif len(filtered_topics) > 0:
+                            # Return what we have even if less than requested
+                            logger.warning(f"⚠️ LLM returned only {len(filtered_topics)} valid topics after filtering, need {num_topics}")
+                            return filtered_topics
                         else:
                             logger.warning(f"⚠️ LLM attempt {attempt + 1} returned only {len(valid_topics)} valid phrases, need {num_topics}")
                             logger.warning(f"⚠️ Valid topics: {valid_topics}")
