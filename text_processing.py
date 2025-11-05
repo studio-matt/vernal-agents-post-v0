@@ -139,11 +139,22 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             elif entity_type == 'ORGANIZATION' and extract_organizations:
                 entities['organizations'].append(entity_text)
             # NLTK sometimes labels organizations as GPE, so check for organization indicators
-            elif entity_type == 'GPE' and extract_organizations:
+            elif entity_type == 'GPE':
                 # Check if it's likely an organization (contains org words)
-                org_indicators = ['Corp', 'Corporation', 'Inc', 'LLC', 'Ltd', 'Company', 'University', 'College', 'School', 'Hospital', 'Foundation', 'Institute', 'Organization', 'Association']
-                if any(indicator in entity_text for indicator in org_indicators):
-                    entities['organizations'].append(entity_text)
+                if extract_organizations:
+                    org_indicators = ['Corp', 'Corporation', 'Inc', 'LLC', 'Ltd', 'Company', 'University', 'College', 'School', 'Hospital', 'Foundation', 'Institute', 'Organization', 'Association']
+                    if any(indicator in entity_text for indicator in org_indicators):
+                        entities['organizations'].append(entity_text)
+                    elif extract_locations:
+                        # If not an organization, it's a location
+                        entities['locations'].append(entity_text)
+                elif extract_locations:
+                    entities['locations'].append(entity_text)
+            elif entity_type == 'DATE' and extract_dates:
+                entities['dates'].append(entity_text)
+            # NLTK sometimes labels facilities as ORGANIZATION, but we'll use regex for better coverage
+            elif entity_type == 'FACILITY' and extract_facility:
+                entities['facility'].append(entity_text)
     
     # Enhanced organization extraction using regex (for organizations NLTK might miss)
     if extract_organizations:
@@ -160,13 +171,6 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                 # Exclude common non-org words
                 if match and match not in {'The', 'A', 'An', 'United', 'States'} and match not in entities['organizations']:
                     entities['organizations'].append(match)
-            elif entity_type == 'GPE' and extract_locations:
-                entities['locations'].append(entity_text)
-            elif entity_type == 'DATE' and extract_dates:
-                entities['dates'].append(entity_text)
-            # NLTK sometimes labels facilities as ORGANIZATION, but we'll use regex for better coverage
-            elif entity_type == 'FACILITY' and extract_facility:
-                entities['facility'].append(entity_text)
     
     # Enhanced date extraction using regex (for dates NLTK might miss)
     if extract_dates:
