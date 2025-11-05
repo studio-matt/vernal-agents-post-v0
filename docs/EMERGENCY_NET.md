@@ -751,7 +751,18 @@ def __init__(self):
 ```bash
 cd /home/ubuntu/vernal-agents-post-v0
 source venv/bin/activate  # CRITICAL: Must activate venv first!
-python3 validate_dependencies.py
+python3 validate_dependencies.py || {
+    echo "❌ Dependency validation FAILED. Fix issues before proceeding."
+    # Use 'return 1' instead of 'exit 1' if running in a function
+    # Or just check the exit code manually
+    exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "Validation failed with exit code: $exit_code"
+        echo "Review the errors above and fix before deploying."
+    fi
+    # Don't exit the shell - just stop the script
+    false  # Returns non-zero but doesn't exit shell
+}
 ```
 
 **OR use the venv Python directly:**
