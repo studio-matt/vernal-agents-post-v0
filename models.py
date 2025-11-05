@@ -212,3 +212,16 @@ class CampaignRawData(Base):
 
     def __repr__(self):
         return f"<CampaignRawData(id={self.id}, campaign_id={self.campaign_id}, url={self.source_url})>"
+
+# System-wide settings (e.g., LLM prompts, configuration)
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    setting_key = Column(String(255), unique=True, nullable=False, index=True)  # e.g., "topic_extraction_prompt"
+    setting_value = Column(Text, nullable=False)  # JSON string or plain text
+    description = Column(Text, nullable=True)  # Description of what this setting does
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def __repr__(self):
+        return f"<SystemSettings(id={self.id}, key={self.setting_key})>"

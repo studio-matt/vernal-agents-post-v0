@@ -1256,6 +1256,87 @@ def debug_campaign_data(campaign_id: str, db: Session = Depends(get_db)):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Debug error: {str(e)}")
 
+# System Settings endpoints
+@app.get("/admin/settings/{setting_key}")
+def get_system_setting(setting_key: str, db: Session = Depends(get_db)):
+    """Get a system setting by key"""
+    try:
+        from models import SystemSettings
+        setting = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
+        if not setting:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Setting '{setting_key}' not found"
+            )
+        return {
+            "status": "success",
+            "setting_key": setting.setting_key,
+            "setting_value": setting.setting_value,
+            "description": setting.description,
+            "updated_at": setting.updated_at.isoformat() if setting.updated_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching system setting: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch setting: {str(e)}"
+        )
+
+@app.put("/admin/settings/{setting_key}")
+def update_system_setting(setting_key: str, setting_data: Dict[str, Any], db: Session = Depends(get_db)):
+    """Update or create a system setting"""
+    try:
+        from models import SystemSettings
+        setting = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
+        
+        if setting:
+            # Update existing setting
+            if "setting_value" in setting_data:
+                setting.setting_value = setting_data["setting_value"]
+            if "description" in setting_data:
+                setting.description = setting_data["description"]
+            setting.updated_at = datetime.now()
+            db.commit()
+            db.refresh(setting)
+            logger.info(f"✅ Updated system setting: {setting_key}")
+            
+            # Clear cache if this is the topic extraction prompt
+            if setting_key == "topic_extraction_prompt":
+                try:
+                    from text_processing import clear_topic_prompt_cache
+                    clear_topic_prompt_cache()
+                except Exception as cache_err:
+                    logger.warning(f"⚠️ Failed to clear prompt cache: {cache_err}")
+        else:
+            # Create new setting
+            setting = SystemSettings(
+                setting_key=setting_key,
+                setting_value=setting_data.get("setting_value", ""),
+                description=setting_data.get("description")
+            )
+            db.add(setting)
+            db.commit()
+            db.refresh(setting)
+            logger.info(f"✅ Created new system setting: {setting_key}")
+        
+        return {
+            "status": "success",
+            "message": f"Setting '{setting_key}' updated successfully",
+            "setting_key": setting.setting_key,
+            "setting_value": setting.setting_value,
+            "description": setting.description,
+            "updated_at": setting.updated_at.isoformat() if setting.updated_at else None
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating system setting: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update setting: {str(e)}"
+        )
+
 # Research data endpoint: returns urls, raw samples, word cloud, topics and entities
 @app.get("/campaigns/{campaign_id}/research")
 def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depends(get_db)):

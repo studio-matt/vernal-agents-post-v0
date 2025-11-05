@@ -13,6 +13,10 @@ import logging
 import os
 import json
 
+# Cache for topic extraction prompt (loaded from database)
+_topic_prompt_cache = None
+_topic_prompt_cache_time = None
+
 # Set up logging first
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -98,6 +102,92 @@ def stem_text(text: str) -> str:
     words = word_tokenize(text)
     stemmed_words = [stemmer.stem(word) for word in words]
     return ' '.join(stemmed_words)
+
+def clear_topic_prompt_cache():
+    """Clear the cached topic extraction prompt (call after updating in DB)"""
+    global _topic_prompt_cache, _topic_prompt_cache_time
+    _topic_prompt_cache = None
+    _topic_prompt_cache_time = None
+    logger.info("✅ Cleared topic extraction prompt cache")
+
+def get_topic_extraction_prompt() -> str:
+    """
+    Get the topic extraction prompt from database, with fallback to default.
+    Caches the prompt for 5 minutes to reduce database queries.
+    """
+    global _topic_prompt_cache, _topic_prompt_cache_time
+    
+    import time
+    
+    # Check cache (5 minute TTL)
+    if _topic_prompt_cache and _topic_prompt_cache_time:
+        if time.time() - _topic_prompt_cache_time < 300:  # 5 minutes
+            return _topic_prompt_cache
+    
+    # Default prompt (fallback)
+    default_prompt = """You are an expert in topic modeling. Your task is to review the scraped information and extract a list of salient topic names as short, descriptive phrases.
+
+CRITICAL REQUIREMENTS:
+- Each topic MUST be a short, descriptive phrase (2-4 words) that captures a distinct concept
+- Each topic name should be a multi-word phrase if that improves clarity
+- Examples of good topics: 'football offense', 'public health policy', 'gun violence', 'vietnam war history', 'military strategy analysis'
+- NEVER return single words (e.g., "war", "vietnam", "football", "health" are INVALID)
+- Each phrase must be meaningful, descriptive, and stand alone as an important theme
+- Phrases should reflect specific concepts found in the scraped content, not vague terms
+- Ensure topics are distinct and capture different aspects of the content
+- Prioritize topics that are most relevant to the scraped texts, query, keywords, and URLs
+
+STRICTLY FORBIDDEN - DO NOT EXTRACT:
+- UI instructions or commands (e.g., "press ctrl", "place your cursor", "enter number", "duplicate pages")
+- Software interface elements (e.g., "blank page", "page break", "min read", "want to duplicate")
+- Keyboard shortcuts or commands (e.g., "press ctrl +", "windows or command")
+- Tutorial step instructions (e.g., "how to duplicate", "select all", "copy paste")
+- Technical identifiers or file extensions (e.g., "press.isbn", "document.pdf", URLs)
+- Generic action phrases without context (e.g., "open file", "save document", "close window")
+
+Focus on EXTRACTING THEMES AND CONCEPTS, not the instructions for how to use software.
+
+Return EXACTLY {num_topics} topics as a JSON array of strings. Each string must be a 2-4 word descriptive phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
+
+Example VALID output:
+["vietnam war history", "military strategy analysis", "cold war politics", "southeast asia conflict", "combat operations planning"]
+
+Example INVALID output (DO NOT DO THIS):
+["war", "vietnam", "history", "military", "strategy"]  ← These are single words, NOT valid
+["press ctrl", "place cursor", "duplicate pages", "blank page"]  ← These are UI instructions, NOT valid topics
+
+Context:
+{context}"""
+    
+    # Try to load from database
+    try:
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            from models import SystemSettings
+            setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "topic_extraction_prompt"
+            ).first()
+            
+            if setting and setting.setting_value:
+                # Update cache
+                _topic_prompt_cache = setting.setting_value
+                _topic_prompt_cache_time = time.time()
+                logger.info("✅ Loaded topic extraction prompt from database")
+                return setting.setting_value
+            else:
+                logger.warning("⚠️ Topic extraction prompt not found in database, using default")
+        except Exception as db_err:
+            logger.warning(f"⚠️ Failed to load prompt from database: {db_err}, using default")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"⚠️ Database not available for prompt loading: {e}, using default")
+    
+    # Return default and cache it
+    _topic_prompt_cache = default_prompt
+    _topic_prompt_cache_time = time.time()
+    return default_prompt
 
 def remove_stopwords(text: str) -> str:
     words = word_tokenize(text)
@@ -582,42 +672,11 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
         if urls:
             context += f"URLs: {', '.join(urls)}\n"
 
-        # Craft the prompt for topic extraction
-        prompt = f"""
-        You are an expert in topic modeling. Your task is to review the scraped information and extract a list of salient topic names as short, descriptive phrases.
-
-        CRITICAL REQUIREMENTS:
-        - Each topic MUST be a short, descriptive phrase (2-4 words) that captures a distinct concept
-        - Each topic name should be a multi-word phrase if that improves clarity
-        - Examples of good topics: 'football offense', 'public health policy', 'gun violence', 'vietnam war history', 'military strategy analysis'
-        - NEVER return single words (e.g., "war", "vietnam", "football", "health" are INVALID)
-        - Each phrase must be meaningful, descriptive, and stand alone as an important theme
-        - Phrases should reflect specific concepts found in the scraped content, not vague terms
-        - Ensure topics are distinct and capture different aspects of the content
-        - Prioritize topics that are most relevant to the scraped texts, query, keywords, and URLs
-
-        STRICTLY FORBIDDEN - DO NOT EXTRACT:
-        - UI instructions or commands (e.g., "press ctrl", "place your cursor", "enter number", "duplicate pages")
-        - Software interface elements (e.g., "blank page", "page break", "min read", "want to duplicate")
-        - Keyboard shortcuts or commands (e.g., "press ctrl +", "windows or command")
-        - Tutorial step instructions (e.g., "how to duplicate", "select all", "copy paste")
-        - Technical identifiers or file extensions (e.g., "press.isbn", "document.pdf", URLs)
-        - Generic action phrases without context (e.g., "open file", "save document", "close window")
-
-        Focus on EXTRACTING THEMES AND CONCEPTS, not the instructions for how to use software.
-
-        Return EXACTLY {num_topics} topics as a JSON array of strings. Each string must be a 2-4 word descriptive phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
-
-        Example VALID output:
-        ["vietnam war history", "military strategy analysis", "cold war politics", "southeast asia conflict", "combat operations planning"]
-
-        Example INVALID output (DO NOT DO THIS):
-        ["war", "vietnam", "history", "military", "strategy"]  ← These are single words, NOT valid
-        ["press ctrl", "place cursor", "duplicate pages", "blank page"]  ← These are UI instructions, NOT valid topics
-
-        Context:
-        {context}
-        """
+        # Load prompt from database, with fallback to default
+        prompt_template = get_topic_extraction_prompt()
+        
+        # Format the prompt with actual values
+        prompt = prompt_template.format(num_topics=num_topics, context=context)
 
         max_attempts = 3
         for attempt in range(max_attempts):
