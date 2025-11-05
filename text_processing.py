@@ -596,6 +596,16 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
         - Ensure topics are distinct and capture different aspects of the content
         - Prioritize topics that are most relevant to the scraped texts, query, keywords, and URLs
 
+        STRICTLY FORBIDDEN - DO NOT EXTRACT:
+        - UI instructions or commands (e.g., "press ctrl", "place your cursor", "enter number", "duplicate pages")
+        - Software interface elements (e.g., "blank page", "page break", "min read", "want to duplicate")
+        - Keyboard shortcuts or commands (e.g., "press ctrl +", "windows or command")
+        - Tutorial step instructions (e.g., "how to duplicate", "select all", "copy paste")
+        - Technical identifiers or file extensions (e.g., "press.isbn", "document.pdf", URLs)
+        - Generic action phrases without context (e.g., "open file", "save document", "close window")
+
+        Focus on EXTRACTING THEMES AND CONCEPTS, not the instructions for how to use software.
+
         Return EXACTLY {num_topics} topics as a JSON array of strings. Each string must be a 2-4 word descriptive phrase. Do not include explanations, additional text, or markdown formatting (e.g., ```json), just the JSON array.
 
         Example VALID output:
@@ -603,6 +613,7 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
 
         Example INVALID output (DO NOT DO THIS):
         ["war", "vietnam", "history", "military", "strategy"]  ← These are single words, NOT valid
+        ["press ctrl", "place cursor", "duplicate pages", "blank page"]  ← These are UI instructions, NOT valid topics
 
         Context:
         {context}
