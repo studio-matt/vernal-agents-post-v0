@@ -1394,36 +1394,118 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 logger.error(f"❌ Error extracting topics with extract_topics: {topic_err}")
                 import traceback
                 logger.error(f"Traceback: {traceback.format_exc()}")
-                logger.warning(f"⚠️ Falling back to word frequency due to error")
-                # Fallback to simple word frequency
-                stop = set(
-                    "the a an and or of for to in on at from by with as is are was were be been being this that those these it its into over under about after before above below between across can will would should could may might not no yes you your we our their them they he she his her him i me my do does did done have has had having".split()
-                )
-                counts = {}
-                tokenizer = re.compile(r"[A-Za-z]{3,}")
-                for t in texts:
-                    for w in tokenizer.findall(t.lower()):
-                        if w in stop:
+                logger.warning(f"⚠️ Falling back to phrase extraction due to error")
+                # Fallback: Extract meaningful bigrams/trigrams instead of single words
+                from collections import Counter
+                from nltk.corpus import stopwords
+                from nltk.tokenize import word_tokenize
+                from nltk import pos_tag
+                
+                nltk_stopwords = set(stopwords.words('english'))
+                additional_stopwords = {
+                    'who', 'which', 'what', 'when', 'where', 'why', 'how', 'but', 'than', 'that', 'this',
+                    'these', 'those', 'united', 'world', 'one', 'two', 'also', 'more', 'most', 'very'
+                }
+                comprehensive_stopwords = nltk_stopwords | additional_stopwords
+                
+                # Extract meaningful bigrams and trigrams
+                phrases = []
+                for t in texts[:50]:  # Limit for performance
+                    try:
+                        tokens = word_tokenize(t.lower())
+                        tagged = pos_tag(tokens)
+                        # Filter out stopwords and function words
+                        meaningful_tokens = [word for word, tag in tagged 
+                                           if word not in comprehensive_stopwords 
+                                           and tag not in {'PRP', 'PRP$', 'DT', 'IN', 'CC', 'TO'}
+                                           and len(word) >= 3 and word.isalpha()]
+                        
+                        # Extract bigrams
+                        for i in range(len(meaningful_tokens) - 1):
+                            bigram = f"{meaningful_tokens[i]} {meaningful_tokens[i+1]}"
+                            phrases.append(bigram)
+                        # Extract trigrams
+                        for i in range(len(meaningful_tokens) - 2):
+                            trigram = f"{meaningful_tokens[i]} {meaningful_tokens[i+1]} {meaningful_tokens[i+2]}"
+                            phrases.append(trigram)
+                    except Exception as e:
+                        logger.debug(f"Phrase extraction failed for text: {e}")
+                        continue
+                
+                # Count phrase frequencies
+                phrase_counts = Counter(phrases)
+                top_phrases = phrase_counts.most_common(10)
+                
+                if top_phrases:
+                    topics = [{"label": phrase, "score": count} for phrase, count in top_phrases]
+                    logger.info(f"✅ Generated {len(topics)} fallback topic phrases: {[t['label'] for t in topics]}")
+                else:
+                    # Last resort: single meaningful words
+                    word_counts = Counter()
+                    for t in texts:
+                        try:
+                            tokens = word_tokenize(t.lower())
+                            tagged = pos_tag(tokens)
+                            for word, tag in tagged:
+                                if (word not in comprehensive_stopwords and 
+                                    tag not in {'PRP', 'PRP$', 'DT', 'IN', 'CC', 'TO'}
+                                    and len(word) >= 4 and word.isalpha()):
+                                    word_counts[word] += 1
+                        except:
                             continue
-                        counts[w] = counts.get(w, 0) + 1
-                top_terms = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
-                topics = [{"label": k, "score": v} for k, v in top_terms]
+                    top_words = word_counts.most_common(10)
+                    topics = [{"label": word, "score": count} for word, count in top_words]
+                    logger.warning(f"⚠️ Using single-word fallback: {[t['label'] for t in topics]}")
         else:
             topics = []
         
-        # Build word cloud from the same texts (for backward compatibility)
-        stop = set(
-            "the a an and or of for to in on at from by with as is are was were be been being this that those these it its into over under about after before above below between across can will would should could may might not no yes you your we our their them they he she his her him i me my do does did done have has had having".split()
-        )
+        # Build word cloud with comprehensive stopword filtering and POS tagging
+        # Use NLTK's comprehensive stopword list + additional filtering
+        from nltk.corpus import stopwords
+        from nltk.tokenize import word_tokenize
+        from nltk import pos_tag
+        
+        # Comprehensive stopword set (NLTK + common function words)
+        nltk_stopwords = set(stopwords.words('english'))
+        additional_stopwords = {
+            'who', 'which', 'what', 'when', 'where', 'why', 'how', 'but', 'than', 'that', 'this',
+            'these', 'those', 'united', 'world', 'one', 'two', 'also', 'more', 'most', 'very',
+            'much', 'many', 'some', 'any', 'all', 'each', 'every', 'both', 'few', 'other',
+            'such', 'only', 'just', 'even', 'still', 'yet', 'already', 'never', 'always',
+            'often', 'sometimes', 'usually', 'generally', 'particularly', 'especially',
+            'however', 'therefore', 'thus', 'hence', 'moreover', 'furthermore', 'nevertheless'
+        }
+        comprehensive_stopwords = nltk_stopwords | additional_stopwords
+        
+        # Function word POS tags to exclude (pronouns, determiners, prepositions, conjunctions, etc.)
+        function_word_tags = {'PRP', 'PRP$', 'DT', 'IN', 'CC', 'TO', 'WDT', 'WP', 'WP$', 'WRB', 'PDT', 'RP', 'EX'}
+        
         counts = {}
-        tokenizer = re.compile(r"[A-Za-z]{3,}")
         for t in texts:
-            for w in tokenizer.findall(t.lower()):
-                if w in stop:
-                    continue
-                counts[w] = counts.get(w, 0) + 1
+            try:
+                # Tokenize and POS tag
+                tokens = word_tokenize(t.lower())
+                tagged = pos_tag(tokens)
+                
+                for word, tag in tagged:
+                    # Skip if stopword, function word, or too short
+                    if (word.lower() in comprehensive_stopwords or 
+                        tag in function_word_tags or 
+                        len(word) < 3 or 
+                        not word.isalpha()):
+                        continue
+                    counts[word.lower()] = counts.get(word.lower(), 0) + 1
+            except Exception as e:
+                # Fallback to simple tokenization if NLTK fails
+                logger.debug(f"POS tagging failed for text, using simple tokenization: {e}")
+                tokenizer = re.compile(r"[A-Za-z]{3,}")
+                for w in tokenizer.findall(t.lower()):
+                    if w not in comprehensive_stopwords:
+                        counts[w] = counts.get(w, 0) + 1
+        
         top_terms = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
         word_cloud = [{"term": k, "count": v} for k, v in top_terms]
+        logger.info(f"📊 Word cloud generated: {[t['term'] for t in word_cloud]}")
 
         # Use NLTK-based entity extraction for accurate named entity recognition
         persons = []

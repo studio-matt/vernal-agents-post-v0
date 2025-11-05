@@ -138,6 +138,28 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
                 entities['persons'].append(entity_text)
             elif entity_type == 'ORGANIZATION' and extract_organizations:
                 entities['organizations'].append(entity_text)
+            # NLTK sometimes labels organizations as GPE, so check for organization indicators
+            elif entity_type == 'GPE' and extract_organizations:
+                # Check if it's likely an organization (contains org words)
+                org_indicators = ['Corp', 'Corporation', 'Inc', 'LLC', 'Ltd', 'Company', 'University', 'College', 'School', 'Hospital', 'Foundation', 'Institute', 'Organization', 'Association']
+                if any(indicator in entity_text for indicator in org_indicators):
+                    entities['organizations'].append(entity_text)
+    
+    # Enhanced organization extraction using regex (for organizations NLTK might miss)
+    if extract_organizations:
+        org_patterns = [
+            r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Corp|Corporation|Inc|LLC|Ltd|Company|Co|Industries|International|Group|Systems|Technologies|Solutions)\b',
+            r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:University|College|School|Institute|Academy|Foundation|Association|Society|Organization|Agency|Department|Bureau)\b',
+            r'\b(?:The\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Hospital|Clinic|Medical Center|Bank|Trust|Fund)\b',
+        ]
+        for pattern in org_patterns:
+            org_matches = re.findall(pattern, text)
+            for match in org_matches:
+                if isinstance(match, tuple):
+                    match = match[0] if match[0] else match[1]
+                # Exclude common non-org words
+                if match and match not in {'The', 'A', 'An', 'United', 'States'} and match not in entities['organizations']:
+                    entities['organizations'].append(match)
             elif entity_type == 'GPE' and extract_locations:
                 entities['locations'].append(entity_text)
             elif entity_type == 'DATE' and extract_dates:
@@ -146,31 +168,86 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             elif entity_type == 'FACILITY' and extract_facility:
                 entities['facility'].append(entity_text)
     
+    # Enhanced date extraction using regex (for dates NLTK might miss)
+    if extract_dates:
+        # Comprehensive date patterns
+        date_patterns = [
+            r'\b(19|20)\d{2}\b',  # Years: 1900-2099
+            r'\b(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{1,2},?\s+\d{4}\b',  # Month Day, Year
+            r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b',  # MM/DD/YYYY or DD-MM-YYYY
+            r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b',  # YYYY/MM/DD
+            r'\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+\d{4}\b',  # "the 15th of January 2024"
+        ]
+        for pattern in date_patterns:
+            date_matches = re.findall(pattern, text, re.IGNORECASE)
+            for match in date_matches:
+                if isinstance(match, tuple):
+                    # Handle groups - take the full match
+                    match = ' '.join(m for m in match if m)
+                if match and match not in entities['dates']:
+                    entities['dates'].append(match)
+    
     # Pattern-based extraction for better coverage (especially for titles and short texts)
     if extract_persons:
         # Pattern: Capitalized word(s) that look like names (First Last, First Middle Last)
         # Common name patterns: "John Smith", "Mary-Jane Watson", "O'Brien"
         name_pattern = r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2}\b'
         # Exclude common capitalized words that aren't names
-        exclude_words = {'The', 'A', 'An', 'In', 'On', 'At', 'For', 'With', 'From', 'To', 'Of', 'And', 'Or', 'But', 'As', 'By', 'War', 'Prisoner', 'Escape', 'Camp', 'Life', 'Liberation'}
+        exclude_words = {
+            'The', 'A', 'An', 'In', 'On', 'At', 'For', 'With', 'From', 'To', 'Of', 'And', 'Or', 'But', 'As', 'By',
+            'War', 'Prisoner', 'Escape', 'Camp', 'Life', 'Liberation', 'Discover', 'Earn', 'Points', 'Support',
+            'Login', 'Vietnam', 'United', 'States', 'America', 'World', 'Documentary', 'Mini', 'Series', 'Trailer',
+            'English', 'General', 'Seasons', 'Brasil', 'Crew', 'Artwork', 'Lists', 'Changed'
+        }
+        # Common non-name patterns (articles, titles, etc.)
+        non_name_patterns = [
+            r'\b(Discover|Support|Login|Earn|Points|The War|That|Changed|America|Brasil|General|Seasons|Crew|Artwork|Lists|Documentary|Mini|Series|United States|English Trailer)\b',
+            r'\b[A-Z][a-z]+\s+(Earn|Points|Login|Support|War|That|Changed|America)\b',
+            r'\b(The|A|An)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b',  # Articles before capitalized words
+        ]
+        
         name_matches = re.findall(name_pattern, text)
         for match in name_matches:
+            # Skip if it matches non-name patterns
+            if any(re.search(pattern, match, re.IGNORECASE) for pattern in non_name_patterns):
+                continue
             # Exclude if it's a common word or if it's already found by NLTK
             words_in_match = match.split()
             if match not in exclude_words and match not in entities['persons']:
                 # If it's two words (First Last), it's likely a name
+                # Additional validation: both words should be proper nouns (capitalized)
                 if len(words_in_match) >= 2:
-                    entities['persons'].append(match)
+                    # Check that both words are capitalized (proper nouns)
+                    if all(word[0].isupper() and word[1:].islower() for word in words_in_match):
+                        # Additional check: not common title words
+                        if not any(word.lower() in ['the', 'war', 'that', 'changed', 'america', 'support', 'login', 'earn', 'points'] 
+                                  for word in words_in_match):
+                            entities['persons'].append(match)
     
     if extract_locations:
-        # Pattern: Common nationality/country adjectives (British, American, etc.)
-        nationality_pattern = r'\b(British|American|French|German|Italian|Spanish|Chinese|Japanese|Russian|Indian|Canadian|Australian|Brazilian|Mexican|South African|New Zealand|Irish|Scottish|Welsh|English|Dutch|Belgian|Swiss|Swedish|Norwegian|Danish|Finnish|Polish|Greek|Turkish|Egyptian|Israeli|Saudi|Pakistani|Bangladeshi|Vietnamese|Thai|Indonesian|Malaysian|Filipino|Singaporean|Taiwanese)\b'
-        nationality_matches = re.findall(nationality_pattern, text, re.IGNORECASE)
-        for match in nationality_matches:
-            # Capitalize properly
-            match = match.title() if match.islower() else match
-            if match not in entities['locations']:
-                entities['locations'].append(match)
+        # DO NOT extract nationalities as locations - they are adjectives, not places
+        # Only extract actual place names (cities, countries, regions, etc.)
+        # Nationalities are filtered out because they're not actionable locations
+        
+        # Pattern for actual place names: Capitalized place names (cities, countries, regions)
+        # This should be primarily handled by NLTK's GPE (Geopolitical Entity) recognition above
+        # Additional regex patterns for place names that might be missed
+        place_patterns = [
+            r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:City|State|Province|Country|Region|Island|Islands|Republic|Kingdom|Empire)\b',
+            r'\b(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:River|Mountain|Lake|Bay|Sea|Ocean|Gulf|Strait)\b',
+        ]
+        
+        for pattern in place_patterns:
+            place_matches = re.findall(pattern, text)
+            for match in place_matches:
+                if isinstance(match, tuple):
+                    match = match[0] if match[0] else match[1]
+                # Exclude common non-place words
+                if match not in {'The', 'A', 'An', 'United', 'States', 'America'} and match not in entities['locations']:
+                    entities['locations'].append(match)
+        
+        # Note: Nationalities like "American", "British", "Vietnamese" are NOT added as locations
+        # They are adjectives describing people, not actual places
     
     # Extract money values using regex
     if extract_money:
