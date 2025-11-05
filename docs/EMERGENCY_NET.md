@@ -504,11 +504,15 @@ python -m playwright install chromium
 **Without browser binaries, scraping fails with "Playwright not available" error.**
 **Note:** Use `python -m playwright` (not just `playwright`) since the command may not be in PATH.
 
-**Note:** If installing new dependencies (e.g., spaCy), also download required models:
+**CRITICAL: Download spaCy Language Model (REQUIRED for NLP processing)**
 ```bash
-# Download spaCy language model (required for NLP processing)
+# spaCy requires TWO steps:
+# 1. Python package (already installed via requirements.txt: spacy>=3.7.0)
+# 2. Language model (MUST run separately)
 python -m spacy download en_core_web_md
 ```
+**Without the language model, NLP processing fails with "Can't find model 'en_core_web_md'" error.**
+**This is MANDATORY - spaCy is a core dependency for entity extraction and NLP features.**
 
 ### 4. **Restart Systemd Service**
 ```bash
@@ -1100,7 +1104,7 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 4. **MANDATORY: Validate dependencies** `python3 validate_dependencies.py` (MUST PASS)
 5. **Activate environment:** `source venv/bin/activate`
 6. **Install dependencies:** `pip install -r requirements.txt --no-cache-dir`
-7. **Download spaCy model (if new install):** `python -m spacy download en_core_web_md`
+7. **Download spaCy model (MANDATORY):** `python -m spacy download en_core_web_md`
 8. **Restart service:** `sudo systemctl restart vernal-agents`
 9. **Run health check:** `./full_health_check.sh` (see script below)
 10. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
@@ -1470,10 +1474,11 @@ curl https://themachine.vernalcontentum.com/deploy/commit
 - `python-dotenv==1.0.0` → Use `python-dotenv>=1.0.1` (required by browser-use)
 - `beautifulsoup4==4.12.2` → Use `beautifulsoup4>=4.12.3` (required by browser-use)
 
-#### **Post-Installation Steps for NLP Dependencies**
-- **spaCy:** After installing `spacy>=3.7.0`, download language model: `python -m spacy download en_core_web_md`
-  - **Recommended model:** `en_core_web_md` (includes word vectors for semantic similarity)
+#### **Post-Installation Steps for NLP Dependencies (MANDATORY)**
+- **spaCy (REQUIRED):** After installing `spacy>=3.7.0` (in requirements.txt), **MUST** download language model: `python -m spacy download en_core_web_md`
+  - **Required model:** `en_core_web_md` (includes word vectors for semantic similarity) - **MANDATORY**
   - **Alternative models:** `en_core_web_sm` (smaller, no vectors), `en_core_web_lg` (larger, best accuracy)
+  - **Without the model, NLP processing fails** - this is a core dependency, not optional
 - **NLTK:** NLTK data downloads automatically on first import, but ensure required resources:
   ```python
   import nltk
