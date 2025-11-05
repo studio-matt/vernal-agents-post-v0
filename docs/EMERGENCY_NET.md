@@ -750,8 +750,18 @@ def __init__(self):
 **🚨 MANDATORY: Run dependency validation before ANY deployment:**
 ```bash
 cd /home/ubuntu/vernal-agents-post-v0
+source venv/bin/activate  # CRITICAL: Must activate venv first!
 python3 validate_dependencies.py
 ```
+
+**OR use the venv Python directly:**
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+./venv/bin/python3 validate_dependencies.py
+```
+
+**⚠️ CRITICAL: Validation MUST run in the venv!**
+If you see all packages as "MISSING", you're using system Python instead of venv Python.
 
 **This validation script checks:**
 - ✅ Pip version compatibility (pip<25.0 for pip-tools)

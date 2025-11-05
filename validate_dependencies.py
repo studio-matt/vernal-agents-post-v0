@@ -146,7 +146,22 @@ def verify_critical_imports():
     Verify that critical modules used in the codebase can actually be imported.
     This catches missing packages in production environments.
     """
+    # Check if we're running in a virtual environment
+    import sys
+    in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+    python_path = sys.executable
+    
+    if not in_venv:
+        print("⚠️  WARNING: Not running in a virtual environment!")
+        print(f"   Python path: {python_path}")
+        print("   This will check system Python, not your project venv.")
+        print("   To fix: source venv/bin/activate, then run this script again")
+        print("")
+        print("   Or run: ./venv/bin/python3 validate_dependencies.py")
+        return False
+    
     print("🔍 Verifying critical imports can be loaded...")
+    print(f"   Using Python: {python_path}")
     
     # Critical imports from text_processing.py and main.py
     critical_imports = [
