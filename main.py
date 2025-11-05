@@ -1274,7 +1274,8 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             from text_processing import (
                 extract_entities as nltk_extract_entities,
                 remove_stopwords,
-                extract_keywords
+                extract_keywords,
+                extract_topics
             )
         except ImportError as import_err:
             logger.warning(f"⚠️ text_processing module not available: {import_err}")
@@ -1284,6 +1285,8 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             def remove_stopwords(text):
                 return text
             def extract_keywords(text):
+                return []
+            def extract_topics(texts, topic_tool, num_topics, iterations, query="", keywords=[], urls=[]):
                 return []
 
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
@@ -1339,7 +1342,60 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         
         logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs, {len(texts)} text samples, {len(errors)} error rows")
 
-        # Build simple word frequency
+        # Get campaign info for better topic extraction
+        from models import Campaign
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        campaign_query = campaign.query if campaign else ""
+        campaign_keywords = campaign.keywords.split(",") if campaign and campaign.keywords else []
+        campaign_urls = campaign.urls.split(",") if campaign and campaign.urls else []
+
+        # Use extract_topics for phrase-based topics instead of single words
+        if texts and len(texts) > 0:
+            try:
+                # Use LLM model for better phrase generation, fallback to LDA if needed
+                topic_tool = "llm"  # Use LLM for phrase generation
+                num_topics = 10
+                iterations = 25
+                
+                topic_phrases = extract_topics(
+                    texts,
+                    topic_tool=topic_tool,
+                    num_topics=num_topics,
+                    iterations=iterations,
+                    query=campaign_query,
+                    keywords=campaign_keywords,
+                    urls=campaign_urls
+                )
+                
+                # If we got phrases, use them; otherwise fall back to word frequency
+                if topic_phrases and len(topic_phrases) > 0:
+                    # Create topics with scores (use position as proxy for relevance)
+                    topics = [{"label": phrase, "score": len(topic_phrases) - i} for i, phrase in enumerate(topic_phrases[:10])]
+                    logger.info(f"✅ Generated {len(topics)} topic phrases: {[t['label'] for t in topics]}")
+                else:
+                    # Fallback to word frequency if extract_topics fails
+                    logger.warning("⚠️ extract_topics returned no results, falling back to word frequency")
+                    raise Exception("No topics from extract_topics")
+                    
+            except Exception as topic_err:
+                logger.warning(f"⚠️ Error extracting topics with extract_topics: {topic_err}, falling back to word frequency")
+                # Fallback to simple word frequency
+                stop = set(
+                    "the a an and or of for to in on at from by with as is are was were be been being this that those these it its into over under about after before above below between across can will would should could may might not no yes you your we our their them they he she his her him i me my do does did done have has had having".split()
+                )
+                counts = {}
+                tokenizer = re.compile(r"[A-Za-z]{3,}")
+                for t in texts:
+                    for w in tokenizer.findall(t.lower()):
+                        if w in stop:
+                            continue
+                        counts[w] = counts.get(w, 0) + 1
+                top_terms = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
+                topics = [{"label": k, "score": v} for k, v in top_terms]
+        else:
+            topics = []
+        
+        # Build word cloud from the same texts (for backward compatibility)
         stop = set(
             "the a an and or of for to in on at from by with as is are was were be been being this that those these it its into over under about after before above below between across can will would should could may might not no yes you your we our their them they he she his her him i me my do does did done have has had having".split()
         )
@@ -1352,8 +1408,6 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 counts[w] = counts.get(w, 0) + 1
         top_terms = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
         word_cloud = [{"term": k, "count": v} for k, v in top_terms]
-
-        topics = [{"label": k, "score": v} for k, v in top_terms]
 
         # Use NLTK-based entity extraction for accurate named entity recognition
         persons = []
