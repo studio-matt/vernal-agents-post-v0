@@ -7,8 +7,6 @@ from nltk.corpus import stopwords
 from nltk import pos_tag, ne_chunk
 import gensim
 from gensim import corpora, models
-from sklearn.decomposition import NMF, TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import Counter
 import numpy as np
 import logging
@@ -16,9 +14,21 @@ from langchain_openai import ChatOpenAI
 import os
 import json
 
-# Set up logging
+# Set up logging first
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# sklearn is optional - only needed for NMF and LSA models
+try:
+    from sklearn.decomposition import NMF, TruncatedSVD
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    NMF = None
+    TruncatedSVD = None
+    TfidfVectorizer = None
+    SKLEARN_AVAILABLE = False
+    logger.warning("⚠️ sklearn not available - NMF and LSA models will not work")
 
 # BERTopic is optional - only needed for bertopic_model function
 try:
@@ -240,6 +250,9 @@ def bertopic_model(texts: List[str], num_topics: int) -> List[List[str]]:
         return []
 
 def nmf_model(texts: List[str], num_topics: int, iterations: int) -> List[List[str]]:
+    if not SKLEARN_AVAILABLE:
+        logger.error("NMF model requires sklearn, which is not available")
+        return []
     try:
         vectorizer = TfidfVectorizer(max_df=1.0, min_df=1)
         tfidf = vectorizer.fit_transform(texts)
@@ -255,6 +268,9 @@ def nmf_model(texts: List[str], num_topics: int, iterations: int) -> List[List[s
         return []
 
 def lsa_model(texts: List[str], num_topics: int, iterations: int) -> List[List[str]]:
+    if not SKLEARN_AVAILABLE:
+        logger.error("LSA model requires sklearn, which is not available")
+        return []
     try:
         vectorizer = TfidfVectorizer(max_df=1.0, min_df=1)
         tfidf = vectorizer.fit_transform(texts)
