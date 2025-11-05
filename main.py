@@ -717,28 +717,62 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
                             # If truncation occurs, it's likely mostly noise (ads, scripts, duplicate content)
                             MAX_TEXT_SIZE = 16_777_000  # Leave small buffer (≈16 MB)
                             
-                            # Sanitize extracted_text to remove emojis/unicode that can't be stored in utf8mb3
-                            # Keep only ASCII + basic UTF-8, remove 4-byte UTF-8 (emojis)
+                            # Language detection and filtering
+                            detected_language = None
                             safe_text = None
                             if text:
+                                # Detect language before processing
                                 try:
-                                    # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
-                                    # Keep only 1-3 byte UTF-8 characters (basic unicode)
-                                    safe_text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
-                                    # Remove any remaining problematic characters (emojis are >0xFFFF)
-                                    safe_text = ''.join(char for char in safe_text if ord(char) < 0x10000)
-                                except Exception as encode_err:
-                                    logger.warning(f"⚠️ Error encoding extracted_text for {url}: {encode_err}, using empty string")
-                                    safe_text = ""
+                                    from langdetect import detect, LangDetectException
+                                    # Use first 1000 chars for faster detection
+                                    sample_text = text[:1000] if len(text) > 1000 else text
+                                    if len(sample_text.strip()) > 10:  # Need minimum text for detection
+                                        detected_language = detect(sample_text)
+                                        meta["detected_language"] = detected_language
+                                        
+                                        # Filter out non-English content
+                                        if detected_language != 'en':
+                                            logger.warning(f"🌐 Non-English content detected ({detected_language}) for {url}, filtering out")
+                                            logger.warning(f"🌐 Sample text: {sample_text[:200]}...")
+                                            meta["language_filtered"] = True
+                                            meta["filter_reason"] = f"non_english_{detected_language}"
+                                            safe_text = ""  # Skip non-English content
+                                        else:
+                                            logger.debug(f"✅ English content confirmed for {url}")
+                                    else:
+                                        logger.debug(f"⚠️ Text too short for language detection for {url}")
+                                        meta["detected_language"] = "unknown"
+                                except LangDetectException as lang_err:
+                                    logger.warning(f"⚠️ Language detection failed for {url}: {lang_err}")
+                                    meta["detected_language"] = "unknown"
+                                    meta["language_detection_error"] = str(lang_err)
+                                except ImportError:
+                                    logger.warning("⚠️ langdetect not available - skipping language filtering")
+                                    meta["detected_language"] = "not_checked"
+                                except Exception as lang_err:
+                                    logger.warning(f"⚠️ Unexpected error in language detection for {url}: {lang_err}")
+                                    meta["detected_language"] = "error"
                                 
-                                # Smart truncation: Keep first portion if too large
-                                if len(safe_text) > MAX_TEXT_SIZE:
-                                    safe_text = safe_text[:MAX_TEXT_SIZE]
-                                    logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
-                                    logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
-                                    meta["text_truncated"] = True
-                                    meta["original_length"] = len(text)
-                                    meta["truncation_reason"] = "exceeded_mediumtext_limit"
+                                # Only process text if it's English (or if language detection failed/not available)
+                                if safe_text is None:  # Only process if not already filtered
+                                    try:
+                                        # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
+                                        # Keep only 1-3 byte UTF-8 characters (basic unicode)
+                                        safe_text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                                        # Remove any remaining problematic characters (emojis are >0xFFFF)
+                                        safe_text = ''.join(char for char in safe_text if ord(char) < 0x10000)
+                                    except Exception as encode_err:
+                                        logger.warning(f"⚠️ Error encoding extracted_text for {url}: {encode_err}, using empty string")
+                                        safe_text = ""
+                                    
+                                    # Smart truncation: Keep first portion if too large
+                                    if len(safe_text) > MAX_TEXT_SIZE:
+                                        safe_text = safe_text[:MAX_TEXT_SIZE]
+                                        logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
+                                        logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
+                                        meta["text_truncated"] = True
+                                        meta["original_length"] = len(text)
+                                        meta["truncation_reason"] = "exceeded_mediumtext_limit"
                             else:
                                 safe_text = ""
                             
