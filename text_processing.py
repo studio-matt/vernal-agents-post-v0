@@ -137,17 +137,37 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             if entity_type == 'PERSON' and extract_persons:
                 # Filter out software names, UI elements, and product names
                 entity_lower = entity_text.lower()
+                entity_words = entity_text.split()
+                
                 software_ui_indicators = [
                     'microsoft', 'word', 'excel', 'powerpoint', 'outlook', 'windows', 'macintosh', 'apple', 'mac',
                     'google', 'chrome', 'firefox', 'safari', 'edge', 'internet', 'explorer', 'browser',
                     'edit', 'view', 'file', 'insert', 'format', 'tools', 'table', 'help', 'developer',
                     'initial', 'predecessor', 'multi', 'type', 'license', 'trialware', 'website', 'tool',
                     'share', 'print', 'save', 'open', 'close', 'new', 'copy', 'paste', 'cut',
-                    'office', 'media', 'unix', 'independent', 'wikimedia', 'foundation', 'project', 'wikipedia'
+                    'office', 'media', 'unix', 'independent', 'wikimedia', 'foundation', 'project', 'wikipedia',
+                    'regular', 'guys', 'built', 'wordperfect', 'eclectic', 'light', 'digital', 'writing'
                 ]
-                # Skip if it's clearly software/UI
-                if not any(indicator in entity_lower for indicator in software_ui_indicators):
-                    entities['persons'].append(entity_text)
+                
+                # Additional validation: Person names should be 2-4 words, both capitalized
+                # Skip single words (too ambiguous)
+                if len(entity_words) == 1:
+                    continue
+                
+                # Skip if any word is a software/UI indicator
+                if any(word.lower() in software_ui_indicators for word in entity_words):
+                    continue
+                
+                # Skip if it's clearly software/UI (contains indicators)
+                if any(indicator in entity_lower for indicator in software_ui_indicators):
+                    continue
+                
+                # Skip if it's a common phrase pattern (not a name)
+                common_phrases = ['edit view', 'tool word', 'type word', 'license trialware', 'microsoft word', 'apple macintosh']
+                if entity_lower in common_phrases:
+                    continue
+                
+                entities['persons'].append(entity_text)
             elif entity_type == 'ORGANIZATION' and extract_organizations:
                 # Filter out invalid organization entries
                 entity_lower = entity_text.lower()
