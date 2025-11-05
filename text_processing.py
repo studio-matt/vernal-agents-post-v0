@@ -186,18 +186,33 @@ def extract_entities(text: str, extract_persons: bool, extract_organizations: bo
             elif entity_type == 'ORGANIZATION' and extract_organizations:
                 # Filter out invalid organization entries
                 entity_lower = entity_text.lower()
+                entity_words = entity_text.split()
+                
                 # Skip if it contains person names or locations incorrectly labeled as organizations
                 invalid_org_indicators = [
                     'louisville', 'muhammad', 'ali',  # Person name + location
                     'regular guys built wordperfect',  # Phrase, not an organization
                     'the eclectic light',  # Publication name, may be valid but let's be strict
                 ]
-                # Skip if it's a single generic word like "Office", "Media", "Independent"
-                if len(entity_text.split()) == 1 and entity_lower in ['office', 'media', 'independent', 'digital', 'writing']:
-                    continue
                 # Skip if it contains person names
                 if any(indicator in entity_lower for indicator in invalid_org_indicators):
                     continue
+                
+                # Skip if it's a single generic word like "Office", "Media", "Independent" (but allow "Microsoft", "Apple", etc.)
+                if len(entity_words) == 1:
+                    generic_words = ['office', 'media', 'independent', 'digital', 'writing', 'page', 'document', 'document', 'tool', 'website']
+                    known_orgs = ['microsoft', 'apple', 'google', 'amazon', 'meta', 'facebook', 'twitter', 'linkedin', 'nvidia', 'intel', 'amd']
+                    if entity_lower in generic_words and entity_lower not in known_orgs:
+                        continue
+                
+                # Skip if it's a UI instruction phrase
+                instruction_words = ['to', 'how', 'duplicate', 'page', 'pages', 'document', 'if', 'press', 'ctrl', 'blank',
+                                   'break', 'different', 'you', 'sub', 'enter', 'number', 'place', 'your', 'cursor',
+                                   'want', 'min', 'read', 'select', 'copy', 'paste', 'open', 'close', 'save', 'print']
+                instruction_count = sum(1 for word in entity_words if word.lower() in instruction_words)
+                if instruction_count > len(entity_words) * 0.5:
+                    continue
+                
                 entities['organizations'].append(entity_text)
             # NLTK sometimes labels organizations as GPE, so check for organization indicators
             elif entity_type == 'GPE':
