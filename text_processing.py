@@ -829,7 +829,8 @@ def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int,
 
     if topic_tool == 'llm':
         # For LLM, call llm_model directly with texts (not preprocessed)
-        logger.info("🔍 Calling llm_model function...")
+        # CRITICAL: This ALWAYS uses the prompt from database (or default fallback)
+        logger.info("🔍 Calling llm_model function... (will use prompt from database)")
         topics = llm_model(texts, num_topics, query, keywords, urls)
         logger.info(f"🔍 llm_model returned: {topics} (type: {type(topics)}, length: {len(topics) if topics else 0})")
         if not topics:
