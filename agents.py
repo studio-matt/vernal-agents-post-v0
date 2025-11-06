@@ -50,15 +50,70 @@ def get_agent_data(agent_name: str, default_role: str, default_goal: str, defaul
     return safe_get_agent_data(agent_name, default_role, default_goal, default_backstory)
 
 def safe_get_agent_data(agent_name: str, default_role: str, default_goal: str, default_backstory: str) -> Tuple[str, str, str]:
-    """Safely get agent data with comprehensive error handling"""
+    """Safely get agent data from system settings (new) or database (legacy), with fallback to defaults"""
     try:
-        agent = db_manager.get_agent_by_name(agent_name) if db_manager else None
-        if agent and hasattr(agent, 'role') and hasattr(agent, 'goal') and hasattr(agent, 'backstory'):
-            logger.debug(f"Retrieved agent data for {agent_name} from database")
-            return agent.role, agent.goal, agent.backstory
-        else:
-            logger.debug(f"Using default data for {agent_name} (not found in database)")
-            return default_role, default_goal, default_backstory
+        # First try system settings (new approach)
+        try:
+            from database import SessionLocal
+            from models import SystemSettings
+            
+            db = SessionLocal()
+            try:
+                # Determine which tab this agent belongs to
+                # Remove "_agent" suffix if present
+                agent_name_lower = agent_name.lower().replace("_agent", "")
+                tab = None
+                
+                if agent_name_lower in ["script_research"]:
+                    tab = "research"
+                elif agent_name_lower in ["instagram", "facebook", "youtube", "twitter", "linkedin", "wordpress", "tiktok", "script_rewriter", "regenrate_content", "regenrate_subcontent"]:
+                    tab = "writing"
+                elif agent_name_lower in ["qc", "instagram_qc", "facebook_qc", "youtube_qc", "twitter_qc", "linkedin_qc", "wordpress_qc", "tiktok_qc"]:
+                    tab = "qc"
+                
+                if tab:
+                    # Try to get from system settings
+                    role_setting = db.query(SystemSettings).filter(
+                        SystemSettings.setting_key == f"{tab}_agent_{agent_name_lower}_role"
+                    ).first()
+                    goal_setting = db.query(SystemSettings).filter(
+                        SystemSettings.setting_key == f"{tab}_agent_{agent_name_lower}_goal"
+                    ).first()
+                    backstory_setting = db.query(SystemSettings).filter(
+                        SystemSettings.setting_key == f"{tab}_agent_{agent_name_lower}_backstory"
+                    ).first()
+                    
+                    if role_setting and goal_setting and backstory_setting:
+                        # Use system settings values - if empty, use defaults as fallback
+                        role = role_setting.setting_value.strip() if role_setting.setting_value and role_setting.setting_value.strip() else default_role
+                        goal = goal_setting.setting_value.strip() if goal_setting.setting_value and goal_setting.setting_value.strip() else default_goal
+                        backstory = backstory_setting.setting_value.strip() if backstory_setting.setting_value and backstory_setting.setting_value.strip() else default_backstory
+                        logger.debug(f"Retrieved agent data for {agent_name} from system settings")
+                        return role, goal, backstory
+                    else:
+                        # Settings exist but some are missing - log warning
+                        logger.warning(f"⚠️ Agent {agent_name} found in system settings but some fields missing. Using defaults.")
+                        return default_role, default_goal, default_backstory
+            except Exception as settings_err:
+                logger.debug(f"Could not get from system settings: {settings_err}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.debug(f"System settings not available: {e}")
+        
+        # Fallback to database agent table (legacy)
+        try:
+            agent = db_manager.get_agent_by_name(agent_name) if db_manager else None
+            if agent and hasattr(agent, 'role') and hasattr(agent, 'goal') and hasattr(agent, 'backstory'):
+                logger.debug(f"Retrieved agent data for {agent_name} from database")
+                return agent.role, agent.goal, agent.backstory
+        except Exception as db_err:
+            logger.debug(f"Database lookup failed: {db_err}")
+        
+        # Final fallback to defaults
+        logger.debug(f"Using default data for {agent_name}")
+        return default_role, default_goal, default_backstory
+        
     except Exception as e:
         logger.error(f"Error getting agent data for {agent_name}: {e}")
         traceback.print_exc()
