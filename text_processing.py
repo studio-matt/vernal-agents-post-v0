@@ -635,6 +635,163 @@ def lsa_model(texts: List[str], num_topics: int, iterations: int) -> List[List[s
         return []
 
 import re
+
+def system_model_topics(texts: List[str], num_topics: int, query: str = "", keywords: List[str] = [], urls: List[str] = []) -> List[str]:
+    """
+    System model (LLM-free) topic extraction using NMF with Gensim Phrases.
+    Loads configuration from system_settings table.
+    """
+    try:
+        # Import required libraries
+        try:
+            from gensim.models import Phrases, Phraser
+            from gensim.models.coherencemodel import CoherenceModel
+            GENSIM_AVAILABLE = True
+        except ImportError:
+            logger.error("❌ Gensim not available - system model requires gensim")
+            return []
+        
+        if not SKLEARN_AVAILABLE:
+            logger.error("❌ sklearn not available - system model requires sklearn")
+            return []
+        
+        # Load configuration from database
+        try:
+            from database import SessionLocal
+            from models import SystemSettings
+            db = SessionLocal()
+            try:
+                config = {}
+                settings = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key.like("system_model_%")
+                ).all()
+                
+                for setting in settings:
+                    key = setting.setting_key.replace("system_model_", "")
+                    value = setting.setting_value
+                    if key == "k_grid":
+                        config["K_GRID"] = json.loads(value) if value else [10, 15, 20, 25]
+                    elif key in ["phrases_threshold", "tfidf_max_df"]:
+                        config[key.upper()] = float(value) if value else (15.0 if key == "phrases_threshold" else 0.7)
+                    else:
+                        config[key.upper()] = int(value) if value else {
+                            "phrases_min_count": 5,
+                            "tfidf_min_df": 3,
+                            "top_words": 12,
+                        }.get(key, 0)
+                
+                # Set defaults
+                PHRASES_MIN_COUNT = config.get("PHRASES_MIN_COUNT", 5)
+                PHRASES_THRESHOLD = config.get("PHRASES_THRESHOLD", 15.0)
+                TFIDF_MIN_DF = config.get("TFIDF_MIN_DF", 3)
+                TFIDF_MAX_DF = config.get("TFIDF_MAX_DF", 0.7)
+                K_GRID = config.get("K_GRID", [10, 15, 20, 25])
+                TOP_WORDS = config.get("TOP_WORDS", 12)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load config from DB, using defaults: {e}")
+            PHRASES_MIN_COUNT = 5
+            PHRASES_THRESHOLD = 15.0
+            TFIDF_MIN_DF = 3
+            TFIDF_MAX_DF = 0.7
+            K_GRID = [10, 15, 20, 25]
+            TOP_WORDS = 12
+        
+        # Tokenize texts (simple tokenization for now)
+        from collections import defaultdict
+        
+        # Simple sentence splitter
+        sent_split = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])")
+        
+        # Tokenize documents
+        tokens_list = []
+        for text in texts:
+            # Simple tokenization - split on whitespace and filter
+            words = text.lower().split()
+            # Filter stopwords and short words
+            stopwords_set = set(stopwords.words('english'))
+            tokens = [w for w in words if w not in stopwords_set and len(w) > 2 and w.isalpha()]
+            tokens_list.append(tokens)
+        
+        if not tokens_list or sum(len(t) for t in tokens_list) < 10:
+            logger.warning("⚠️ Insufficient tokens for system model")
+            return []
+        
+        # Phrase mining with Gensim
+        bigram = Phrases(tokens_list, min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter=b"_")
+        trigram = Phrases(bigram[tokens_list], min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter=b"_")
+        bigr = Phraser(bigram)
+        trgr = Phraser(trigram)
+        tokens_phrased = [trgr[bigr[tok]] for tok in tokens_list]
+        docs_str = [" ".join(t) for t in tokens_phrased]
+        
+        # Vectorize with TF-IDF
+        tfidf = TfidfVectorizer(min_df=TFIDF_MIN_DF, max_df=TFIDF_MAX_DF, strip_accents="unicode")
+        X = tfidf.fit_transform(docs_str)
+        terms = tfidf.get_feature_names_out()
+        idf = tfidf.idf_
+        
+        # K sweep (pick best by coherence)
+        best = None
+        best_topic_terms = None
+        for K in K_GRID:
+            if K > len(texts):
+                continue
+            try:
+                nmf = NMF(n_components=K, init="nndsvd", random_state=42, max_iter=500)
+                W = nmf.fit_transform(X)
+                H = nmf.components_
+                
+                # Calculate coherence
+                topic_terms = [[terms[i] for i in comp.argsort()[-TOP_WORDS:]] for comp in H]
+                cm = CoherenceModel(topics=topic_terms, texts=tokens_phrased, coherence="c_v")
+                coh = cm.get_coherence()
+                
+                if (best is None) or (coh > best[0]):
+                    best = (coh, K, nmf, W, H)
+                    best_topic_terms = topic_terms
+            except Exception as e:
+                logger.warning(f"⚠️ Error with K={K}: {e}")
+                continue
+        
+        if best is None:
+            logger.error("❌ Could not fit any NMF model")
+            return []
+        
+        coherence, K, nmf, W, H = best
+        
+        # Label topics
+        vocab = terms.tolist()
+        idf_lookup = {t: idf[i] for i, t in enumerate(vocab)}
+        labels = []
+        for row in H:
+            idx = row.argsort()[-TOP_WORDS:][::-1]
+            cand = [(terms[i], row[i]) for i in idx]
+            scored = []
+            for t, w in cand:
+                bonus = 1.3 if "_" in t else 1.0
+                scored.append((t, w * idf_lookup.get(t, 1.0) * bonus))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            title = " / ".join([t.replace("_", " ") for t, _ in scored[:2]]) or (cand[0][0] if cand else "topic")
+            labels.append(title[:35])
+        
+        # Return top topics (limit to num_topics)
+        topic_strength = W.sum(axis=0)
+        if hasattr(topic_strength, "A1"):
+            topic_strength = topic_strength.A1
+        order = np.argsort(-topic_strength)
+        
+        result = [labels[int(t_idx)] for t_idx in order[:num_topics]]
+        logger.info(f"✅ System model generated {len(result)} topics: {result[:5]}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ System model error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return []
+
 def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List[str] = [], urls: List[str] = []) -> List[str]:
     try:
         logger.info(f"🔍 llm_model called with {len(texts)} texts, num_topics={num_topics}, query='{query}', keywords={keywords[:3]}")
@@ -814,6 +971,23 @@ def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int,
         logger.warning("Insufficient data; using keyword extraction")
         return extract_keywords(texts, num_keywords=num_topics)
 
+    # Check if system model is requested
+    if topic_tool == 'system':
+        logger.info("🔍 Using system model (NMF-based with Gensim Phrases) for topic extraction")
+        try:
+            topics = system_model_topics(texts, num_topics, query, keywords, urls)
+            if topics:
+                logger.info(f"✅ System model returned {len(topics)} topics")
+                return topics
+            else:
+                logger.warning("⚠️ System model returned empty, falling back to NMF")
+                topic_tool = 'nmf'  # Fallback to regular NMF
+        except Exception as e:
+            logger.error(f"❌ Error in system model: {e}, falling back to NMF")
+            import traceback
+            logger.error(traceback.format_exc())
+            topic_tool = 'nmf'  # Fallback to regular NMF
+
     # Remove stop words from all texts before processing
     texts_no_stopwords = [remove_stopwords(text) for text in texts]
     preprocessed = [preprocess_text(text, aggressive=len(texts_no_stopwords) > 5) for text in texts_no_stopwords]
@@ -837,7 +1011,7 @@ def extract_topics(texts: List[str], topic_tool: Optional[str], num_topics: int,
             logger.warning("⚠️ LLM model returned empty result; falling back to phrase extraction from bigrams/trigrams")
             # Fallback to phrase extraction instead of single-word keywords
             # Extract meaningful phrases from texts (same logic as non-LLM fallback)
-            from collections import Counter
+            # Counter is already imported at the top of the file
             stopwords_set = set(stopwords.words('english'))
             phrases = []
             

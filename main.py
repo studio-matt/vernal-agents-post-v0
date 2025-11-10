@@ -1567,6 +1567,9 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     logger.warning(f"⚠️ Using single-word fallback: {[t['label'] for t in topics]}")
         else:
             topics = []
+            logger.warning(f"⚠️ No texts available for topic extraction (texts length: {len(texts)})")
+            if len(rows) > 0:
+                logger.warning(f"⚠️ Campaign has {len(rows)} rows but {len(texts)} valid texts. Error rows: {len(errors)}")
         
         # Build word cloud with comprehensive stopword filtering and POS tagging
         # Use NLTK's comprehensive stopword list + additional filtering
