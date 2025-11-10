@@ -1422,6 +1422,19 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                             pass
         
         logger.info(f"🔍 Research endpoint: Extracted {len(urls)} URLs, {len(texts)} text samples, {len(errors)} error rows")
+        
+        # Enhanced diagnostics logging
+        if len(rows) == 0:
+            logger.warning(f"⚠️ No rows found in database for campaign {campaign_id}")
+        elif len(texts) == 0:
+            logger.warning(f"⚠️ No valid text data found for campaign {campaign_id}")
+            logger.warning(f"⚠️ Total rows: {len(rows)}, Error rows: {len(errors)}, Valid URLs: {len(urls)}")
+            if len(errors) > 0:
+                logger.warning(f"⚠️ Error details: {errors[:3]}")  # Log first 3 errors
+            # Log sample of rows to understand what's in the DB
+            for i, r in enumerate(rows[:5]):
+                text_len = len(r.extracted_text) if r.extracted_text else 0
+                logger.warning(f"⚠️ Row {i+1}: source_url={r.source_url[:50] if r.source_url else 'None'}, text_length={text_len}, is_error={r.source_url and r.source_url.startswith(('error:', 'placeholder:')) if r.source_url else False}")
 
         # Get campaign info for better topic extraction
         from models import Campaign
@@ -1433,15 +1446,30 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         # Use extract_topics for phrase-based topics instead of single words
         if texts and len(texts) > 0:
             try:
-                # Check if OpenAI API key is available for LLM model
-                import os
-                openai_key = os.getenv("OPENAI_API_KEY")
-                if openai_key and len(openai_key.strip()) > 0:
-                    topic_tool = "llm"  # Use LLM for phrase generation
-                    logger.info("✅ OPENAI_API_KEY found, using LLM model for topics")
+                # Check topic extraction method from system settings (default to "system")
+                from models import SystemSettings
+                method_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == "topic_extraction_method"
+                ).first()
+                
+                topic_extraction_method = "system"  # Default to system model
+                if method_setting and method_setting.setting_value:
+                    topic_extraction_method = method_setting.setting_value.lower()
+                
+                # Determine topic_tool based on method
+                if topic_extraction_method == "llm":
+                    # Check if OpenAI API key is available for LLM model
+                    import os
+                    openai_key = os.getenv("OPENAI_API_KEY")
+                    if openai_key and len(openai_key.strip()) > 0:
+                        topic_tool = "llm"  # Use LLM for phrase generation
+                        logger.info("✅ Using LLM model for topics (from system settings)")
+                    else:
+                        topic_tool = "system"  # Fallback to system model if no API key
+                        logger.warning("⚠️ LLM selected but OPENAI_API_KEY not found, using system model")
                 else:
-                    topic_tool = "lda"  # Use LDA (generates phrases via bigrams/trigrams)
-                    logger.warning("⚠️ OPENAI_API_KEY not found, using LDA model (will generate phrases from bigrams/trigrams)")
+                    topic_tool = "system"  # Use system model (NMF-based)
+                    logger.info("✅ Using system model for topics (from system settings)")
                 
                 num_topics = 10
                 iterations = 25
@@ -1734,6 +1762,89 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 "has_errors": True,
                 "has_data": False
             }
+        }
+
+# Compare topics endpoint: re-process raw data with alternative method
+@app.get("/campaigns/{campaign_id}/compare-topics")
+def compare_topics(campaign_id: str, method: str = "system", db: Session = Depends(get_db)):
+    """
+    Re-process raw scraped data with alternative topic extraction method.
+    Returns topics in the same format as research endpoint.
+    """
+    try:
+        from models import CampaignRawData, SystemSettings
+        from text_processing import extract_topics
+        
+        # Get raw data
+        rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+        texts = []
+        
+        for r in rows:
+            if r.extracted_text and len(r.extracted_text.strip()) > 0:
+                if not r.source_url or not r.source_url.startswith(("error:", "placeholder:")):
+                    texts.append(r.extracted_text)
+        
+        if not texts:
+            return {
+                "status": "error",
+                "message": "No raw data available for comparison"
+            }
+        
+        # Get campaign info
+        from models import Campaign
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        campaign_query = campaign.query if campaign else ""
+        campaign_keywords = campaign.keywords.split(",") if campaign and campaign.keywords else []
+        campaign_urls = campaign.urls.split(",") if campaign and campaign.urls else []
+        
+        # Determine topic_tool based on method parameter
+        if method == "llm":
+            # Check if OpenAI API key is available
+            import os
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if not openai_key or len(openai_key.strip()) == 0:
+                return {
+                    "status": "error",
+                    "message": "LLM method requires OPENAI_API_KEY"
+                }
+            topic_tool = "llm"
+        else:
+            topic_tool = "system"
+        
+        num_topics = 10
+        iterations = 25
+        
+        logger.info(f"🔄 Comparing topics with method={method}, tool={topic_tool}, texts={len(texts)}")
+        
+        topic_phrases = extract_topics(
+            texts,
+            topic_tool=topic_tool,
+            num_topics=num_topics,
+            iterations=iterations,
+            query=campaign_query,
+            keywords=campaign_keywords,
+            urls=campaign_urls
+        )
+        
+        # Format topics same as research endpoint
+        if topic_phrases and len(topic_phrases) > 0:
+            topics = [{"label": phrase, "score": len(topic_phrases) - i} for i, phrase in enumerate(topic_phrases[:10])]
+        else:
+            topics = []
+        
+        return {
+            "status": "success",
+            "topics": topics,
+            "method": method
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in compare-topics endpoint: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {
+            "status": "error",
+            "message": str(e)
         }
 
 # Author Personalities endpoints
