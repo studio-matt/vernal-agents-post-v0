@@ -1933,6 +1933,124 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         logger.error(traceback.format_exc())
         return {"status": "error", "message": str(e)}
 
+# Initialize Research Agent Prompts endpoint
+@app.post("/admin/initialize-research-agent-prompts")
+def initialize_research_agent_prompts(db: Session = Depends(get_db)):
+    """
+    Initialize default research agent prompts in the database if they don't exist.
+    This ensures all research agent prompts have default values.
+    """
+    try:
+        from models import SystemSettings
+        
+        default_prompts = {
+            "research_agent_keyword_prompt": """Analyze the following keyword data from a content campaign scrape:
+
+{context}
+
+Based on this data, provide:
+1. A summary of what the word cloud analysis reveals about the campaign's focus
+2. Areas where content could be expanded for better balance
+3. Specific recommendations for improving keyword coverage
+4. Actionable insights about underrepresented topics
+
+Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+            
+            "research_agent_micro-sentiment_prompt": """Analyze the sentiment data from a content campaign scrape:
+
+{context}
+
+Based on this data, provide:
+1. Overall sentiment assessment
+2. Sentiment breakdown by topic/theme
+3. Areas with lower positive sentiment that need attention
+4. Recommendations for improving sentiment in specific areas
+
+Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+            
+            "research_agent_topical-map_prompt": """Analyze the topical map data from a content campaign scrape:
+
+{context}
+
+Based on this data, provide:
+1. A summary of the main topics identified
+2. Topic relationships and coverage analysis
+3. Gaps or underrepresented topics
+4. Recommendations for expanding topic coverage
+
+Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+            
+            "research_agent_knowledge-graph_prompt": """Analyze the knowledge graph data from a content campaign scrape:
+
+{context}
+
+Based on this data, provide:
+1. Assessment of entity relationships and structure
+2. Analysis of connection strengths between concepts
+3. Identification of weakly connected areas
+4. Recommendations for strengthening relationships in the knowledge graph
+
+Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+            
+            "research_agent_hashtag-generator_prompt": """Analyze the hashtag data from a content campaign scrape:
+
+{context}
+
+Based on this data, provide:
+1. Assessment of hashtag mix (industry-standard, trending, niche, campaign-specific)
+2. Analysis of hashtag performance potential
+3. Recommendations for optimal hashtag combinations
+4. Suggested hashtag strategies for different platforms
+
+Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+        }
+        
+        initialized = []
+        for setting_key, prompt_value in default_prompts.items():
+            # Check if setting exists
+            existing = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
+            if not existing:
+                # Create new setting
+                agent_type = setting_key.replace("research_agent_", "").replace("_prompt", "")
+                agent_labels = {
+                    "keyword": "Keyword Research Agent",
+                    "micro-sentiment": "Micro Sentiment Agent",
+                    "topical-map": "Topical Map Agent",
+                    "knowledge-graph": "Knowledge Graph Agent",
+                    "hashtag-generator": "Hashtag Generator Agent",
+                }
+                label = agent_labels.get(agent_type, agent_type)
+                
+                new_setting = SystemSettings(
+                    setting_key=setting_key,
+                    setting_value=prompt_value,
+                    description=f"Default prompt for {label}"
+                )
+                db.add(new_setting)
+                initialized.append(setting_key)
+                logger.info(f"✅ Initialized {setting_key}")
+        
+        if initialized:
+            db.commit()
+            return {
+                "status": "success",
+                "message": f"Initialized {len(initialized)} research agent prompts",
+                "initialized": initialized
+            }
+        else:
+            return {
+                "status": "success",
+                "message": "All research agent prompts already exist",
+                "initialized": []
+            }
+            
+    except Exception as e:
+        logger.error(f"Error initializing research agent prompts: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        db.rollback()
+        return {"status": "error", "message": str(e)}
+
 # Author Personalities endpoints
 @app.get("/author_personalities")
 def get_author_personalities(db: Session = Depends(get_db)):
