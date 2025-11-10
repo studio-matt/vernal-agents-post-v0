@@ -542,6 +542,9 @@ def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
         )
 
 # Analyze endpoint models
+class ResearchAgentRequest(BaseModel):
+    agent_type: str
+
 class AnalyzeRequest(BaseModel):
     campaign_id: Optional[str] = None
     campaign_name: Optional[str] = None
@@ -1849,6 +1852,86 @@ def compare_topics(campaign_id: str, method: str = "system", db: Session = Depen
             "status": "error",
             "message": str(e)
         }
+
+# Research Agent Recommendations endpoint
+@app.post("/campaigns/{campaign_id}/research-agent-recommendations")
+def get_research_agent_recommendations(campaign_id: str, request_data: ResearchAgentRequest, db: Session = Depends(get_db)):
+    """
+    Generate LLM-based recommendations for research agents (Keyword, Micro Sentiment, Topical Map, Knowledge Graph, Hashtag Generator).
+    Uses prompts from system_settings table.
+    """
+    try:
+        agent_type = request_data.agent_type
+        from models import CampaignRawData, Campaign, SystemSettings
+        
+        # Get campaign data
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            return {"status": "error", "message": "Campaign not found"}
+        
+        # Get raw data for context
+        rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+        texts = [r.extracted_text for r in rows if r.extracted_text and len(r.extracted_text.strip()) > 10 and not r.source_url.startswith(("error:", "placeholder:"))]
+        
+        if not texts:
+            return {"status": "error", "message": "No valid scraped data available"}
+        
+        # Get research data for context
+        from text_processing import extract_keywords, extract_topics
+        keywords_data = extract_keywords(texts, num_keywords=20)
+        topics_data = extract_topics(texts, topic_tool="system", num_topics=10, iterations=25, query=campaign.query or "", keywords=campaign.keywords.split(",") if campaign.keywords else [], urls=[])
+        
+        # Get prompt from system settings
+        prompt_setting = db.query(SystemSettings).filter(
+            SystemSettings.setting_key == f"research_agent_{agent_type}_prompt"
+        ).first()
+        
+        if not prompt_setting or not prompt_setting.setting_value:
+            return {"status": "error", "message": f"Prompt not configured for {agent_type} agent"}
+        
+        prompt_template = prompt_setting.setting_value
+        
+        # Prepare context
+        context = f"""
+Campaign Query: {campaign.query or 'N/A'}
+Keywords: {', '.join(campaign.keywords.split(',')) if campaign.keywords else 'N/A'}
+Top Keywords Found: {', '.join([k if isinstance(k, str) else k.get('term', '') for k in keywords_data[:10]])}
+Topics Identified: {', '.join(topics_data[:10]) if topics_data else 'N/A'}
+Number of Scraped Texts: {len(texts)}
+Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
+"""
+        
+        # Format prompt with context
+        prompt = prompt_template.format(context=context)
+        
+        # Call LLM
+        import os
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return {"status": "error", "message": "OPENAI_API_KEY not configured"}
+        
+        try:
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key, temperature=0.4, max_tokens=1000)
+            response = llm.invoke(prompt)
+            recommendations_text = response.content if hasattr(response, 'content') else str(response)
+        except Exception as e:
+            logger.error(f"Error calling LLM for {agent_type} recommendations: {e}")
+            return {"status": "error", "message": f"LLM call failed: {str(e)}"}
+        
+        # Parse recommendations (expecting structured format with recommendations)
+        # For now, return the raw text - frontend will parse it
+        return {
+            "status": "success",
+            "recommendations": recommendations_text,
+            "agent_type": agent_type
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating {agent_type} recommendations: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {"status": "error", "message": str(e)}
 
 # Author Personalities endpoints
 @app.get("/author_personalities")
