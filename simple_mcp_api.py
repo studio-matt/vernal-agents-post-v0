@@ -25,6 +25,14 @@ class SimpleMCPToolResponse(BaseModel):
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
+class GenerateContentRequest(BaseModel):
+    text: str
+    week: int = 1
+    platform: str = "linkedin"
+    campaign_id: Optional[str] = None
+    author_personality: Optional[str] = None
+    use_crewai: bool = False
+
 # MCP Tool Endpoints
 @simple_mcp_router.post("/tools/execute", response_model=SimpleMCPToolResponse)
 async def execute_tool(request: SimpleMCPToolRequest):
@@ -81,16 +89,17 @@ async def get_tool_info(tool_name: str):
 
 # Content Generation Endpoints (MCP-powered)
 @simple_mcp_router.post("/generate-content", response_model=SimpleMCPToolResponse)
-async def generate_content(
-    text: str,
-    week: int = 1,
-    platform: str = "linkedin",
-    campaign_id: Optional[str] = None,
-    author_personality: Optional[str] = None,
-    use_crewai: bool = False  # New parameter to toggle CrewAI
-):
+async def generate_content(request: GenerateContentRequest):
     """Generate content using MCP tools. Set use_crewai=True to use CrewAI orchestration."""
     try:
+        # Extract parameters from request body
+        text = request.text
+        week = request.week
+        platform = request.platform
+        campaign_id = request.campaign_id
+        author_personality = request.author_personality
+        use_crewai = request.use_crewai
+        
         # If CrewAI is requested, use CrewAI workflow
         if use_crewai:
             crewai_tool = simple_mcp_server.get_tool("crewai_content_generation")
