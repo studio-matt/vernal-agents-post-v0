@@ -1,6 +1,24 @@
 # Testing CrewAI vs Manual Content Generation
 
-## Quick Start
+## 🚀 Deployment (Run First)
+
+**Since you're already in AWS terminal, run:**
+
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+chmod +x scripts/deploy_crewai_feature.sh
+bash scripts/deploy_crewai_feature.sh
+```
+
+This will:
+- Pull latest code from GitHub
+- Validate dependencies
+- Install/verify CrewAI
+- Restart the service
+- Run all health checks
+- Verify CrewAI tool is registered
+
+## Quick Start (Testing)
 
 ### Option 1: Python Script (Recommended)
 ```bash
