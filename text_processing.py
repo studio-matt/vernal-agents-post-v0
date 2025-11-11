@@ -638,8 +638,8 @@ import re
 
 def system_model_topics(texts: List[str], num_topics: int, query: str = "", keywords: List[str] = [], urls: List[str] = []) -> List[str]:
     """
-    System model (LLM-free) topic extraction using NMF with Gensim Phrases.
-    Loads configuration from system_settings table.
+    System model (LLM-free) topic extraction using NMF with Gensim Phrases and spaCy tokenization.
+    Loads ALL configuration from system_settings table (fully configurable from admin panel).
     """
     try:
         # Import required libraries
@@ -655,7 +655,25 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
             logger.error("❌ sklearn not available - system model requires sklearn")
             return []
         
-        # Load configuration from database
+        # Check for spaCy (optional but recommended)
+        try:
+            import spacy
+            SPACY_AVAILABLE = True
+            try:
+                nlp = spacy.load("en_core_web_sm", disable=["ner", "parser", "textcat"])
+                nlp.enable_pipe("lemmatizer")
+                logger.info("✅ Using spaCy for enhanced tokenization (lemmatization + POS filtering)")
+            except OSError:
+                logger.warning("⚠️ spaCy model 'en_core_web_sm' not found, falling back to simple tokenization")
+                logger.warning("⚠️ Install with: python -m spacy download en_core_web_sm")
+                SPACY_AVAILABLE = False
+                nlp = None
+        except ImportError:
+            logger.warning("⚠️ spaCy not available, using simple tokenization")
+            SPACY_AVAILABLE = False
+            nlp = None
+        
+        # Load ALL configuration from database (fully configurable)
         try:
             from database import SessionLocal
             from models import SystemSettings
@@ -673,6 +691,17 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
                         config["K_GRID"] = json.loads(value) if value else [10, 15, 20, 25]
                     elif key in ["phrases_threshold", "tfidf_max_df"]:
                         config[key.upper()] = float(value) if value else (15.0 if key == "phrases_threshold" else 0.7)
+                    elif key == "min_doc_len_chars":
+                        config["MIN_DOC_LEN_CHARS"] = int(value) if value else 400
+                    elif key == "max_per_domain":
+                        # None means disabled, otherwise integer
+                        config["MAX_PER_DOMAIN"] = int(value) if value and value.lower() != "none" else None
+                    elif key == "nmf_max_iter":
+                        config["NMF_MAX_ITER"] = int(value) if value else 500
+                    elif key == "nmf_random_state":
+                        config["NMF_RANDOM_STATE"] = int(value) if value else 42
+                    elif key == "use_spacy":
+                        config["USE_SPACY"] = value.lower() == "true" if value else True
                     else:
                         config[key.upper()] = int(value) if value else {
                             "phrases_min_count": 5,
@@ -680,13 +709,18 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
                             "top_words": 12,
                         }.get(key, 0)
                 
-                # Set defaults
+                # Set defaults for all parameters
                 PHRASES_MIN_COUNT = config.get("PHRASES_MIN_COUNT", 5)
                 PHRASES_THRESHOLD = config.get("PHRASES_THRESHOLD", 15.0)
                 TFIDF_MIN_DF = config.get("TFIDF_MIN_DF", 3)
                 TFIDF_MAX_DF = config.get("TFIDF_MAX_DF", 0.7)
                 K_GRID = config.get("K_GRID", [10, 15, 20, 25])
                 TOP_WORDS = config.get("TOP_WORDS", 12)
+                MIN_DOC_LEN_CHARS = config.get("MIN_DOC_LEN_CHARS", 400)
+                MAX_PER_DOMAIN = config.get("MAX_PER_DOMAIN", None)
+                NMF_MAX_ITER = config.get("NMF_MAX_ITER", 500)
+                NMF_RANDOM_STATE = config.get("NMF_RANDOM_STATE", 42)
+                USE_SPACY = config.get("USE_SPACY", True) and SPACY_AVAILABLE
             finally:
                 db.close()
         except Exception as e:
@@ -697,22 +731,83 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
             TFIDF_MAX_DF = 0.7
             K_GRID = [10, 15, 20, 25]
             TOP_WORDS = 12
+            MIN_DOC_LEN_CHARS = 400
+            MAX_PER_DOMAIN = None
+            NMF_MAX_ITER = 500
+            NMF_RANDOM_STATE = 42
+            USE_SPACY = SPACY_AVAILABLE
         
-        # Tokenize texts (simple tokenization for now)
-        from collections import defaultdict
+        # Filter documents by minimum length (removes noise from tiny pages)
+        filtered_texts = [t for t in texts if t and len(t.strip()) >= MIN_DOC_LEN_CHARS]
+        if len(filtered_texts) < len(texts):
+            logger.info(f"📊 Filtered {len(texts) - len(filtered_texts)} documents below {MIN_DOC_LEN_CHARS} chars")
         
-        # Simple sentence splitter
-        sent_split = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])")
+        if not filtered_texts:
+            logger.warning(f"⚠️ No documents meet minimum length requirement ({MIN_DOC_LEN_CHARS} chars)")
+            return []
         
-        # Tokenize documents
+        texts = filtered_texts
+        
+        # Optional: Domain diversity filtering (if URLs provided)
+        if MAX_PER_DOMAIN and urls and len(urls) == len(texts):
+            from urllib.parse import urlparse
+            from collections import defaultdict
+            
+            def normalize_domain(u):
+                try:
+                    d = urlparse(u).netloc.lower()
+                    return d[4:] if d.startswith("www.") else d
+                except:
+                    return ""
+            
+            # Group texts by domain
+            domain_texts = defaultdict(list)
+            for text, url in zip(texts, urls):
+                domain = normalize_domain(url)
+                domain_texts[domain].append((text, url))
+            
+            # Cap per domain
+            filtered_texts = []
+            filtered_urls = []
+            for domain, items in domain_texts.items():
+                # Keep up to MAX_PER_DOMAIN items per domain (keep most recent if sorted)
+                for text, url in items[:MAX_PER_DOMAIN]:
+                    filtered_texts.append(text)
+                    filtered_urls.append(url)
+            
+            if len(filtered_texts) < len(texts):
+                logger.info(f"📊 Domain diversity: {len(texts)} -> {len(filtered_texts)} docs (max {MAX_PER_DOMAIN} per domain)")
+            texts = filtered_texts
+            urls = filtered_urls if urls else []
+        
+        # Tokenize documents using spaCy (if available) or simple tokenization
         tokens_list = []
-        for text in texts:
+        if USE_SPACY and nlp:
+            logger.info("🔍 Using spaCy tokenization (lemmatization + POS filtering)")
+            for text in texts:
+                doc = nlp(text)
+                toks = []
+                for tok in doc:
+                    if tok.is_punct or tok.is_space or tok.like_num:
+                        continue
+                    lemma = tok.lemma_.lower().strip()
+                    if not lemma or len(lemma) < 2:
+                        continue
+                    # Keep nouns/verbs/adjectives/adverbs (most meaningful for topics)
+                    if tok.pos_ in ("NOUN", "PROPN", "VERB", "ADJ", "ADV"):
+                        toks.append(lemma)
+                tokens_list.append(toks)
+        else:
+            logger.info("🔍 Using simple tokenization (spaCy not available)")
+            # Simple sentence splitter (for reference, not used in simple mode)
+            sent_split = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])")
+            
             # Simple tokenization - split on whitespace and filter
-            words = text.lower().split()
-            # Filter stopwords and short words
             stopwords_set = set(stopwords.words('english'))
-            tokens = [w for w in words if w not in stopwords_set and len(w) > 2 and w.isalpha()]
-            tokens_list.append(tokens)
+            for text in texts:
+                words = text.lower().split()
+                tokens = [w for w in words if w not in stopwords_set and len(w) > 2 and w.isalpha()]
+                tokens_list.append(tokens)
         
         if not tokens_list or sum(len(t) for t in tokens_list) < 10:
             logger.warning("⚠️ Insufficient tokens for system model")
@@ -739,7 +834,7 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
             if K > len(texts):
                 continue
             try:
-                nmf = NMF(n_components=K, init="nndsvd", random_state=42, max_iter=500)
+                nmf = NMF(n_components=K, init="nndsvd", random_state=NMF_RANDOM_STATE, max_iter=NMF_MAX_ITER)
                 W = nmf.fit_transform(X)
                 H = nmf.components_
                 
@@ -747,6 +842,8 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
                 topic_terms = [[terms[i] for i in comp.argsort()[-TOP_WORDS:]] for comp in H]
                 cm = CoherenceModel(topics=topic_terms, texts=tokens_phrased, coherence="c_v")
                 coh = cm.get_coherence()
+                
+                logger.info(f"📊 K={K}, coherence={coh:.3f}")
                 
                 if (best is None) or (coh > best[0]):
                     best = (coh, K, nmf, W, H)
