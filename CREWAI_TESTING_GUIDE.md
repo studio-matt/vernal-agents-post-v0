@@ -20,7 +20,8 @@ curl -X POST http://127.0.0.1:8000/mcp/generate-content \
 ```
 **Expected:** 
 - Returns JSON with `"success": true`
-- Has `"platform_content"` field with generated text
+- Has `"data.platform_content"` field with generated text
+- Has `"metadata.workflow": "content_generation"`
 - Takes 30-60 seconds
 
 ---
@@ -33,8 +34,8 @@ curl -X POST http://127.0.0.1:8000/mcp/generate-content \
 ```
 **Expected:**
 - Returns JSON with `"success": true`
-- Has `"platform_content"` field with generated text
-- Has `"metadata"` with `"workflow": "crewai_content_generation"`
+- Has `"data.platform_content"` field with generated text
+- Has `"metadata.workflow": "crewai_content_generation"`
 - Takes 2-5 minutes (slower than manual)
 
 ---
