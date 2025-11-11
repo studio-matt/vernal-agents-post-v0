@@ -2015,12 +2015,42 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
                 return {"status": "error", "message": f"OpenAI API key is invalid or expired. Please check your .env file and restart the service."}
             return {"status": "error", "message": f"LLM call failed: {error_msg}"}
         
+        # Save insights to database for caching (as "raw data" associated with campaign)
+        try:
+            # Check if record exists, update it; otherwise create new
+            insights_record = db.query(CampaignResearchInsights).filter(
+                CampaignResearchInsights.campaign_id == campaign_id,
+                CampaignResearchInsights.agent_type == agent_type
+            ).first()
+            
+            if insights_record:
+                # Update existing record
+                insights_record.insights_text = recommendations_text
+                insights_record.updated_at = datetime.now()
+                logger.info(f"✅ Updated cached {agent_type} insights for campaign {campaign_id}")
+            else:
+                # Create new record
+                insights_record = CampaignResearchInsights(
+                    campaign_id=campaign_id,
+                    agent_type=agent_type,
+                    insights_text=recommendations_text
+                )
+                db.add(insights_record)
+                logger.info(f"✅ Saved new {agent_type} insights to database for campaign {campaign_id}")
+            
+            db.commit()
+        except Exception as e:
+            logger.error(f"⚠️ Failed to save insights to database: {e}")
+            db.rollback()
+            # Continue anyway - return the insights even if DB save failed
+        
         # Parse recommendations (expecting structured format with recommendations)
         # For now, return the raw text - frontend will parse it
         return {
             "status": "success",
             "recommendations": recommendations_text,
-            "agent_type": agent_type
+            "agent_type": agent_type,
+            "cached": False
         }
         
     except Exception as e:
