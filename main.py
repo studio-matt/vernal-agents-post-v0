@@ -1347,12 +1347,54 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
     Aggregate research outputs for a campaign.
     - urls: list of source_url
     - raw: up to `limit` extracted_text samples
-    - wordCloud: top 10 terms by frequency
-    - topics: naive primary topics (top terms)
-    - entities: NLTK-based extraction using named entity recognition
+    - wordCloud: top 10 terms by frequency (cached in DB)
+    - topics: naive primary topics (top terms) (cached in DB)
+    - entities: NLTK-based extraction using named entity recognition (cached in DB)
+    - hashtags: generated from topics/keywords (cached in DB)
+    
+    Caches wordCloud, topics, hashtags, and entities in database to avoid re-computation.
     """
     try:
-        from models import CampaignRawData
+        from models import CampaignRawData, CampaignResearchData
+        import json
+        
+        # Check if cached research data exists
+        cached_data = db.query(CampaignResearchData).filter(
+            CampaignResearchData.campaign_id == campaign_id
+        ).first()
+        
+        if cached_data and cached_data.word_cloud_json and cached_data.topics_json:
+            logger.info(f"✅ Returning cached research data for campaign {campaign_id}")
+            # Parse cached JSON data
+            word_cloud = json.loads(cached_data.word_cloud_json) if cached_data.word_cloud_json else []
+            topics = json.loads(cached_data.topics_json) if cached_data.topics_json else []
+            hashtags = json.loads(cached_data.hashtags_json) if cached_data.hashtags_json else []
+            entities = json.loads(cached_data.entities_json) if cached_data.entities_json else {}
+            
+            # Still need to get URLs and raw text (these change with scraping)
+            rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+            urls = [r.source_url for r in rows if r.source_url and not r.source_url.startswith(("error:", "placeholder:"))]
+            texts = [r.extracted_text for r in rows if r.extracted_text and len(r.extracted_text.strip()) > 0 and not (r.source_url and r.source_url.startswith(("error:", "placeholder:")))]
+            
+            return {
+                "status": "success",
+                "campaign_id": campaign_id,
+                "urls": urls,
+                "raw": texts[:max(0, limit) or 20],
+                "wordCloud": word_cloud,
+                "topics": topics,
+                "hashtags": hashtags,
+                "entities": entities,
+                "total_raw": len(texts),
+                "cached": True,
+                "diagnostics": {
+                    "total_rows": len(rows),
+                    "valid_urls": len(urls),
+                    "valid_texts": len(texts),
+                    "has_data": len(urls) > 0 or len(texts) > 0,
+                    "cached": True
+                }
+            }
         # Import NLTK-based text processing (lazy import with fallback)
         try:
             from text_processing import (

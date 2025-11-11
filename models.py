@@ -232,6 +232,26 @@ class CampaignResearchInsights(Base):
     def __repr__(self):
         return f"<CampaignResearchInsights(id={self.id}, campaign_id={self.campaign_id}, agent_type={self.agent_type})>"
 
+# Cached research data (word cloud, topics, hashtags) for campaigns
+# This stores the processed research data to avoid re-computation
+class CampaignResearchData(Base):
+    __tablename__ = "campaign_research_data"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    campaign_id = Column(String(255), index=True, nullable=False, unique=True)  # One record per campaign
+    word_cloud_json = Column(Text, nullable=True)  # JSON array of {term, count} objects
+    topics_json = Column(Text, nullable=True)  # JSON array of {label, score} objects
+    hashtags_json = Column(Text, nullable=True)  # JSON array of {id, name, category} objects
+    entities_json = Column(Text, nullable=True)  # JSON object with persons, organizations, locations, etc.
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},
+    )
+
+    def __repr__(self):
+        return f"<CampaignResearchData(id={self.id}, campaign_id={self.campaign_id})>"
+
 # System-wide settings (e.g., LLM prompts, configuration)
 class SystemSettings(Base):
     __tablename__ = "system_settings"
