@@ -22,14 +22,18 @@ python3 validate_dependencies.py || {
     exit 1
 }
 
-# Step 3: Verify CrewAI is installed
+# Step 3: Verify CrewAI is installed (per EMERGENCY_NET.md: install from requirements.txt)
 echo ""
 echo "📋 Step 3: Verifying CrewAI installation..."
 if python3 -c "import crewai; print('✅ CrewAI version:', crewai.__version__)" 2>/dev/null; then
     echo "✅ CrewAI is installed"
 else
-    echo "⚠️  CrewAI not found. Installing..."
-    pip install crewai>=0.28.0 --no-cache-dir
+    echo "⚠️  CrewAI not found. Installing from requirements.txt (per EMERGENCY_NET.md)..."
+    # Per EMERGENCY_NET.md: Always install from requirements.txt, not individual packages
+    pip install -r requirements.txt --no-cache-dir || {
+        echo "⚠️  CrewAI may not be in requirements.txt. Installing directly..."
+        pip install crewai>=0.28.0 --no-cache-dir
+    }
     echo "✅ CrewAI installed"
 fi
 
@@ -94,6 +98,14 @@ if curl -I https://themachine.vernalcontentum.com/health > /dev/null 2>&1; then
     echo "✅ Public health check: OK"
 else
     echo "❌ Public health check failed"
+    exit 1
+fi
+
+echo "Testing auth endpoint (MANDATORY per EMERGENCY_NET.md)..."
+if curl -I https://themachine.vernalcontentum.com/auth/login > /dev/null 2>&1; then
+    echo "✅ Auth endpoint check: OK"
+else
+    echo "❌ Auth endpoint check failed"
     exit 1
 fi
 
