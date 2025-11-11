@@ -22,9 +22,18 @@ from typing import Dict, Any, List
 import json
 import logging
 
-# Configure logging
+# Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try to import CrewAI workflows (optional - falls back to manual if not available)
+try:
+    from crewai_workflows import create_content_generation_crew, create_research_to_writing_crew
+    CREWAI_AVAILABLE = True
+    logger.info("✅ CrewAI workflows available")
+except ImportError as e:
+    CREWAI_AVAILABLE = False
+    logger.warning(f"⚠️ CrewAI workflows not available: {e}. Using manual orchestration.")
 
 class VernalContentumMCPServer(MCPServer):
     """MCP Server for Vernal Contentum AI agents"""
@@ -115,6 +124,26 @@ class VernalContentumMCPServer(MCPServer):
                     "required": ["content", "platform"]
                 },
                 handler=self._create_platform_handler(platform)
+            ))
+        
+        # CrewAI-based content generation workflow (Research → Writing → QC)
+        if CREWAI_AVAILABLE:
+            self.register_tool(Tool(
+                name="crewai_content_generation",
+                description="Generate content using CrewAI orchestration: Research Agent → Writing Agent → QC Agent",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string", "description": "Input text to analyze"},
+                        "week": {"type": "integer", "description": "Week number for content planning"},
+                        "platform": {"type": "string", "description": "Target platform"},
+                        "days_list": {"type": "array", "items": {"type": "string"}, "description": "List of days for subcontent"},
+                        "author_personality": {"type": "string", "description": "Author personality style"},
+                        "use_qc": {"type": "boolean", "description": "Whether to include QC agent (default: true)"}
+                    },
+                    "required": ["text", "platform"]
+                },
+                handler=self._handle_crewai_content_generation
             ))
         
         logger.info(f"Registered {len(self.tools)} MCP tools")
@@ -257,6 +286,74 @@ class VernalContentumMCPServer(MCPServer):
                 success=False,
                 error=str(e),
                 metadata={"agent": "regenrate_subcontent_agent"}
+            )
+    
+    def _handle_crewai_content_generation(self, input_data: Dict[str, Any]) -> ToolResult:
+        """Handle CrewAI-based content generation workflow"""
+        if not CREWAI_AVAILABLE:
+            return ToolResult(
+                success=False,
+                error="CrewAI workflows not available",
+                metadata={"workflow": "crewai_content_generation"}
+            )
+        
+        try:
+            text = input_data.get("text", "")
+            week = input_data.get("week", 1)
+            platform = input_data.get("platform", "linkedin")
+            days_list = input_data.get("days_list", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+            author_personality = input_data.get("author_personality", None)
+            use_qc = input_data.get("use_qc", True)
+            
+            if not text:
+                return ToolResult(
+                    success=False,
+                    error="Text input is required",
+                    metadata={"workflow": "crewai_content_generation"}
+                )
+            
+            # Use CrewAI workflow
+            if use_qc:
+                result = create_content_generation_crew(
+                    text=text,
+                    week=week,
+                    platform=platform,
+                    days_list=days_list,
+                    author_personality=author_personality
+                )
+            else:
+                result = create_research_to_writing_crew(
+                    text=text,
+                    week=week,
+                    platform=platform,
+                    days_list=days_list
+                )
+            
+            if result.get("success"):
+                return ToolResult(
+                    success=True,
+                    data=result.get("data"),
+                    metadata={
+                        **result.get("metadata", {}),
+                        "workflow": "crewai_content_generation",
+                        "use_qc": use_qc
+                    }
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    error=result.get("error", "Unknown error"),
+                    metadata={"workflow": "crewai_content_generation"}
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in CrewAI content generation: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ToolResult(
+                success=False,
+                error=str(e),
+                metadata={"workflow": "crewai_content_generation"}
             )
 
 # Create MCP server instance
