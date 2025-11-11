@@ -86,10 +86,48 @@ async def generate_content(
     week: int = 1,
     platform: str = "linkedin",
     campaign_id: Optional[str] = None,
-    author_personality: Optional[str] = None
+    author_personality: Optional[str] = None,
+    use_crewai: bool = False  # New parameter to toggle CrewAI
 ):
-    """Generate content using MCP tools"""
+    """Generate content using MCP tools. Set use_crewai=True to use CrewAI orchestration."""
     try:
+        # If CrewAI is requested, use CrewAI workflow
+        if use_crewai:
+            crewai_tool = simple_mcp_server.get_tool("crewai_content_generation")
+            if crewai_tool:
+                result = await crewai_tool.execute({
+                    "text": text,
+                    "week": week,
+                    "platform": platform,
+                    "days_list": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+                    "author_personality": author_personality,
+                    "use_qc": True
+                })
+                # Convert CrewAI result format to SimpleMCPToolResponse format
+                if result.success:
+                    return SimpleMCPToolResponse(
+                        success=True,
+                        data={
+                            "research": result.data.get("research"),
+                            "quality_control": result.data.get("quality_control"),
+                            "platform_content": result.data.get("writing") or result.data.get("final_content"),
+                            "crewai_metadata": result.metadata
+                        },
+                        metadata={
+                            **result.metadata,
+                            "workflow": "crewai_content_generation"
+                        }
+                    )
+                else:
+                    return SimpleMCPToolResponse(
+                        success=False,
+                        error=result.error,
+                        metadata={"workflow": "crewai_content_generation"}
+                    )
+            else:
+                logger.warning("CrewAI tool requested but not available, falling back to manual")
+        
+        # Manual orchestration (original flow)
         # Step 1: Script Research
         research_tool = simple_mcp_server.get_tool("script_research")
         research_result = await research_tool.execute({
@@ -133,7 +171,7 @@ async def generate_content(
                 "platform_content": platform_result.data
             },
             error=platform_result.error,
-            metadata={"workflow": "content_generation"}
+            metadata={"workflow": "content_generation", "use_crewai": False}
         )
         
     except Exception as e:
