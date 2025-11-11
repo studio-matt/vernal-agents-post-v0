@@ -1962,18 +1962,37 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         
         # Call LLM
         import os
+        from dotenv import load_dotenv
+        # Ensure .env is loaded (in case systemd didn't load it properly)
+        load_dotenv()
+        
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
+            logger.error("❌ OPENAI_API_KEY not found in environment")
             return {"status": "error", "message": "OPENAI_API_KEY not configured"}
+        
+        # Strip whitespace from API key (common issue)
+        api_key = api_key.strip()
+        
+        # Log first few chars for debugging (without exposing full key)
+        logger.info(f"✅ Using OpenAI API key: {api_key[:10]}... (length: {len(api_key)})")
+        
+        if not api_key.startswith("sk-"):
+            logger.warning(f"⚠️ API key doesn't start with 'sk-' - might be invalid format")
         
         try:
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key, temperature=0.4, max_tokens=1000)
             response = llm.invoke(prompt)
             recommendations_text = response.content if hasattr(response, 'content') else str(response)
+            logger.info(f"✅ Successfully generated {agent_type} recommendations ({len(recommendations_text)} chars)")
         except Exception as e:
-            logger.error(f"Error calling LLM for {agent_type} recommendations: {e}")
-            return {"status": "error", "message": f"LLM call failed: {str(e)}"}
+            error_msg = str(e)
+            logger.error(f"❌ Error calling LLM for {agent_type} recommendations: {error_msg}")
+            # Check if it's an API key error
+            if "401" in error_msg or "unauthorized" in error_msg.lower() or "incorrect api key" in error_msg.lower():
+                return {"status": "error", "message": f"OpenAI API key is invalid or expired. Please check your .env file and restart the service."}
+            return {"status": "error", "message": f"LLM call failed: {error_msg}"}
         
         # Parse recommendations (expecting structured format with recommendations)
         # For now, return the raw text - frontend will parse it
