@@ -1757,6 +1757,62 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                    f"{len(entities['organizations'])} organizations, "
                    f"{len(entities['locations'])} locations, "
                    f"{len(entities['dates'])} dates")
+        
+        # Generate hashtags from topics and keywords (for caching)
+        hashtags = []
+        if topics:
+            for i, topic in enumerate(topics[:10]):
+                topic_label = topic.get('label', topic) if isinstance(topic, dict) else str(topic)
+                hashtag_name = f"#{topic_label.replace(' ', '')}"
+                hashtags.append({
+                    "id": f"topic-{i}",
+                    "name": hashtag_name,
+                    "category": "Campaign-Specific"
+                })
+        if campaign and campaign.keywords:
+            campaign_keywords = campaign.keywords.split(",") if isinstance(campaign.keywords, str) else campaign.keywords
+            for i, keyword in enumerate(campaign_keywords[:10]):
+                keyword_clean = keyword.strip()
+                if keyword_clean:
+                    hashtag_name = f"#{keyword_clean.replace(' ', '')}"
+                    hashtags.append({
+                        "id": f"keyword-{i}",
+                        "name": hashtag_name,
+                        "category": "Industry"
+                    })
+        
+        # Save to database cache (as "raw data" associated with campaign)
+        try:
+            import json
+            research_data_record = db.query(CampaignResearchData).filter(
+                CampaignResearchData.campaign_id == campaign_id
+            ).first()
+            
+            if research_data_record:
+                # Update existing record
+                research_data_record.word_cloud_json = json.dumps(word_cloud)
+                research_data_record.topics_json = json.dumps(topics)
+                research_data_record.hashtags_json = json.dumps(hashtags)
+                research_data_record.entities_json = json.dumps(entities)
+                research_data_record.updated_at = datetime.now()
+                logger.info(f"✅ Updated cached research data for campaign {campaign_id}")
+            else:
+                # Create new record
+                research_data_record = CampaignResearchData(
+                    campaign_id=campaign_id,
+                    word_cloud_json=json.dumps(word_cloud),
+                    topics_json=json.dumps(topics),
+                    hashtags_json=json.dumps(hashtags),
+                    entities_json=json.dumps(entities)
+                )
+                db.add(research_data_record)
+                logger.info(f"✅ Saved new research data to database for campaign {campaign_id}")
+            
+            db.commit()
+        except Exception as e:
+            logger.error(f"⚠️ Failed to save research data to database: {e}")
+            db.rollback()
+            # Continue anyway - return the data even if DB save failed
 
         return {
             "status": "success",
@@ -1765,9 +1821,11 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             "raw": texts[: max(0, limit) or 20],
             "wordCloud": word_cloud,
             "topics": topics,
+            "hashtags": hashtags,
             "entities": entities,
             "total_raw": len(texts),
             "truncation_info": truncation_info if truncation_info else None,  # Info about truncated texts
+            "cached": False,
             "diagnostics": {
                 "total_rows": len(rows),
                 "valid_urls": len(urls),
@@ -1775,7 +1833,8 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 "errors": errors,
                 "has_errors": len(errors) > 0,
                 "has_data": len(urls) > 0 or len(texts) > 0,
-                "truncated_count": len(truncation_info)
+                "truncated_count": len(truncation_info),
+                "cached": False
             }
         }
     except Exception as e:
