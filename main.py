@@ -1879,6 +1879,18 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         # Get research data for context
         from text_processing import extract_keywords, extract_topics
         keywords_data = extract_keywords(texts, num_keywords=20)
+        
+        # Generate word cloud data (term: count format) for keyword agent
+        from collections import Counter
+        all_words = []
+        for text in texts:
+            words = text.lower().split()
+            # Remove very short words and common stopwords
+            words = [w.strip('.,!?;:"()[]{}') for w in words if len(w) > 3]
+            all_words.extend(words)
+        word_counts = Counter(all_words)
+        word_cloud_data = [{"term": term, "count": count} for term, count in word_counts.most_common(20)]
+        
         # Check topic extraction method from system settings (default to "system")
         from models import SystemSettings
         method_setting = db.query(SystemSettings).filter(
@@ -1912,15 +1924,34 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         ).first()
         
         if not prompt_setting or not prompt_setting.setting_value:
-            return {"status": "error", "message": f"Prompt not configured for {agent_type} agent"}
+            logger.error(f"❌ Prompt not configured for {agent_type} agent. Looking for key: research_agent_{agent_type}_prompt")
+            return {"status": "error", "message": f"Prompt not configured for {agent_type} agent. Please configure it in Admin Panel → Research Agents → {agent_type.replace('-', ' ').title()}"}
         
         prompt_template = prompt_setting.setting_value
+        logger.info(f"✅ Using prompt for {agent_type} agent (key: research_agent_{agent_type}_prompt)")
         
-        # Prepare context
-        context = f"""
+        # Prepare context with word cloud data for keyword agent
+        if agent_type == "keyword":
+            # Format word cloud data for keyword agent
+            word_cloud_text = "\n".join([f"- {item['term']}: {item['count']} occurrences" for item in word_cloud_data[:20]])
+            context = f"""
+Campaign Query: {campaign.query or 'N/A'}
+Campaign Keywords: {', '.join(campaign.keywords.split(',')) if campaign.keywords else 'N/A'}
+
+Word Cloud Data (Top Keywords from Scraped Content):
+{word_cloud_text}
+
+Topics Identified: {', '.join(topics_data[:10]) if topics_data else 'N/A'}
+Number of Scraped Texts: {len(texts)}
+Total Words Analyzed: {sum(item['count'] for item in word_cloud_data)}
+Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
+"""
+        else:
+            # For other agent types, use simpler context
+            context = f"""
 Campaign Query: {campaign.query or 'N/A'}
 Keywords: {', '.join(campaign.keywords.split(',')) if campaign.keywords else 'N/A'}
-Top Keywords Found: {', '.join([k if isinstance(k, str) else k.get('term', '') for k in keywords_data[:10]])}
+Top Keywords Found: {', '.join([k if isinstance(k, str) else str(k) for k in keywords_data[:10]])}
 Topics Identified: {', '.join(topics_data[:10]) if topics_data else 'N/A'}
 Number of Scraped Texts: {len(texts)}
 Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
