@@ -1977,6 +1977,11 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         # Log first few chars for debugging (without exposing full key)
         logger.info(f"✅ Using OpenAI API key: {api_key[:10]}... (length: {len(api_key)})")
         
+        # Check key length (OpenAI keys are typically 200+ characters)
+        if len(api_key) < 50:
+            logger.error(f"❌ API key is too short ({len(api_key)} chars). OpenAI keys should be 200+ characters. Check .env file for line breaks or truncation.")
+            return {"status": "error", "message": f"API key is too short ({len(api_key)} characters). OpenAI keys should be 200+ characters. Please check your .env file - the key might have line breaks or be truncated. Ensure the entire key is on a single line."}
+        
         if not api_key.startswith("sk-"):
             logger.warning(f"⚠️ API key doesn't start with 'sk-' - might be invalid format")
         
