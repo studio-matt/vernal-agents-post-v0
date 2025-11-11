@@ -1879,7 +1879,32 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         # Get research data for context
         from text_processing import extract_keywords, extract_topics
         keywords_data = extract_keywords(texts, num_keywords=20)
-        topics_data = extract_topics(texts, topic_tool="system", num_topics=10, iterations=25, query=campaign.query or "", keywords=campaign.keywords.split(",") if campaign.keywords else [], urls=[])
+        # Check topic extraction method from system settings (default to "system")
+        from models import SystemSettings
+        method_setting = db.query(SystemSettings).filter(
+            SystemSettings.setting_key == "topic_extraction_method"
+        ).first()
+        
+        topic_extraction_method = "system"  # Default to system model
+        if method_setting and method_setting.setting_value:
+            topic_extraction_method = method_setting.setting_value.lower()
+        
+        # Determine topic_tool based on method
+        if topic_extraction_method == "llm":
+            # Check if OpenAI API key is available for LLM model
+            import os
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if openai_key and len(openai_key.strip()) > 0:
+                topic_tool = "llm"  # Use LLM for phrase generation
+                logger.info("✅ Using LLM model for topics (from system settings)")
+            else:
+                topic_tool = "system"  # Fallback to system model if no API key
+                logger.warning("⚠️ LLM selected but OPENAI_API_KEY not found, using system model")
+        else:
+            topic_tool = "system"  # Use system model (NMF-based)
+            logger.info("✅ Using system model for topics (from system settings)")
+        
+        topics_data = extract_topics(texts, topic_tool=topic_tool, num_topics=10, iterations=25, query=campaign.query or "", keywords=campaign.keywords.split(",") if campaign.keywords else [], urls=[])
         
         # Get prompt from system settings
         prompt_setting = db.query(SystemSettings).filter(
@@ -2005,26 +2030,42 @@ Based on this data, provide:
 Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
         }
         
+        # Add keyword expansion prompt
+        default_prompts["keyword_expansion_prompt"] = """Expand this abbreviation to its full form. Return ONLY the expansion, nothing else. If it's not an abbreviation, return the original word.
+
+Examples:
+- WW2 → World War 2
+- AI → artificial intelligence
+- CEO → Chief Executive Officer
+- NASA → National Aeronautics and Space Administration
+
+Abbreviation: {keyword}
+
+Expansion:"""
+        
         initialized = []
         for setting_key, prompt_value in default_prompts.items():
             # Check if setting exists
             existing = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
             if not existing:
                 # Create new setting
-                agent_type = setting_key.replace("research_agent_", "").replace("_prompt", "")
-                agent_labels = {
-                    "keyword": "Keyword Research Agent",
-                    "micro-sentiment": "Micro Sentiment Agent",
-                    "topical-map": "Topical Map Agent",
-                    "knowledge-graph": "Knowledge Graph Agent",
-                    "hashtag-generator": "Hashtag Generator Agent",
-                }
-                label = agent_labels.get(agent_type, agent_type)
+                if setting_key == "keyword_expansion_prompt":
+                    description = "Prompt for LLM-based keyword abbreviation expansion"
+                else:
+                    agent_type = setting_key.replace("research_agent_", "").replace("_prompt", "")
+                    agent_labels = {
+                        "keyword": "Keyword Research Agent",
+                        "micro-sentiment": "Micro Sentiment Agent",
+                        "topical-map": "Topical Map Agent",
+                        "knowledge-graph": "Knowledge Graph Agent",
+                        "hashtag-generator": "Hashtag Generator Agent",
+                    }
+                    description = f"Default prompt for {agent_labels.get(agent_type, agent_type)}"
                 
                 new_setting = SystemSettings(
                     setting_key=setting_key,
                     setting_value=prompt_value,
-                    description=f"Default prompt for {label}"
+                    description=description
                 )
                 db.add(new_setting)
                 initialized.append(setting_key)
@@ -2034,13 +2075,13 @@ Format your response as structured recommendations that can be displayed to user
             db.commit()
             return {
                 "status": "success",
-                "message": f"Initialized {len(initialized)} research agent prompts",
+                "message": f"Initialized {len(initialized)} prompts",
                 "initialized": initialized
             }
         else:
             return {
                 "status": "success",
-                "message": "All research agent prompts already exist",
+                "message": "All prompts already exist",
                 "initialized": []
             }
             

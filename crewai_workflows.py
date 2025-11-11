@@ -3,16 +3,140 @@ CrewAI-based workflows for content generation
 Enables agent-to-agent handoffs with automatic orchestration
 """
 
-from crewai import Crew, Process, Task
-from agents import script_research_agent, qc_agent
+from crewai import Crew, Process, Task, Agent
+from agents import script_research_agent, qc_agent, create_agent_safely
 from agents import linkedin_agent, twitter_agent, facebook_agent, instagram_agent, tiktok_agent, youtube_agent, wordpress_agent
-from database import DatabaseManager
-from typing import Dict, Any, Optional
+from database import DatabaseManager, SessionLocal
+from models import SystemSettings
+from typing import Dict, Any, Optional, List
 import logging
 import json
 
 logger = logging.getLogger(__name__)
 db_manager = DatabaseManager()
+
+def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
+    """
+    Get QC agents for a specific agent.
+    Returns: assigned QC agents + global QC agents (always included)
+    
+    Args:
+        tab: The agent tab (research, writing)
+        agent_id: The agent ID
+        
+    Returns:
+        List of QC Agent objects
+    """
+    qc_agents: List[Agent] = []
+    db = SessionLocal()
+    
+    try:
+        # Step 1: Get assigned QC agent (if any)
+        assigned_qc_setting = db.query(SystemSettings).filter(
+            SystemSettings.setting_key == f"{tab}_agent_{agent_id}_qc_agent"
+        ).first()
+        
+        if assigned_qc_setting and assigned_qc_setting.setting_value:
+            assigned_qc_id = assigned_qc_setting.setting_value.strip()
+            if assigned_qc_id:
+                # Create agent from assigned QC agent ID
+                qc_agent_obj = _create_qc_agent_from_id(assigned_qc_id)
+                if qc_agent_obj:
+                    qc_agents.append(qc_agent_obj)
+                    logger.info(f"✅ Added assigned QC agent: {assigned_qc_id}")
+        
+        # Step 2: Get all global QC agents (always included)
+        # Get list of all QC agents
+        qc_agents_list_setting = db.query(SystemSettings).filter(
+            SystemSettings.setting_key == "qc_agents_list"
+        ).first()
+        
+        if qc_agents_list_setting and qc_agents_list_setting.setting_value:
+            try:
+                qc_agent_ids = json.loads(qc_agents_list_setting.setting_value)
+                for qc_agent_id in qc_agent_ids:
+                    # Check if this QC agent is global
+                    global_setting = db.query(SystemSettings).filter(
+                        SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_global"
+                    ).first()
+                    
+                    if global_setting and global_setting.setting_value == "true":
+                        # Create agent from global QC agent ID
+                        qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)
+                        if qc_agent_obj:
+                            # Avoid duplicates (if assigned QC is also global)
+                            if not any(agent.role == qc_agent_obj.role for agent in qc_agents):
+                                qc_agents.append(qc_agent_obj)
+                                logger.info(f"✅ Added global QC agent: {qc_agent_id}")
+            except json.JSONDecodeError:
+                logger.warning("⚠️ Could not parse qc_agents_list, skipping global QC agents")
+        
+        # Step 3: Fallback to default qc_agent if no QC agents found
+        if not qc_agents:
+            logger.info("⚠️ No QC agents found, using default qc_agent")
+            qc_agents.append(qc_agent)
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting QC agents: {e}")
+        # Fallback to default
+        if not qc_agents:
+            qc_agents.append(qc_agent)
+    finally:
+        db.close()
+    
+    return qc_agents
+
+def _create_qc_agent_from_id(qc_agent_id: str) -> Optional[Agent]:
+    """
+    Create a QC Agent object from a QC agent ID stored in system settings.
+    
+    Args:
+        qc_agent_id: The QC agent ID (e.g., "agent_0_qc")
+        
+    Returns:
+        Agent object or None if creation fails
+    """
+    try:
+        db = SessionLocal()
+        try:
+            # Get agent data from system settings
+            name_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_name"
+            ).first()
+            role_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_role"
+            ).first()
+            goal_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_goal"
+            ).first()
+            backstory_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_backstory"
+            ).first()
+            
+            # Extract name
+            agent_name = name_setting.setting_value if name_setting and name_setting.setting_value else qc_agent_id
+            
+            # Use settings if available, otherwise use defaults
+            role = role_setting.setting_value if role_setting and role_setting.setting_value else "Quality Control Agent"
+            goal = goal_setting.setting_value if goal_setting and goal_setting.setting_value else "Review and ensure quality of generated content"
+            backstory = backstory_setting.setting_value if backstory_setting and backstory_setting.setting_value else "You are a meticulous quality control specialist who ensures all content meets high standards."
+            
+            # Create agent using the same method as agents.py
+            agent = create_agent_safely(
+                f"qc_{qc_agent_id}",
+                role,
+                goal,
+                backstory
+            )
+            
+            logger.debug(f"✅ Created QC agent from ID {qc_agent_id}: {agent_name}")
+            return agent
+            
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"❌ Error creating QC agent from ID {qc_agent_id}: {e}")
+        return None
 
 # Platform agent mapping
 PLATFORM_AGENTS = {
@@ -112,7 +236,64 @@ def create_content_generation_crew(
             agent=writing_agent
         )
         
-        # Task 3: QC Agent - Review the written content
+        # Task 3: QC Agent(s) - Review the written content
+        # Get QC agents (assigned + global)
+        # For now, use writing agent's QC assignment (we'll need to pass agent_id in the future)
+        # For now, we'll use a default approach: get QC agents for the platform writing agent
+        # In the future, we can pass agent_id as a parameter
+        
+        # Get QC agents - try to get from writing agent assignment
+        # First, try to find the agent_id for this platform
+        # Agent IDs are stored like "agent_0_linkedin", "agent_1_facebook", etc.
+        # We'll search for agents with this platform name
+        qc_agents_list = []
+        db = SessionLocal()
+        try:
+            # Try to find the agent_id for this platform
+            platform_lower = platform.lower()
+            agents_list_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "writing_agents_list"
+            ).first()
+            
+            if agents_list_setting and agents_list_setting.setting_value:
+                try:
+                    agent_ids = json.loads(agents_list_setting.setting_value)
+                    # Find agent_id that matches this platform
+                    matching_agent_id = None
+                    for agent_id in agent_ids:
+                        # Check if this agent's name matches the platform
+                        name_setting = db.query(SystemSettings).filter(
+                            SystemSettings.setting_key == f"writing_agent_{agent_id}_name"
+                        ).first()
+                        if name_setting and name_setting.setting_value:
+                            agent_name_lower = name_setting.setting_value.lower()
+                            # Check if platform name is in agent name (e.g., "LinkedIn" in "LinkedIn Writer")
+                            if platform_lower in agent_name_lower or agent_name_lower.replace(" writer", "").replace(" content", "") == platform_lower:
+                                matching_agent_id = agent_id
+                                break
+                    
+                    if matching_agent_id:
+                        qc_agents_list = get_qc_agents_for_agent("writing", matching_agent_id)
+                    else:
+                        # Fallback: try platform name directly
+                        qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+                except json.JSONDecodeError:
+                    # Fallback: try platform name directly
+                    qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+            else:
+                # Fallback: try platform name directly
+                qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+        except Exception as e:
+            logger.warning(f"⚠️ Could not find agent_id for platform {platform}, using fallback: {e}")
+            # Fallback: try platform name directly
+            qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+        finally:
+            db.close()
+        
+        # If we have multiple QC agents, we'll use the first one for the task
+        # In the future, we could create multiple QC tasks for multiple QC agents
+        primary_qc_agent = qc_agents_list[0] if qc_agents_list else qc_agent
+        
         qc_description = qc_task_desc.description
         qc_expected_output = qc_task_desc.expected_output
         
@@ -129,13 +310,17 @@ def create_content_generation_crew(
             The writing agent has created content based on the research. Review it thoroughly.
             """,
             expected_output=qc_expected_output,
-            agent=qc_agent
+            agent=primary_qc_agent
         )
+        
+        # Build agents list: research + writing + all QC agents
+        all_agents = [script_research_agent, writing_agent] + qc_agents_list
+        all_tasks = [research_task, writing_task, qc_task]
         
         # Create Crew with sequential process
         crew = Crew(
-            agents=[script_research_agent, writing_agent, qc_agent],
-            tasks=[research_task, writing_task, qc_task],
+            agents=all_agents,
+            tasks=all_tasks,
             process=Process.sequential,  # Research → Writing → QC
             verbose=True,
             memory=True  # Agents remember previous interactions
@@ -188,7 +373,8 @@ def create_content_generation_crew(
             },
             "metadata": {
                 "workflow": "crewai_content_generation",
-                "agents_used": ["script_research_agent", f"{platform}_agent", "qc_agent"],
+                "agents_used": ["script_research_agent", f"{platform}_agent"] + [f"qc_{i}" for i in range(len(qc_agents_list))],
+                "qc_agents_count": len(qc_agents_list),
                 "process": "sequential"
             }
         }

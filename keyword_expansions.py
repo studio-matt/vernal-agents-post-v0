@@ -22,6 +22,47 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+def _get_keyword_expansion_prompt() -> str:
+    """
+    Get the keyword expansion prompt from database, with fallback to default.
+    """
+    # Default prompt (fallback)
+    default_prompt = """Expand this abbreviation to its full form. Return ONLY the expansion, nothing else. If it's not an abbreviation, return the original word.
+
+Examples:
+- WW2 → World War 2
+- AI → artificial intelligence
+- CEO → Chief Executive Officer
+- NASA → National Aeronautics and Space Administration
+
+Abbreviation: {keyword}
+
+Expansion:"""
+    
+    # Try to load from database
+    try:
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            from models import SystemSettings
+            setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "keyword_expansion_prompt"
+            ).first()
+            
+            if setting and setting.setting_value:
+                logger.debug("✅ Loaded keyword expansion prompt from database")
+                return setting.setting_value
+            else:
+                logger.debug("⚠️ Keyword expansion prompt not found in database, using default")
+        except Exception as db_err:
+            logger.warning(f"⚠️ Failed to load prompt from database: {db_err}, using default")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"⚠️ Database not available for prompt loading: {e}, using default")
+    
+    return default_prompt
+
 # In-memory cache for LLM expansions (avoid repeated API calls)
 _llm_cache: dict[str, str] = {}
 
@@ -128,6 +169,12 @@ def _expand_with_llm(keyword: str) -> Optional[str]:
     try:
         from langchain_openai import ChatOpenAI
         
+        # Get prompt from database, with fallback to default
+        prompt_template = _get_keyword_expansion_prompt()
+        
+        # Format prompt with keyword
+        prompt = prompt_template.format(keyword=keyword)
+        
         # Use cheap, fast model for simple abbreviation expansion
         llm = ChatOpenAI(
             model="gpt-4o-mini",
@@ -135,18 +182,6 @@ def _expand_with_llm(keyword: str) -> Optional[str]:
             temperature=0.1,  # Low temperature for factual expansion
             max_tokens=20     # Very short response needed
         )
-        
-        prompt = f"""Expand this abbreviation to its full form. Return ONLY the expansion, nothing else. If it's not an abbreviation, return the original word.
-
-Examples:
-- WW2 → World War 2
-- AI → artificial intelligence
-- CEO → Chief Executive Officer
-- NASA → National Aeronautics and Space Administration
-
-Abbreviation: {keyword}
-
-Expansion:"""
         
         response = llm.invoke(prompt)
         expansion = response.content.strip()
