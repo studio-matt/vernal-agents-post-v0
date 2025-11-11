@@ -1859,10 +1859,26 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
     """
     Generate LLM-based recommendations for research agents (Keyword, Micro Sentiment, Topical Map, Knowledge Graph, Hashtag Generator).
     Uses prompts from system_settings table.
+    Caches insights in database to avoid re-calling LLM for the same campaign/agent combination.
     """
     try:
         agent_type = request_data.agent_type
-        from models import CampaignRawData, Campaign, SystemSettings
+        from models import CampaignRawData, Campaign, SystemSettings, CampaignResearchInsights
+        
+        # Check if insights already exist in database (cache)
+        existing_insights = db.query(CampaignResearchInsights).filter(
+            CampaignResearchInsights.campaign_id == campaign_id,
+            CampaignResearchInsights.agent_type == agent_type
+        ).first()
+        
+        if existing_insights and existing_insights.insights_text:
+            logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id}")
+            return {
+                "status": "success",
+                "recommendations": existing_insights.insights_text,
+                "agent_type": agent_type,
+                "cached": True
+            }
         
         # Get campaign data
         campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
