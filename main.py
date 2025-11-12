@@ -2663,7 +2663,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             padding: {padding}px;
             border-radius: {border_radius}px;
             border-left: {border_width}px solid #3d545f;
-            transition: transform {animation_speed}ms ease{"", hover_effects else ""};
+            transition: transform {animation_speed}ms ease{" " if hover_effects else ""};
         }}
         {"        .topic-card:hover { transform: scale(1.02); }" if hover_effects else ""}
         .topic-card h3 {{
@@ -2702,7 +2702,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             padding: {spacing/4}px {spacing/2}px;
             border-radius: {border_radius}px;
             font-weight: {font_weight};
-            transition: transform {animation_speed}ms ease{"", hover_effects else ""};
+            transition: transform {animation_speed}ms ease{" " if hover_effects else ""};
         }}
         {"        .cloud-word:hover { transform: scale(1.1); }" if hover_effects else ""}
         .heatmap-container {{
