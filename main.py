@@ -3172,7 +3172,7 @@ def get_knowledge_graph_visualization(campaign_id: str, current_user = Depends(g
                 }}
               }},
               "interaction": {{
-                "hover": {str(interaction_hover).lower())},
+                "hover": {str(interaction_hover).lower()},
                 "zoomView": {str(interaction_zoom).lower()},
                 "dragView": {str(interaction_drag).lower()},
                 "selectConnectedEdges": {str(interaction_select).lower()},
