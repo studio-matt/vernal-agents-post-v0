@@ -1557,6 +1557,11 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 import traceback
                 logger.error(f"Traceback: {traceback.format_exc()}")
                 logger.warning(f"⚠️ Falling back to phrase extraction due to error")
+                topic_phrases = None  # Ensure we go to fallback
+                
+            # Fallback: Extract meaningful bigrams/trigrams if extract_topics failed or returned empty
+            if not topic_phrases or len(topic_phrases) == 0:
+                logger.info(f"🔄 Using fallback phrase extraction (extract_topics returned empty or failed)")
                 # Fallback: Extract meaningful bigrams/trigrams instead of single words
                 from collections import Counter
                 from nltk.corpus import stopwords
