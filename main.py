@@ -1363,38 +1363,45 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
             CampaignResearchData.campaign_id == campaign_id
         ).first()
         
+        # Only use cache if it has valid non-empty data
         if cached_data and cached_data.word_cloud_json and cached_data.topics_json:
-            logger.info(f"✅ Returning cached research data for campaign {campaign_id}")
-            # Parse cached JSON data
-            word_cloud = json.loads(cached_data.word_cloud_json) if cached_data.word_cloud_json else []
-            topics = json.loads(cached_data.topics_json) if cached_data.topics_json else []
-            hashtags = json.loads(cached_data.hashtags_json) if cached_data.hashtags_json else []
-            entities = json.loads(cached_data.entities_json) if cached_data.entities_json else {}
-            
-            # Still need to get URLs and raw text (these change with scraping)
-            rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
-            urls = [r.source_url for r in rows if r.source_url and not r.source_url.startswith(("error:", "placeholder:"))]
-            texts = [r.extracted_text for r in rows if r.extracted_text and len(r.extracted_text.strip()) > 0 and not (r.source_url and r.source_url.startswith(("error:", "placeholder:")))]
-            
-            return {
-                "status": "success",
-                "campaign_id": campaign_id,
-                "urls": urls,
-                "raw": texts[:max(0, limit) or 20],
-                "wordCloud": word_cloud,
-                "topics": topics,
-                "hashtags": hashtags,
-                "entities": entities,
-                "total_raw": len(texts),
-                "cached": True,
-                "diagnostics": {
-                    "total_rows": len(rows),
-                    "valid_urls": len(urls),
-                    "valid_texts": len(texts),
-                    "has_data": len(urls) > 0 or len(texts) > 0,
-                    "cached": True
-                }
-            }
+            try:
+                word_cloud = json.loads(cached_data.word_cloud_json) if cached_data.word_cloud_json else []
+                topics = json.loads(cached_data.topics_json) if cached_data.topics_json else []
+                # Only use cache if we have actual data (not empty arrays)
+                if word_cloud and len(word_cloud) > 0 and topics and len(topics) > 0:
+                    logger.info(f"✅ Returning cached research data for campaign {campaign_id} (wordCloud: {len(word_cloud)} items, topics: {len(topics)} items)")
+                    hashtags = json.loads(cached_data.hashtags_json) if cached_data.hashtags_json else []
+                    entities = json.loads(cached_data.entities_json) if cached_data.entities_json else {}
+                    
+                    # Still need to get URLs and raw text (these change with scraping)
+                    rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+                    urls = [r.source_url for r in rows if r.source_url and not r.source_url.startswith(("error:", "placeholder:"))]
+                    texts = [r.extracted_text for r in rows if r.extracted_text and len(r.extracted_text.strip()) > 0 and not (r.source_url and r.source_url.startswith(("error:", "placeholder:")))]
+                    
+                    return {
+                        "status": "success",
+                        "campaign_id": campaign_id,
+                        "urls": urls,
+                        "raw": texts[:max(0, limit) or 20],
+                        "wordCloud": word_cloud,
+                        "topics": topics,
+                        "hashtags": hashtags,
+                        "entities": entities,
+                        "total_raw": len(texts),
+                        "cached": True,
+                        "diagnostics": {
+                            "total_rows": len(rows),
+                            "valid_urls": len(urls),
+                            "valid_texts": len(texts),
+                            "has_data": len(urls) > 0 or len(texts) > 0,
+                            "cached": True
+                        }
+                    }
+                else:
+                    logger.warning(f"⚠️ Cached data exists but is empty (wordCloud: {len(word_cloud) if word_cloud else 0}, topics: {len(topics) if topics else 0}), regenerating...")
+            except json.JSONDecodeError as e:
+                logger.warning(f"⚠️ Failed to parse cached JSON data: {e}, regenerating...")
         # Import NLTK-based text processing (lazy import with fallback)
         try:
             from text_processing import (
@@ -1662,7 +1669,21 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
         
         top_terms = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
         word_cloud = [{"term": k, "count": v} for k, v in top_terms]
-        logger.info(f"📊 Word cloud generated: {[t['term'] for t in word_cloud]}")
+        
+        if not word_cloud or len(word_cloud) == 0:
+            logger.warning(f"⚠️ Word cloud generation failed - no terms found. Texts: {len(texts)}, Total chars: {sum(len(t) for t in texts)}")
+            # Fallback: use simple word frequency if POS tagging failed
+            simple_counts = {}
+            for t in texts:
+                words = re.findall(r"[A-Za-z]{3,}", t.lower())
+                for w in words:
+                    if w not in comprehensive_stopwords:
+                        simple_counts[w] = simple_counts.get(w, 0) + 1
+            top_simple = sorted(simple_counts.items(), key=lambda kv: kv[1], reverse=True)[:10]
+            word_cloud = [{"term": k, "count": v} for k, v in top_simple]
+            logger.info(f"📊 Word cloud (fallback): {[t['term'] for t in word_cloud]}")
+        else:
+            logger.info(f"📊 Word cloud generated: {len(word_cloud)} terms - {[t['term'] for t in word_cloud[:5]]}")
 
         # Use NLTK-based entity extraction for accurate named entity recognition
         persons = []
@@ -1782,37 +1803,41 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     })
         
         # Save to database cache (as "raw data" associated with campaign)
-        try:
-            import json
-            research_data_record = db.query(CampaignResearchData).filter(
-                CampaignResearchData.campaign_id == campaign_id
-            ).first()
-            
-            if research_data_record:
-                # Update existing record
-                research_data_record.word_cloud_json = json.dumps(word_cloud)
-                research_data_record.topics_json = json.dumps(topics)
-                research_data_record.hashtags_json = json.dumps(hashtags)
-                research_data_record.entities_json = json.dumps(entities)
-                research_data_record.updated_at = datetime.now()
-                logger.info(f"✅ Updated cached research data for campaign {campaign_id}")
-            else:
-                # Create new record
-                research_data_record = CampaignResearchData(
-                    campaign_id=campaign_id,
-                    word_cloud_json=json.dumps(word_cloud),
-                    topics_json=json.dumps(topics),
-                    hashtags_json=json.dumps(hashtags),
-                    entities_json=json.dumps(entities)
-                )
-                db.add(research_data_record)
-                logger.info(f"✅ Saved new research data to database for campaign {campaign_id}")
-            
-            db.commit()
-        except Exception as e:
-            logger.error(f"⚠️ Failed to save research data to database: {e}")
-            db.rollback()
-            # Continue anyway - return the data even if DB save failed
+        # Only save if we have valid non-empty data
+        if word_cloud and len(word_cloud) > 0 and topics and len(topics) > 0:
+            try:
+                import json
+                research_data_record = db.query(CampaignResearchData).filter(
+                    CampaignResearchData.campaign_id == campaign_id
+                ).first()
+                
+                if research_data_record:
+                    # Update existing record
+                    research_data_record.word_cloud_json = json.dumps(word_cloud)
+                    research_data_record.topics_json = json.dumps(topics)
+                    research_data_record.hashtags_json = json.dumps(hashtags)
+                    research_data_record.entities_json = json.dumps(entities)
+                    research_data_record.updated_at = datetime.now()
+                    logger.info(f"✅ Updated cached research data for campaign {campaign_id}")
+                else:
+                    # Create new record
+                    research_data_record = CampaignResearchData(
+                        campaign_id=campaign_id,
+                        word_cloud_json=json.dumps(word_cloud),
+                        topics_json=json.dumps(topics),
+                        hashtags_json=json.dumps(hashtags),
+                        entities_json=json.dumps(entities)
+                    )
+                    db.add(research_data_record)
+                    logger.info(f"✅ Saved new research data to database for campaign {campaign_id}")
+                
+                db.commit()
+            except Exception as e:
+                logger.error(f"⚠️ Failed to save research data to database: {e}")
+                db.rollback()
+                # Continue anyway - return the data even if DB save failed
+        else:
+            logger.warning(f"⚠️ Not saving to cache - data is empty (wordCloud: {len(word_cloud) if word_cloud else 0}, topics: {len(topics) if topics else 0})")
 
         return {
             "status": "success",
