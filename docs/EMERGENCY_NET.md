@@ -1118,8 +1118,8 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 7. **Download spaCy model (MANDATORY):** `python -m spacy download en_core_web_md`
 8. **Verify TopicWizard (OPTIONAL):** `python3 -c "import topicwizard; print('✅ TopicWizard available')"` (for topic visualization)
 9. **Restart service:** `sudo systemctl restart vernal-agents`
-9. **Run health check:** `./full_health_check.sh` (see script below)
-10. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
+10. **Run health check:** `./full_health_check.sh` (see script below)
+11. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
 
 ---
 
