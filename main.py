@@ -234,8 +234,13 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
         from models import Campaign
         
         # Filter campaigns by authenticated user (multi-tenant security)
-        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
-        logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
+        # Admin users can see all campaigns for troubleshooting
+        if hasattr(current_user, 'is_admin') and current_user.is_admin:
+            campaigns = db.query(Campaign).all()
+            logger.info(f"Admin user {current_user.id} viewing all campaigns: found {len(campaigns)} campaigns")
+        else:
+            campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+            logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
         
         # If no campaigns found for user, also check total campaigns for debugging
         total_campaigns = db.query(Campaign).count()
