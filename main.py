@@ -2035,7 +2035,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             from models import SystemSettings
             db_settings = SessionLocal()
             try:
-                # Load settings
+                # Load system model settings
                 tfidf_min_df = 3
                 tfidf_max_df = 0.7
                 num_topics = 10
@@ -2054,6 +2054,34 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                     elif key == "k_grid":
                         k_grid = json.loads(value) if value else [10, 15, 20, 25]
                         num_topics = k_grid[0] if k_grid else 10
+                
+                # Load visualizer settings
+                max_texts = 100
+                top_words_per_topic = 10
+                grid_columns = 0  # 0 = auto-fill
+                sort_order = "coverage"  # "coverage" or "topic_id"
+                show_coverage = True
+                show_top_weights = False
+                
+                visualizer_settings = db_settings.query(SystemSettings).filter(
+                    SystemSettings.setting_key.like("visualizer_%")
+                ).all()
+                
+                for setting in visualizer_settings:
+                    key = setting.setting_key.replace("visualizer_", "")
+                    value = setting.setting_value
+                    if key == "max_documents":
+                        max_texts = int(value) if value else 100
+                    elif key == "top_words_per_topic":
+                        top_words_per_topic = int(value) if value else 10
+                    elif key == "grid_columns":
+                        grid_columns = int(value) if value else 0
+                    elif key == "sort_order":
+                        sort_order = value if value in ["coverage", "topic_id"] else "coverage"
+                    elif key == "show_coverage":
+                        show_coverage = value.lower() == "true" if value else True
+                    elif key == "show_top_weights":
+                        show_top_weights = value.lower() == "true" if value else False
             finally:
                 db_settings.close()
         except Exception as e:
@@ -2061,9 +2089,14 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             tfidf_min_df = 3
             tfidf_max_df = 0.7
             num_topics = 10
+            max_texts = 100
+            top_words_per_topic = 10
+            grid_columns = 0
+            sort_order = "coverage"
+            show_coverage = True
+            show_top_weights = False
         
         # Limit texts for performance (TopicWizard can be slow with many documents)
-        max_texts = 100
         if len(texts) > max_texts:
             texts = texts[:max_texts]
             logger.info(f"Limited to {max_texts} texts for TopicWizard performance")
@@ -2105,8 +2138,8 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         
         topics_data = []
         for topic_idx in range(min(num_topics, len(texts) - 1)):
-            # Get top 10 words for this topic
-            top_word_indices = topic_word_matrix[topic_idx].argsort()[-10:][::-1]
+            # Get top N words for this topic (using visualizer setting)
+            top_word_indices = topic_word_matrix[topic_idx].argsort()[-top_words_per_topic:][::-1]
             top_words = [feature_names[idx] for idx in top_word_indices]
             top_weights = [topic_word_matrix[topic_idx][idx] for idx in top_word_indices]
             
@@ -2121,16 +2154,33 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 'coverage': round(coverage_pct, 1)
             })
         
-        # Sort by coverage
-        topics_data.sort(key=lambda x: x['coverage'], reverse=True)
+        # Sort by configured order
+        if sort_order == "coverage":
+            topics_data.sort(key=lambda x: x['coverage'], reverse=True)
+        else:  # topic_id
+            topics_data.sort(key=lambda x: x['id'])
         
         # Generate HTML visualization
         topics_html = ""
         for topic in topics_data:
-            words_html = ", ".join([f"<strong>{word}</strong>" if i < 3 else word for i, word in enumerate(topic['top_words'][:8])])
+            # Build words display (show weights if enabled)
+            words_display = []
+            for i, word in enumerate(topic['top_words']):
+                word_html = f"<strong>{word}</strong>" if i < 3 else word
+                if show_top_weights and i < len(topic['top_weights']):
+                    weight = round(topic['top_weights'][i], 3)
+                    word_html += f" <span class='weight'>({weight})</span>"
+                words_display.append(word_html)
+            words_html = ", ".join(words_display)
+            
+            # Build title with optional coverage
+            title = f"Topic {topic['id'] + 1}"
+            if show_coverage:
+                title += f" ({topic['coverage']}% coverage)"
+            
             topics_html += f"""
             <div class="topic-card">
-                <h3>Topic {topic['id'] + 1} ({topic['coverage']}% coverage)</h3>
+                <h3>{title}</h3>
                 <p class="topic-words">{words_html}</p>
             </div>
             """
@@ -2171,7 +2221,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         }}
         .topics-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: {"repeat(" + str(grid_columns) + ", 1fr)" if grid_columns > 0 else "repeat(auto-fill, minmax(300px, 1fr))"};
             gap: 20px;
             margin-top: 20px;
         }}
@@ -2195,6 +2245,11 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         .topic-words strong {{
             color: #3d545f;
             font-weight: 600;
+        }}
+        .topic-words .weight {{
+            color: #999;
+            font-size: 12px;
+            font-weight: normal;
         }}
         .note {{
             background: #fff3cd;
