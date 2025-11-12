@@ -2062,6 +2062,14 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 sort_order = "coverage"  # "coverage" or "topic_id"
                 show_coverage = True
                 show_top_weights = False
+                visualization_type = "scatter"  # "columns", "scatter", "bubble", "network", "word-cloud"
+                color_scheme = "rainbow"  # "single", "gradient", "rainbow", "categorical"
+                size_scaling = True
+                show_title = False
+                show_info_box = False
+                background_color = "#ffffff"
+                min_size = 20
+                max_size = 100
                 
                 visualizer_settings = db_settings.query(SystemSettings).filter(
                     SystemSettings.setting_key.like("visualizer_%")
@@ -2082,6 +2090,22 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                         show_coverage = value.lower() == "true" if value else True
                     elif key == "show_top_weights":
                         show_top_weights = value.lower() == "true" if value else False
+                    elif key == "visualization_type":
+                        visualization_type = value if value in ["columns", "scatter", "bubble", "network", "word-cloud"] else "scatter"
+                    elif key == "color_scheme":
+                        color_scheme = value if value in ["single", "gradient", "rainbow", "categorical"] else "rainbow"
+                    elif key == "size_scaling":
+                        size_scaling = value.lower() == "true" if value else True
+                    elif key == "show_title":
+                        show_title = value.lower() == "true" if value else False
+                    elif key == "show_info_box":
+                        show_info_box = value.lower() == "true" if value else False
+                    elif key == "background_color":
+                        background_color = value if value else "#ffffff"
+                    elif key == "min_size":
+                        min_size = int(value) if value else 20
+                    elif key == "max_size":
+                        max_size = int(value) if value else 100
             finally:
                 db_settings.close()
         except Exception as e:
@@ -2095,6 +2119,14 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             sort_order = "coverage"
             show_coverage = True
             show_top_weights = False
+            visualization_type = "scatter"
+            color_scheme = "rainbow"
+            size_scaling = True
+            show_title = False
+            show_info_box = False
+            background_color = "#ffffff"
+            min_size = 20
+            max_size = 100
         
         # Limit texts for performance (TopicWizard can be slow with many documents)
         if len(texts) > max_texts:
@@ -2160,30 +2192,154 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         else:  # topic_id
             topics_data.sort(key=lambda x: x['id'])
         
-        # Generate HTML visualization
+        # Helper function to get color for a topic based on scheme
+        def get_topic_color(topic_idx, total_topics, coverage):
+            if color_scheme == "rainbow":
+                # Rainbow: hue from 0 to 360
+                hue = (topic_idx / max(total_topics, 1)) * 360
+                return f"hsl({hue}, 70%, 60%)"
+            elif color_scheme == "gradient":
+                # Gradient: blue to purple
+                ratio = topic_idx / max(total_topics, 1)
+                r = int(59 + (147 - 59) * ratio)
+                g = int(130 + (112 - 130) * ratio)
+                b = int(246 + (219 - 246) * ratio)
+                return f"rgb({r}, {g}, {b})"
+            elif color_scheme == "categorical":
+                # Categorical: distinct colors
+                colors = ["#3b82f6", "#22c55e", "#a855f7", "#eab308", "#ef4444", "#64748b", "#f97316", "#06b6d4", "#8b5cf6", "#ec4899"]
+                return colors[topic_idx % len(colors)]
+            else:  # single
+                # Single: monochromatic with variations
+                base = 61  # #3d545f
+                variation = (topic_idx % 5) * 20
+                return f"rgb({base + variation}, {84 + variation}, {95 + variation})"
+        
+        # Helper function to calculate size based on coverage
+        def get_topic_size(coverage, max_coverage):
+            if not size_scaling:
+                return (min_size + max_size) / 2
+            if max_coverage == 0:
+                return min_size
+            ratio = coverage / max_coverage
+            return min_size + (max_size - min_size) * ratio
+        
+        # Calculate max coverage for size scaling
+        max_coverage = max([t['coverage'] for t in topics_data]) if topics_data else 100
+        
+        # Generate visualization based on type
         topics_html = ""
-        for topic in topics_data:
-            # Build words display (show weights if enabled)
-            words_display = []
-            for i, word in enumerate(topic['top_words']):
-                word_html = f"<strong>{word}</strong>" if i < 3 else word
-                if show_top_weights and i < len(topic['top_weights']):
-                    weight = round(topic['top_weights'][i], 3)
-                    word_html += f" <span class='weight'>({weight})</span>"
-                words_display.append(word_html)
-            words_html = ", ".join(words_display)
+        total_topics = len(topics_data)
+        
+        if visualization_type == "scatter" or visualization_type == "bubble":
+            # Scatter/Bubble plot with SVG
+            svg_width = 1000
+            svg_height = 600
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: 8px;">'
             
-            # Build title with optional coverage
-            title = f"Topic {topic['id'] + 1}"
-            if show_coverage:
-                title += f" ({topic['coverage']}% coverage)"
+            for i, topic in enumerate(topics_data):
+                # Calculate position (scattered)
+                angle = (i / total_topics) * 2 * 3.14159
+                radius = 150 + (i % 3) * 50
+                x = svg_width / 2 + radius * (0.7 if i % 2 == 0 else -0.7) * (i / total_topics)
+                y = svg_height / 2 + radius * (0.5 if i % 3 == 0 else -0.5) * ((i * 1.3) / total_topics)
+                
+                # Ensure within bounds
+                x = max(50, min(svg_width - 50, x))
+                y = max(50, min(svg_height - 50, y))
+                
+                size = get_topic_size(topic['coverage'], max_coverage)
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                
+                # Draw circle/bubble
+                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" opacity="0.7" stroke="#333" stroke-width="2"/>'
+                
+                # Add label
+                label_text = ", ".join(topic['top_words'][:3])
+                if show_coverage:
+                    label_text += f" ({topic['coverage']}%)"
+                topics_html += f'<text x="{x}" y="{y + size/2 + 15}" text-anchor="middle" font-size="12" fill="#333" font-weight="600">{label_text}</text>'
             
-            topics_html += f"""
-            <div class="topic-card">
-                <h3>{title}</h3>
-                <p class="topic-words">{words_html}</p>
-            </div>
-            """
+            topics_html += '</svg>'
+            
+        elif visualization_type == "network":
+            # Network graph
+            svg_width = 1000
+            svg_height = 600
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: 8px;">'
+            
+            # Position topics in a circle
+            center_x, center_y = svg_width / 2, svg_height / 2
+            radius = 200
+            
+            for i, topic in enumerate(topics_data):
+                angle = (i / total_topics) * 2 * 3.14159
+                x = center_x + radius * (1 + (i % 3) * 0.3) * (0.8 if i % 2 == 0 else 1.2) * (i / total_topics)
+                y = center_y + radius * (1 + (i % 3) * 0.3) * (0.8 if i % 2 == 0 else 1.2) * ((i * 1.5) / total_topics)
+                
+                x = max(60, min(svg_width - 60, x))
+                y = max(60, min(svg_height - 60, y))
+                
+                size = get_topic_size(topic['coverage'], max_coverage)
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                
+                # Draw connections to nearby topics
+                if i < total_topics - 1:
+                    next_topic = topics_data[(i + 1) % total_topics]
+                    next_angle = ((i + 1) / total_topics) * 2 * 3.14159
+                    next_x = center_x + radius * (1 + ((i + 1) % 3) * 0.3) * (0.8 if (i + 1) % 2 == 0 else 1.2) * ((i + 1) / total_topics)
+                    next_y = center_y + radius * (1 + ((i + 1) % 3) * 0.3) * (0.8 if (i + 1) % 2 == 0 else 1.2) * (((i + 1) * 1.5) / total_topics)
+                    next_x = max(60, min(svg_width - 60, next_x))
+                    next_y = max(60, min(svg_height - 60, next_y))
+                    topics_html += f'<line x1="{x}" y1="{y}" x2="{next_x}" y2="{next_y}" stroke="#ccc" stroke-width="1" opacity="0.3"/>'
+                
+                # Draw node
+                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" stroke="#333" stroke-width="2"/>'
+                
+                # Add label
+                label_text = ", ".join(topic['top_words'][:2])
+                topics_html += f'<text x="{x}" y="{y + size/2 + 12}" text-anchor="middle" font-size="11" fill="#333" font-weight="600">{label_text}</text>'
+            
+            topics_html += '</svg>'
+            
+        elif visualization_type == "word-cloud":
+            # Word cloud style
+            topics_html = '<div class="word-cloud">'
+            for i, topic in enumerate(topics_data):
+                size = get_topic_size(topic['coverage'], max_coverage)
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                words = ", ".join(topic['top_words'][:5])
+                font_size = max(12, min(24, size / 4))
+                topics_html += f'<span class="cloud-word" style="font-size: {font_size}px; color: {color}; margin: 5px;">{words}</span>'
+            topics_html += '</div>'
+            
+        else:  # columns (default)
+            # Column cards (grid layout)
+            for i, topic in enumerate(topics_data):
+                words_display = []
+                for j, word in enumerate(topic['top_words']):
+                    word_html = f"<strong>{word}</strong>" if j < 3 else word
+                    if show_top_weights and j < len(topic['top_weights']):
+                        weight = round(topic['top_weights'][j], 3)
+                        word_html += f" <span class='weight'>({weight})</span>"
+                    words_display.append(word_html)
+                words_html = ", ".join(words_display)
+                
+                title = f"Topic {topic['id'] + 1}"
+                if show_coverage:
+                    title += f" ({topic['coverage']}% coverage)"
+                
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                
+                topics_html += f"""
+                <div class="topic-card" style="border-left-color: {color};">
+                    <h3>{title}</h3>
+                    <p class="topic-words">{words_html}</p>
+                </div>
+                """
+        
+        # Determine container class based on visualization type
+        container_class = "topics-grid" if visualization_type == "columns" else "visualization-container"
         
         html_content = f"""
 <!DOCTYPE html>
@@ -2196,15 +2352,14 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             margin: 0;
             padding: 20px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f5f5;
+            background: {background_color};
         }}
         .container {{
             max-width: 1400px;
             margin: 0 auto;
-            background: white;
+            background: {background_color};
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
         h1 {{
             color: #333;
@@ -2223,6 +2378,13 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             display: grid;
             grid-template-columns: {"repeat(" + str(grid_columns) + ", 1fr)" if grid_columns > 0 else "repeat(auto-fill, minmax(300px, 1fr))"};
             gap: 20px;
+            margin-top: 20px;
+        }}
+        .visualization-container {{
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             margin-top: 20px;
         }}
         .topic-card {{
@@ -2251,6 +2413,20 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             font-size: 12px;
             font-weight: normal;
         }}
+        .word-cloud {{
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            min-height: 400px;
+        }}
+        .cloud-word {{
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: 600;
+        }}
         .note {{
             background: #fff3cd;
             padding: 10px;
@@ -2270,14 +2446,10 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
 </head>
 <body>
     <div class="container">
-        <h1>Topic Model Visualization</h1>
-        <div class="info">
-            <p><strong>Campaign ID:</strong> {campaign_id}</p>
-            <p><strong>Documents:</strong> {len(texts)}</p>
-            <p><strong>Topics:</strong> {min(num_topics, len(texts) - 1)}</p>
-        </div>
+        {"<h1>Topic Model Visualization</h1>" if show_title else ""}
+        {"<div class='info'><p><strong>Campaign ID:</strong> {campaign_id}</p><p><strong>Documents:</strong> {len(texts)}</p><p><strong>Topics:</strong> {min(num_topics, len(texts) - 1)}</p></div>" if show_info_box else ""}
         {"<div class='warning'><strong>Note:</strong> TopicWizard interactive visualization is not available due to Python 3.12 compatibility issues with numba/llvmlite. Showing topic model results instead.</div>" if not TOPICWIZARD_AVAILABLE else ""}
-        <div class="topics-grid">
+        <div class="{container_class}">
             {topics_html}
         </div>
     </div>
