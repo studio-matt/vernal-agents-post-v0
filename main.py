@@ -2344,7 +2344,8 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             # Scatter/Bubble plot with SVG
             svg_width = 1000
             svg_height = 600
-            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: 8px;">'
+            shadow_style = f"filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));" if shadow_enabled else ""
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; {shadow_style}">'
             
             for i, topic in enumerate(topics_data):
                 # Calculate position (scattered)
@@ -2360,14 +2361,14 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 size = get_topic_size(topic['coverage'], max_coverage)
                 color = get_topic_color(i, total_topics, topic['coverage'])
                 
-                # Draw circle/bubble
-                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" opacity="0.7" stroke="#333" stroke-width="2"/>'
+                # Draw circle/bubble with loaded settings
+                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
                 
-                # Add label
+                # Add label with loaded font settings
                 label_text = ", ".join(topic['top_words'][:3])
                 if show_coverage:
                     label_text += f" ({topic['coverage']}%)"
-                topics_html += f'<text x="{x}" y="{y + size/2 + 15}" text-anchor="middle" font-size="12" fill="#333" font-weight="600">{label_text}</text>'
+                topics_html += f'<text x="{x}" y="{y + size/2 + 15}" text-anchor="middle" font-size="{font_size}" fill="#333" font-weight="{font_weight}">{label_text}</text>'
             
             topics_html += '</svg>'
             
@@ -2375,7 +2376,8 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             # Network graph
             svg_width = 1000
             svg_height = 600
-            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: 8px;">'
+            shadow_style = f"filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));" if shadow_enabled else ""
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; {shadow_style}">'
             
             # Position topics in a circle
             center_x, center_y = svg_width / 2, svg_height / 2
@@ -2400,33 +2402,35 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                     next_y = center_y + radius * (1 + ((i + 1) % 3) * 0.3) * (0.8 if (i + 1) % 2 == 0 else 1.2) * (((i + 1) * 1.5) / total_topics)
                     next_x = max(60, min(svg_width - 60, next_x))
                     next_y = max(60, min(svg_height - 60, next_y))
-                    topics_html += f'<line x1="{x}" y1="{y}" x2="{next_x}" y2="{next_y}" stroke="#ccc" stroke-width="1" opacity="0.3"/>'
+                    topics_html += f'<line x1="{x}" y1="{y}" x2="{next_x}" y2="{next_y}" stroke="#ccc" stroke-width="1" opacity="{opacity * 0.5}"/>'
                 
-                # Draw node
-                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" stroke="#333" stroke-width="2"/>'
+                # Draw node with loaded settings
+                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
                 
-                # Add label
+                # Add label with loaded font settings
                 label_text = ", ".join(topic['top_words'][:2])
-                topics_html += f'<text x="{x}" y="{y + size/2 + 12}" text-anchor="middle" font-size="11" fill="#333" font-weight="600">{label_text}</text>'
+                topics_html += f'<text x="{x}" y="{y + size/2 + 12}" text-anchor="middle" font-size="{font_size}" fill="#333" font-weight="{font_weight}">{label_text}</text>'
             
             topics_html += '</svg>'
             
         elif visualization_type == "word-cloud":
             # Word cloud style
-            topics_html = '<div class="word-cloud">'
+            shadow_style = f"text-shadow: 2px 2px 4px rgba(0,0,0,0.2);" if shadow_enabled else ""
+            topics_html = f'<div class="word-cloud" style="padding: {padding}px; margin: {margin}px;">'
             for i, topic in enumerate(topics_data):
                 size = get_topic_size(topic['coverage'], max_coverage)
                 color = get_topic_color(i, total_topics, topic['coverage'])
                 words = ", ".join(topic['top_words'][:5])
-                font_size = max(12, min(24, size / 4))
-                topics_html += f'<span class="cloud-word" style="font-size: {font_size}px; color: {color}; margin: 5px;">{words}</span>'
+                cloud_font_size = max(font_size, min(font_size + 10, size / 4))
+                topics_html += f'<span class="cloud-word" style="font-size: {cloud_font_size}px; font-weight: {font_weight}; color: {color}; margin: {spacing/4}px; opacity: {opacity}; {shadow_style}">{words}</span>'
             topics_html += '</div>'
             
         elif visualization_type == "word_map":
             # Word map: shows relationships between words
             svg_width = 1000
             svg_height = 600
-            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            shadow_style = f"filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));" if shadow_enabled else ""
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; {shadow_style}">'
             # Place words in a force-directed layout
             for i, topic in enumerate(topics_data):
                 angle = (i / total_topics) * 2 * 3.14159
@@ -2435,10 +2439,10 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 x = max(50, min(svg_width - 50, x))
                 y = max(50, min(svg_height - 50, y))
                 color = get_topic_color(i, total_topics, topic['coverage'])
-                # Draw word nodes
+                # Draw word nodes with loaded settings
                 for j, word in enumerate(topic['top_words'][:3]):
                     word_x = x + (j - 1) * word_map_link_distance
-                    word_y = y + (j % 2) * 20
+                    word_y = y + (j % 2) * spacing
                     topics_html += f'<circle cx="{word_x}" cy="{word_y}" r="15" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
                     topics_html += f'<text x="{word_x}" y="{word_y + 5}" text-anchor="middle" font-size="{font_size}" fill="#333" font-weight="{font_weight}">{word}</text>'
             topics_html += '</svg>'
@@ -2447,7 +2451,8 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             # Topic map: shows topic similarity/clustering
             svg_width = 1000
             svg_height = 600
-            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            shadow_style = f"filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));" if shadow_enabled else ""
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; {shadow_style}">'
             center_x, center_y = svg_width / 2, svg_height / 2
             for i, topic in enumerate(topics_data):
                 angle = (i / total_topics) * 2 * 3.14159
@@ -2467,7 +2472,8 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             # Document map: shows document clustering
             svg_width = 1000
             svg_height = 600
-            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            shadow_style = f"filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.1));" if shadow_enabled else ""
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; {shadow_style}">'
             # Represent documents as points colored by topic
             for i, topic in enumerate(topics_data):
                 color = get_topic_color(i, total_topics, topic['coverage'])
@@ -2506,15 +2512,16 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             # Treemap: hierarchical coverage visualization
             svg_width = 1000
             svg_height = 600
-            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            shadow_style = f"filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));" if shadow_enabled else ""
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; {shadow_style}">'
             # Calculate total coverage for sizing
             total_coverage = sum(t['coverage'] for t in topics_data)
-            current_x, current_y = 0, 0
-            row_height = svg_height / max(3, int(len(topics_data) ** 0.5))
+            current_x, current_y = padding, padding
+            row_height = (svg_height - padding * 2) / max(3, int(len(topics_data) ** 0.5))
             for i, topic in enumerate(topics_data):
-                width = (topic['coverage'] / total_coverage) * svg_width if total_coverage > 0 else svg_width / len(topics_data)
-                if current_x + width > svg_width:
-                    current_x = 0
+                width = (topic['coverage'] / total_coverage) * (svg_width - padding * 2) if total_coverage > 0 else (svg_width - padding * 2) / len(topics_data)
+                if current_x + width > svg_width - padding:
+                    current_x = padding
                     current_y += row_height
                 color = get_topic_color(i, total_topics, topic['coverage'])
                 topics_html += f'<rect x="{current_x}" y="{current_y}" width="{width}" height="{row_height}" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
@@ -2525,6 +2532,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             
         else:  # columns (default)
             # Column cards (grid layout)
+            shadow_style = f"box-shadow: 2px 2px 4px rgba(0,0,0,0.2);" if shadow_enabled else ""
             for i, topic in enumerate(topics_data):
                 words_display = []
                 for j, word in enumerate(topic['top_words']):
@@ -2542,14 +2550,20 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 color = get_topic_color(i, total_topics, topic['coverage'])
                 
                 topics_html += f"""
-                <div class="topic-card" style="border-left-color: {color};">
-                    <h3>{title}</h3>
-                    <p class="topic-words">{words_html}</p>
+                <div class="topic-card" style="border-left-color: {color}; border-left-width: {border_width}px; border-radius: {border_radius}px; padding: {padding}px; margin: {margin}px; opacity: {opacity}; {shadow_style}">
+                    <h3 style="font-size: {font_size + 2}px; font-weight: {font_weight};">{title}</h3>
+                    <p class="topic-words" style="font-size: {font_size}px; font-weight: {font_weight - 200 if font_weight > 400 else 400};">{words_html}</p>
                 </div>
                 """
         
         # Determine container class based on visualization type
         container_class = "topics-grid" if visualization_type == "columns" else "visualization-container"
+        
+        # Build alignment style
+        align_style = f"text-align: {alignment};" if alignment in ["left", "center", "right"] else "text-align: center;"
+        
+        # Build orientation style
+        flex_direction = "row" if orientation == "horizontal" else "column"
         
         html_content = f"""
 <!DOCTYPE html>
@@ -2560,7 +2574,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
     <style>
         body {{
             margin: 0;
-            padding: 20px;
+            padding: {padding}px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: {background_color};
         }}
@@ -2568,8 +2582,9 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             max-width: 1400px;
             margin: 0 auto;
             background: {background_color};
-            padding: 20px;
-            border-radius: 8px;
+            padding: {padding}px;
+            border-radius: {border_radius}px;
+            {align_style}
         }}
         h1 {{
             color: #333;
@@ -2587,31 +2602,38 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         .topics-grid {{
             display: grid;
             grid-template-columns: {"repeat(" + str(grid_columns) + ", 1fr)" if grid_columns > 0 else "repeat(auto-fill, minmax(300px, 1fr))"};
-            gap: 20px;
-            margin-top: 20px;
+            gap: {spacing}px;
+            margin-top: {margin}px;
+            flex-direction: {flex_direction};
         }}
         .visualization-container {{
             width: 100%;
             display: flex;
-            justify-content: center;
+            flex-direction: {flex_direction};
+            justify-content: {"flex-start" if alignment == "left" else "flex-end" if alignment == "right" else "center"};
             align-items: center;
-            margin-top: 20px;
+            margin-top: {margin}px;
+            padding: {padding}px;
         }}
         .topic-card {{
             background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #3d545f;
+            padding: {padding}px;
+            border-radius: {border_radius}px;
+            border-left: {border_width}px solid #3d545f;
+            transition: transform {animation_speed}ms ease{"", hover_effects else ""};
         }}
+        {"        .topic-card:hover { transform: scale(1.02); }" if hover_effects else ""}
         .topic-card h3 {{
-            margin: 0 0 10px 0;
+            margin: 0 0 {spacing/2}px 0;
             color: #3d545f;
-            font-size: 16px;
+            font-size: {font_size + 2}px;
+            font-weight: {font_weight};
         }}
         .topic-words {{
             margin: 0;
             color: #666;
-            font-size: 14px;
+            font-size: {font_size}px;
+            font-weight: {font_weight - 200 if font_weight > 400 else 400};
             line-height: 1.6;
         }}
         .topic-words strong {{
@@ -2626,16 +2648,35 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         .word-cloud {{
             display: flex;
             flex-wrap: wrap;
-            justify-content: center;
+            justify-content: {"flex-start" if alignment == "left" else "flex-end" if alignment == "right" else "center"};
             align-items: center;
-            padding: 20px;
+            padding: {padding}px;
             min-height: 400px;
+            flex-direction: {flex_direction};
         }}
         .cloud-word {{
             display: inline-block;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-weight: 600;
+            padding: {spacing/4}px {spacing/2}px;
+            border-radius: {border_radius}px;
+            font-weight: {font_weight};
+            transition: transform {animation_speed}ms ease{"", hover_effects else ""};
+        }}
+        {"        .cloud-word:hover { transform: scale(1.1); }" if hover_effects else ""}
+        .heatmap-container {{
+            padding: {padding}px;
+            margin: {margin}px;
+        }}
+        .heatmap-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: {border_radius}px;
+            overflow: hidden;
+        }}
+        .heatmap-table th, .heatmap-table td {{
+            padding: {spacing/2}px;
+            border: {border_width}px solid {border_color};
+            text-align: center;
+            font-size: {font_size}px;
         }}
         .note {{
             background: #fff3cd;
