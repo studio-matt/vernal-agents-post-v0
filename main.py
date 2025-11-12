@@ -2075,6 +2075,10 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                     SystemSettings.setting_key.like("visualizer_%")
                 ).all()
                 
+                logger.info(f"🔍 Found {len(visualizer_settings)} visualizer settings in database")
+                for setting in visualizer_settings:
+                    logger.debug(f"  - {setting.setting_key} = {setting.setting_value}")
+                
                 for setting in visualizer_settings:
                     key = setting.setting_key.replace("visualizer_", "")
                     value = setting.setting_value
@@ -2092,6 +2096,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                         show_top_weights = value.lower() == "true" if value else False
                     elif key == "visualization_type":
                         visualization_type = value if value in ["columns", "scatter", "bubble", "network", "word-cloud"] else "scatter"
+                        logger.info(f"📊 Loaded visualization_type: {visualization_type} (from DB: {value})")
                     elif key == "color_scheme":
                         color_scheme = value if value in ["single", "gradient", "rainbow", "categorical"] else "rainbow"
                     elif key == "size_scaling":
@@ -2228,6 +2233,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         max_coverage = max([t['coverage'] for t in topics_data]) if topics_data else 100
         
         # Generate visualization based on type
+        logger.info(f"🎨 Generating {visualization_type} visualization with {len(topics_data)} topics, color_scheme={color_scheme}, size_scaling={size_scaling}")
         topics_html = ""
         total_topics = len(topics_data)
         
