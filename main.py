@@ -1548,8 +1548,9 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                     logger.info(f"✅ Generated {len(topics)} topic phrases: {[t['label'] for t in topics]}")
                 else:
                     # Fallback to word frequency if extract_topics fails
-                    logger.warning("⚠️ extract_topics returned no results, falling back to word frequency")
-                    raise Exception("No topics from extract_topics")
+                    logger.warning(f"⚠️ extract_topics returned no results (texts: {len(texts)}, tool: {topic_tool}), falling back to phrase extraction")
+                    # Don't raise exception - continue to fallback logic below
+                    topic_phrases = None
                     
             except Exception as topic_err:
                 logger.error(f"❌ Error extracting topics with extract_topics: {topic_err}")
