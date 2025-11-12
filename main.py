@@ -2925,6 +2925,391 @@ def get_topicwizard_visualization(campaign_id: str, current_user = Depends(get_c
             status_code=500
         )
 
+# Knowledge Graph Visualization endpoint
+@app.get("/campaigns/{campaign_id}/knowledge-graph")
+def get_knowledge_graph_visualization(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Generate knowledge graph visualization for campaign using NetworkX and pyvis.
+    Uses existing extracted data: entities, topics, and word cloud from /research endpoint.
+    Returns HTML page with interactive knowledge graph.
+    REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
+    """
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content="<html><body><h1>Campaign not found or access denied</h1></body></html>", status_code=404)
+    
+    try:
+        from models import CampaignRawData, CampaignResearchData, SystemSettings
+        from fastapi.responses import HTMLResponse
+        import json
+        import networkx as nx
+        from pyvis.network import Network
+        
+        # Get research data (entities, topics, word cloud) - use cached if available
+        cached_data = db.query(CampaignResearchData).filter(
+            CampaignResearchData.campaign_id == campaign_id
+        ).first()
+        
+        # Get raw texts for relationship extraction
+        rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+        texts = []
+        for r in rows:
+            if r.extracted_text and len(r.extracted_text.strip()) > 0 and not (r.source_url and r.source_url.startswith(("error:", "placeholder:"))):
+                texts.append(r.extracted_text.strip())
+        
+        if len(texts) < 1:
+            return HTMLResponse(
+                content="<html><body><h1>Insufficient Data</h1><p>Need at least 1 document for knowledge graph. Please scrape content first.</p></body></html>",
+                status_code=400
+            )
+        
+        # Load entities, topics, word cloud from cache or extract
+        if cached_data and cached_data.entities_json and cached_data.topics_json and cached_data.word_cloud_json:
+            try:
+                entities = json.loads(cached_data.entities_json) if cached_data.entities_json else {}
+                topics = json.loads(cached_data.topics_json) if cached_data.topics_json else []
+                word_cloud = json.loads(cached_data.word_cloud_json) if cached_data.word_cloud_json else []
+            except json.JSONDecodeError:
+                entities = {}
+                topics = []
+                word_cloud = []
+        else:
+            # Fallback: minimal data
+            entities = {
+                "persons": [],
+                "organizations": [],
+                "locations": [],
+                "dates": [],
+                "money": [],
+                "percent": [],
+                "time": [],
+                "facility": []
+            }
+            topics = []
+            word_cloud = []
+        
+        # Load knowledge graph settings from database
+        kg_settings = {}
+        settings = db.query(SystemSettings).filter(
+            SystemSettings.setting_key.like("knowledge_graph_%")
+        ).all()
+        
+        for setting in settings:
+            key = setting.setting_key.replace("knowledge_graph_", "")
+            value = setting.setting_value
+            # Parse based on type
+            if key in ["physics_enabled", "interaction_hover", "interaction_zoom", "interaction_drag", 
+                      "interaction_select", "interaction_navigation_buttons", "show_legend", "show_isolated_nodes"]:
+                kg_settings[key] = value.lower() == "true"
+            elif key in ["spring_length", "spring_strength", "damping", "central_gravity", "node_repulsion",
+                        "node_size", "node_border_width", "node_font_size", "edge_width", "edge_arrow_size",
+                        "max_nodes", "max_edges", "min_edge_weight", "height"]:
+                kg_settings[key] = float(value) if "." in value else int(value) if value else 0
+            else:
+                kg_settings[key] = value
+        
+        # Set defaults if not in database
+        physics_enabled = kg_settings.get("physics_enabled", True)
+        layout_algorithm = kg_settings.get("layout_algorithm", "force")
+        spring_length = kg_settings.get("spring_length", 100)
+        spring_strength = kg_settings.get("spring_strength", 0.05)
+        damping = kg_settings.get("damping", 0.09)
+        central_gravity = kg_settings.get("central_gravity", 0.1)
+        node_repulsion = kg_settings.get("node_repulsion", 4500)
+        node_shape = kg_settings.get("node_shape", "dot")
+        node_size = kg_settings.get("node_size", 25)
+        node_border_width = kg_settings.get("node_border_width", 2)
+        node_border_color = kg_settings.get("node_border_color", "#333333")
+        node_font_size = kg_settings.get("node_font_size", 14)
+        node_font_color = kg_settings.get("node_font_color", "#000000")
+        node_size_by = kg_settings.get("node_size_by", "degree")
+        edge_color = kg_settings.get("edge_color", "#848484")
+        edge_width = kg_settings.get("edge_width", 2)
+        edge_arrow_type = kg_settings.get("edge_arrow_type", "arrow")
+        edge_arrow_size = kg_settings.get("edge_arrow_size", 10)
+        edge_smooth = kg_settings.get("edge_smooth", "dynamic")
+        edge_width_by = kg_settings.get("edge_width_by", "weight")
+        max_nodes = int(kg_settings.get("max_nodes", 200))
+        max_edges = int(kg_settings.get("max_edges", 500))
+        min_edge_weight = int(kg_settings.get("min_edge_weight", 1))
+        show_isolated_nodes = kg_settings.get("show_isolated_nodes", False)
+        interaction_hover = kg_settings.get("interaction_hover", True)
+        interaction_zoom = kg_settings.get("interaction_zoom", True)
+        interaction_drag = kg_settings.get("interaction_drag", True)
+        interaction_select = kg_settings.get("interaction_select", True)
+        interaction_navigation_buttons = kg_settings.get("interaction_navigation_buttons", True)
+        background_color = kg_settings.get("background_color", "#ffffff")
+        height = int(kg_settings.get("height", 600))
+        width = kg_settings.get("width", "100%")
+        show_legend = kg_settings.get("show_legend", True)
+        legend_position = kg_settings.get("legend_position", "bottom")
+        
+        # Node type colors
+        color_entity_person = kg_settings.get("color_entity_person", "#FF5733")
+        color_entity_organization = kg_settings.get("color_entity_organization", "#33C1FF")
+        color_entity_location = kg_settings.get("color_entity_location", "#33FF57")
+        color_entity_date = kg_settings.get("color_entity_date", "#FF33A8")
+        color_entity_money = kg_settings.get("color_entity_money", "#8D33FF")
+        color_entity_percent = kg_settings.get("color_entity_percent", "#FFC133")
+        color_entity_time = kg_settings.get("color_entity_time", "#4BFFDB")
+        color_entity_facility = kg_settings.get("color_entity_facility", "#FFD733")
+        color_topic = kg_settings.get("color_topic", "#FF6B6B")
+        color_word = kg_settings.get("color_word", "#4ECDC4")
+        
+        # Build NetworkX graph
+        G = nx.Graph()
+        
+        # Add entity nodes
+        entity_count = 0
+        for entity_type, entity_list in entities.items():
+            if entity_list and isinstance(entity_list, list):
+                for entity in entity_list[:20]:  # Limit per type
+                    if entity and str(entity).strip():
+                        G.add_node(str(entity), node_type="entity", entity_type=entity_type)
+                        entity_count += 1
+                        if entity_count >= max_nodes:
+                            break
+                if entity_count >= max_nodes:
+                    break
+        
+        # Add topic nodes
+        topic_count = 0
+        if topics and isinstance(topics, list):
+            for topic in topics[:20]:  # Limit topics
+                if isinstance(topic, dict):
+                    topic_label = topic.get('label', '')
+                else:
+                    topic_label = str(topic)
+                if topic_label and topic_label.strip():
+                    G.add_node(topic_label, node_type="topic")
+                    topic_count += 1
+                    if entity_count + topic_count >= max_nodes:
+                        break
+        
+        # Add word cloud nodes
+        word_count = 0
+        if word_cloud and isinstance(word_cloud, list):
+            for word_item in word_cloud[:20]:  # Limit word cloud terms
+                if isinstance(word_item, dict):
+                    word_term = word_item.get('term', '')
+                else:
+                    word_term = str(word_item)
+                if word_term and word_term.strip():
+                    G.add_node(word_term, node_type="word")
+                    word_count += 1
+                    if entity_count + topic_count + word_count >= max_nodes:
+                        break
+        
+        # Build relationships using co-occurrence in raw text
+        edge_count = 0
+        for text in texts[:100]:  # Limit texts for performance
+            if not text or len(text.strip()) < 10:
+                continue
+            
+            # Find entities/topics/words that appear in this text
+            nodes_in_text = []
+            text_lower = text.lower()
+            
+            for node in G.nodes():
+                node_str = str(node).lower()
+                if node_str in text_lower:
+                    nodes_in_text.append(node)
+            
+            # Connect nodes that co-occur in same text
+            for i, node1 in enumerate(nodes_in_text):
+                for node2 in nodes_in_text[i+1:]:
+                    if G.has_edge(node1, node2):
+                        # Increment weight
+                        G[node1][node2]['weight'] = G[node1][node2].get('weight', 1) + 1
+                    else:
+                        # Add new edge
+                        if edge_count < max_edges:
+                            G.add_edge(node1, node2, weight=1, relationship="co_occurs_with")
+                            edge_count += 1
+        
+        # Filter edges by minimum weight
+        if min_edge_weight > 1:
+            edges_to_remove = [(u, v) for u, v, d in G.edges(data=True) if d.get('weight', 1) < min_edge_weight]
+            G.remove_edges_from(edges_to_remove)
+        
+        # Remove isolated nodes if not wanted
+        if not show_isolated_nodes:
+            isolated = list(nx.isolates(G))
+            G.remove_nodes_from(isolated)
+        
+        # Create pyvis network
+        net = Network(
+            height=f"{height}px",
+            width=width,
+            bgcolor=background_color,
+            font_color=node_font_color,
+            directed=False
+        )
+        
+        # Configure physics
+        if physics_enabled:
+            net.set_options(f"""
+            {{
+              "physics": {{
+                "enabled": true,
+                "barnesHut": {{
+                  "gravitationalConstant": -{node_repulsion},
+                  "centralGravity": {central_gravity},
+                  "springLength": {spring_length},
+                  "springConstant": {spring_strength},
+                  "damping": {damping}
+                }}
+              }},
+              "interaction": {{
+                "hover": {str(interaction_hover).lower())},
+                "zoomView": {str(interaction_zoom).lower()},
+                "dragView": {str(interaction_drag).lower()},
+                "selectConnectedEdges": {str(interaction_select).lower()},
+                "navigationButtons": {str(interaction_navigation_buttons).lower()}
+              }}
+            }}
+            """)
+        else:
+            net.set_options(f"""
+            {{
+              "physics": {{
+                "enabled": false
+              }},
+              "interaction": {{
+                "hover": {str(interaction_hover).lower()},
+                "zoomView": {str(interaction_zoom).lower()},
+                "dragView": {str(interaction_drag).lower()},
+                "selectConnectedEdges": {str(interaction_select).lower()},
+                "navigationButtons": {str(interaction_navigation_buttons).lower()}
+              }}
+            }}
+            """)
+        
+        # Add nodes with colors by type
+        node_colors = {
+            "person": color_entity_person,
+            "organization": color_entity_organization,
+            "location": color_entity_location,
+            "date": color_entity_date,
+            "money": color_entity_money,
+            "percent": color_entity_percent,
+            "time": color_entity_time,
+            "facility": color_entity_facility,
+            "topic": color_topic,
+            "word": color_word,
+        }
+        
+        for node, data in G.nodes(data=True):
+            node_type = data.get('node_type', 'unknown')
+            entity_type = data.get('entity_type', '')
+            
+            # Determine color
+            if node_type == "entity" and entity_type:
+                color = node_colors.get(entity_type, "#CCCCCC")
+            elif node_type == "topic":
+                color = color_topic
+            elif node_type == "word":
+                color = color_word
+            else:
+                color = "#CCCCCC"
+            
+            # Calculate size based on degree if enabled
+            if node_size_by == "degree":
+                degree = G.degree(node)
+                size = max(node_size * 0.5, min(node_size * 2, node_size + degree * 2))
+            elif node_size_by == "weight":
+                # Use average edge weight
+                edges = G.edges(node, data=True)
+                if edges:
+                    avg_weight = sum(d.get('weight', 1) for _, _, d in edges) / len(edges)
+                    size = max(node_size * 0.5, min(node_size * 2, node_size + avg_weight * 2))
+                else:
+                    size = node_size
+            else:
+                size = node_size
+            
+            net.add_node(
+                str(node),
+                label=str(node),
+                color=color,
+                size=size,
+                shape=node_shape,
+                borderWidth=node_border_width,
+                borderColor=node_border_color,
+                font={"size": node_font_size, "color": node_font_color},
+                title=f"{node_type}: {node}"
+            )
+        
+        # Add edges with weights
+        for edge in G.edges(data=True):
+            source, target, data = edge
+            weight = data.get('weight', 1)
+            relationship = data.get('relationship', 'related')
+            
+            # Calculate edge width
+            if edge_width_by == "weight":
+                width_val = max(1, min(10, edge_width + weight))
+            else:
+                width_val = edge_width
+            
+            net.add_edge(
+                str(source),
+                str(target),
+                value=weight,
+                width=width_val,
+                color=edge_color,
+                arrows=edge_arrow_type if edge_arrow_type != "none" else False,
+                arrowStrikethrough=False,
+                smooth={"type": edge_smooth, "roundness": 0.5},
+                title=f"{relationship} (weight: {weight})"
+            )
+        
+        # Generate HTML
+        html = net.generate_html()
+        
+        # Add legend if enabled
+        if show_legend:
+            legend_html = f"""
+            <div style="position: absolute; {legend_position}: 10px; left: 10px; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; z-index: 1000;">
+                <strong>Legend:</strong><br/>
+                <span style="color: {color_entity_person};">●</span> Person<br/>
+                <span style="color: {color_entity_organization};">●</span> Organization<br/>
+                <span style="color: {color_entity_location};">●</span> Location<br/>
+                <span style="color: {color_entity_date};">●</span> Date<br/>
+                <span style="color: {color_topic};">●</span> Topic<br/>
+                <span style="color: {color_word};">●</span> Word<br/>
+            </div>
+            """
+            # Insert legend before closing body tag
+            html = html.replace("</body>", legend_html + "</body>")
+        
+        response = HTMLResponse(content=html)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+        
+    except ImportError as e:
+        logger.error(f"Required packages not available: {e}")
+        return HTMLResponse(
+            content=f"<html><body><h1>Error</h1><p>Required packages not available: {str(e)}</p><p>Please install: pip install networkx pyvis</p></body></html>",
+            status_code=503
+        )
+    except Exception as e:
+        logger.error(f"Error generating knowledge graph visualization: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return HTMLResponse(
+            content=f"<html><body><h1>Error</h1><p>{str(e)}</p><p>Check backend logs for details.</p></body></html>",
+            status_code=500
+        )
+
 # Research Agent Recommendations endpoint
 @app.post("/campaigns/{campaign_id}/research-agent-recommendations")
 def get_research_agent_recommendations(campaign_id: str, request_data: ResearchAgentRequest, current_user = Depends(get_current_user), db: Session = Depends(get_db)):

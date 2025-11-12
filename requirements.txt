@@ -49,6 +49,8 @@ numba>=0.59.1
 llvmlite>=0.42.0
 pynndescent>=0.5.11
 topic-wizard>=0.5.0  # Interactive topic model visualization
+networkx>=3.0  # Graph structure and analysis for knowledge graphs
+pyvis>=0.3.0  # Interactive network visualization (HTML output)
 
 # =============================================================================
 # DOCUMENT PROCESSING
