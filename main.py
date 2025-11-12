@@ -222,9 +222,19 @@ def get_campaigns(request: Request, db: Session = Depends(get_db)):
         # EMERGENCY_NET: Multi-tenant - filter by user if authenticated
         if current_user:
             campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+            logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
+            # If no campaigns found for user, also check total campaigns for debugging
+            total_campaigns = db.query(Campaign).count()
+            if len(campaigns) == 0 and total_campaigns > 0:
+                logger.warning(f"⚠️ User {current_user.id} has 0 campaigns, but database has {total_campaigns} total campaigns. This may indicate a user_id mismatch.")
+                # Show sample campaign user_ids for debugging
+                sample_campaigns = db.query(Campaign).limit(5).all()
+                sample_user_ids = [c.user_id for c in sample_campaigns]
+                logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
         else:
             # No auth token - return all (for backward compatibility during migration)
             campaigns = db.query(Campaign).all()
+            logger.info(f"No authentication - returning all {len(campaigns)} campaigns")
         return {
             "status": "success",
             "campaigns": [
