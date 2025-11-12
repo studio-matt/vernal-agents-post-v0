@@ -3275,12 +3275,15 @@ Expansion:"""
 
 # Author Personalities endpoints
 @app.get("/author_personalities")
-def get_author_personalities(db: Session = Depends(get_db)):
-    """Get all author personalities - REAL database query"""
-    logger.info("🔍 /author_personalities GET endpoint called")
+def get_author_personalities(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all author personalities for the current user - REQUIRES AUTHENTICATION"""
+    logger.info(f"🔍 /author_personalities GET endpoint called by user {current_user.id}")
     try:
         from models import AuthorPersonality
-        personalities = db.query(AuthorPersonality).all()
+        # Filter by user_id to only return user's own personalities
+        personalities = db.query(AuthorPersonality).filter(
+            AuthorPersonality.user_id == current_user.id
+        ).all()
         return {
             "status": "success",
             "personalities": [
