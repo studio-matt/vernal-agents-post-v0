@@ -95,6 +95,20 @@ def include_routers():
 # Include routers immediately but with error handling
 include_routers()
 
+# Import authentication helpers after routers are included
+try:
+    from auth_api import get_current_user, verify_campaign_ownership, get_admin_user
+    logger.info("✅ Authentication helpers imported successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to import authentication helpers: {e}")
+    # Define fallback functions if import fails
+    def get_current_user(*args, **kwargs):
+        raise HTTPException(status_code=401, detail="Authentication not available")
+    def verify_campaign_ownership(*args, **kwargs):
+        raise HTTPException(status_code=401, detail="Authentication not available")
+    def get_admin_user(*args, **kwargs):
+        raise HTTPException(status_code=401, detail="Authentication not available")
+
 # Global variables for lazy initialization
 db_manager = None
 scheduler = None
@@ -213,51 +227,24 @@ def deploy_commit():
 
 # Campaign endpoints with REAL database operations (EMERGENCY_NET: Multi-tenant scoped)
 @app.get("/campaigns")
-def get_campaigns(request: Request, db: Session = Depends(get_db)):
-    """Get all campaigns - REAL database query (EMERGENCY_NET: Multi-tenant scoped)"""
+def get_campaigns(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all campaigns for the authenticated user - REQUIRES AUTHENTICATION"""
     logger.info("🔍 /campaigns GET endpoint called")
     try:
-        from models import Campaign, User
+        from models import Campaign
         
-        # Get current user from auth token if provided (EMERGENCY_NET compliance)
-        current_user = None
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            try:
-                token = auth_header.replace("Bearer ", "")
-                from utils import verify_token
-                payload = verify_token(token)
-                user_id = int(payload.get("sub"))
-                logger.info(f"Token verified for user_id: {user_id}")
-                current_user = db.query(User).filter(User.id == user_id).first()
-                if current_user:
-                    logger.info(f"User found: {current_user.id} ({current_user.username})")
-                else:
-                    logger.warning(f"User {user_id} not found in database")
-            except Exception as auth_error:
-                # Log auth errors but continue without filtering for backward compatibility
-                logger.warning(f"Authentication failed for /campaigns GET: {auth_error}")
-                import traceback
-                logger.debug(f"Auth error traceback: {traceback.format_exc()}")
-        else:
-            logger.info("No Authorization header provided - returning all campaigns")
+        # Filter campaigns by authenticated user (multi-tenant security)
+        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+        logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
         
-        # EMERGENCY_NET: Multi-tenant - filter by user if authenticated
-        if current_user:
-            campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
-            logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
-            # If no campaigns found for user, also check total campaigns for debugging
-            total_campaigns = db.query(Campaign).count()
-            if len(campaigns) == 0 and total_campaigns > 0:
-                logger.warning(f"⚠️ User {current_user.id} has 0 campaigns, but database has {total_campaigns} total campaigns. This may indicate a user_id mismatch.")
-                # Show sample campaign user_ids for debugging
-                sample_campaigns = db.query(Campaign).limit(5).all()
-                sample_user_ids = [c.user_id for c in sample_campaigns]
-                logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
-        else:
-            # No auth token - return all (for backward compatibility during migration)
-            campaigns = db.query(Campaign).all()
-            logger.info(f"No authentication - returning all {len(campaigns)} campaigns")
+        # If no campaigns found for user, also check total campaigns for debugging
+        total_campaigns = db.query(Campaign).count()
+        if len(campaigns) == 0 and total_campaigns > 0:
+            logger.warning(f"⚠️ User {current_user.id} has 0 campaigns, but database has {total_campaigns} total campaigns. This may indicate a user_id mismatch.")
+            # Show sample campaign user_ids for debugging
+            sample_campaigns = db.query(Campaign).limit(5).all()
+            sample_user_ids = [c.user_id for c in sample_campaigns]
+            logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
         return {
             "status": "success",
             "campaigns": [
@@ -290,38 +277,12 @@ def get_campaigns(request: Request, db: Session = Depends(get_db)):
         )
 
 @app.post("/campaigns")
-def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session = Depends(get_db)):
-    """Create campaign - REAL database save (EMERGENCY_NET: Multi-tenant scoped)"""
+def create_campaign(campaign_data: CampaignCreate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Create campaign for the authenticated user - REQUIRES AUTHENTICATION"""
     try:
-        from models import Campaign, User
-        
-        # Get current user from auth token (EMERGENCY_NET compliance)
-        user_id = None
-        try:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header.replace("Bearer ", "")
-                from utils import verify_token
-                payload = verify_token(token)
-                user_id = int(payload.get("sub"))
-                # Verify user exists
-                user = db.query(User).filter(User.id == user_id).first()
-                if not user:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="User not found"
-                    )
-        except HTTPException:
-            raise
-        except Exception as auth_error:
-            logger.warning(f"Authentication failed for /campaigns POST: {auth_error} - using default user_id=1")
-            user_id = 1  # TEMPORARY fallback for backward compatibility
-        
-        if not user_id:
-            user_id = 1  # TEMPORARY fallback if no auth token
-        
         from models import Campaign
-        logger.info(f"Creating campaign: {campaign_data.name} for user {user_id}")
+        
+        logger.info(f"Creating campaign: {campaign_data.name} for user {current_user.id}")
         
         # Generate unique campaign ID
         campaign_id = str(uuid.uuid4())
@@ -362,7 +323,7 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
             trending_topics=trending_topics_str,
             topics=topics_str,
             status=campaign_data.status or "INCOMPLETE",  # Use provided status or default to INCOMPLETE
-            user_id=user_id,
+            user_id=current_user.id,  # Use authenticated user
             extraction_settings_json=extraction_settings_json,
             preprocessing_settings_json=preprocessing_settings_json,
             entity_settings_json=entity_settings_json,
@@ -397,15 +358,19 @@ def create_campaign(campaign_data: CampaignCreate, request: Request, db: Session
         )
 
 @app.get("/campaigns/{campaign_id}")
-def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
-    """Get campaign by ID - REAL database query"""
+def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get campaign by ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
         from models import Campaign
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        # Verify ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
         if not campaign:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Campaign not found"
+                detail="Campaign not found or access denied"
             )
         
         import json
@@ -472,29 +437,20 @@ def get_campaign_by_id(campaign_id: str, db: Session = Depends(get_db)):
         )
 
 @app.put("/campaigns/{campaign_id}")
-def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, request: Request, db: Session = Depends(get_db)):
-    """Update campaign - REAL database update"""
+def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Update campaign - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
-        from models import Campaign, User
+        from models import Campaign
         
-        # Get current user from auth token
-        user_id = None
-        try:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header.replace("Bearer ", "")
-                from utils import verify_token
-                payload = verify_token(token)
-                user_id = int(payload.get("sub"))
-        except Exception as auth_error:
-            logger.warning(f"Authentication failed for /campaigns PUT: {auth_error}")
-            user_id = 1  # Fallback
-        
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        # Verify ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
         if not campaign:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Campaign not found"
+                detail="Campaign not found or access denied"
             )
         
         # Update fields if provided
@@ -555,15 +511,19 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, request: Re
         )
 
 @app.delete("/campaigns/{campaign_id}")
-def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
-    """Delete campaign - REAL database deletion"""
+def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete campaign - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
         from models import Campaign
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        # Verify ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
         if not campaign:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Campaign not found"
+                detail="Campaign not found or access denied"
             )
         db.delete(campaign)
         db.commit()
@@ -1301,8 +1261,8 @@ def debug_campaign_data(campaign_id: str, db: Session = Depends(get_db)):
 
 # System Settings endpoints
 @app.get("/admin/settings/{setting_key}")
-def get_system_setting(setting_key: str, db: Session = Depends(get_db)):
-    """Get a system setting by key"""
+def get_system_setting(setting_key: str, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """Get a system setting by key - ADMIN ONLY"""
     try:
         from models import SystemSettings
         setting = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
@@ -1327,9 +1287,125 @@ def get_system_setting(setting_key: str, db: Session = Depends(get_db)):
             detail=f"Failed to fetch setting: {str(e)}"
         )
 
+# Admin User Management endpoints
+@app.get("/admin/users")
+def get_all_users(admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """Get all users with admin status - ADMIN ONLY"""
+    try:
+        from models import User
+        users = db.query(User).all()
+        return {
+            "status": "success",
+            "users": [
+                {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "is_admin": getattr(user, 'is_admin', False),
+                    "is_verified": getattr(user, 'is_verified', False),
+                    "created_at": user.created_at.isoformat() if user.created_at else None
+                }
+                for user in users
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error fetching users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch users: {str(e)}"
+        )
+
+@app.post("/admin/users/{user_id}/admin")
+def grant_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """Grant admin access to a user - ADMIN ONLY"""
+    try:
+        from models import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with ID {user_id} not found"
+            )
+        
+        # Prevent removing your own admin access
+        if user.id == admin_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot modify your own admin status"
+            )
+        
+        user.is_admin = True
+        db.commit()
+        db.refresh(user)
+        logger.info(f"✅ Granted admin access to user {user_id} ({user.email})")
+        
+        return {
+            "status": "success",
+            "message": f"Admin access granted to {user.email}",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "is_admin": True
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error granting admin access: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to grant admin access: {str(e)}"
+        )
+
+@app.delete("/admin/users/{user_id}/admin")
+def revoke_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """Revoke admin access from a user - ADMIN ONLY"""
+    try:
+        from models import User
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with ID {user_id} not found"
+            )
+        
+        # Prevent removing your own admin access
+        if user.id == admin_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot modify your own admin status"
+            )
+        
+        user.is_admin = False
+        db.commit()
+        db.refresh(user)
+        logger.info(f"✅ Revoked admin access from user {user_id} ({user.email})")
+        
+        return {
+            "status": "success",
+            "message": f"Admin access revoked from {user.email}",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "is_admin": False
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error revoking admin access: {e}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke admin access: {str(e)}"
+        )
+
 @app.put("/admin/settings/{setting_key}")
-def update_system_setting(setting_key: str, setting_data: Dict[str, Any], db: Session = Depends(get_db)):
-    """Update or create a system setting"""
+def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """Update or create a system setting - ADMIN ONLY"""
     try:
         from models import SystemSettings
         setting = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
@@ -2980,7 +3056,7 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
 
 # Initialize Research Agent Prompts endpoint
 @app.post("/admin/initialize-research-agent-prompts")
-def initialize_research_agent_prompts(db: Session = Depends(get_db)):
+def initialize_research_agent_prompts(admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """
     Initialize default research agent prompts in the database if they don't exist.
     This ensures all research agent prompts have default values.
