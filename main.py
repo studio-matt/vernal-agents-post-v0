@@ -211,8 +211,8 @@ def root():
     return {"message": "Vernal Agents Backend API", "status": "running"}
 
 @app.get("/deploy/commit")
-def deploy_commit():
-    """Return the current deployed commit hash for verification"""
+def deploy_commit(admin_user = Depends(get_admin_user)):
+    """Return the current deployed commit hash for verification - ADMIN ONLY"""
     import subprocess
     try:
         # Use current file location instead of hardcoded path

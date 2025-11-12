@@ -113,29 +113,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-def get_optional_user(
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """
-    Get current user if authenticated, None otherwise.
-    Used for backward compatibility during migration.
-    TODO: Remove after all endpoints are migrated to require authentication.
-    """
-    try:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header.replace("Bearer ", "")
-            from utils import verify_token
-            payload = verify_token(token)
-            user_id = payload.get("sub")
-            if user_id:
-                from models import User
-                user = db.query(User).filter(User.id == int(user_id)).first()
-                return user
-    except Exception:
-        pass
-    return None
+# Removed get_optional_user - no longer needed after authentication refactoring
+# All endpoints now use get_current_user (required) or are public
 
 def get_admin_user(current_user = Depends(get_current_user)):
     """
