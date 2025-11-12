@@ -3631,6 +3631,75 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         logger.error(traceback.format_exc())
         return {"status": "error", "message": str(e)}
 
+# Generate Ideas endpoint (for content queue)
+@app.post("/generate-ideas")
+async def generate_ideas_endpoint(
+    topics: str = None,
+    posts: str = None,
+    days: str = None,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate content ideas based on topics, posts, and days.
+    Used by content queue flow after selecting platforms and number of posts.
+    Accepts form-urlencoded data: topics, posts, days
+    REQUIRES AUTHENTICATION
+    """
+    try:
+        from machine_agent import IdeaGeneratorAgent
+        from langchain_openai import ChatOpenAI
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return {"status": "error", "message": "OPENAI_API_KEY not configured"}
+        
+        # Parse form data from request
+        form_data = await request.form()
+        topics = form_data.get("topics", "")
+        posts = form_data.get("posts", "")
+        days = form_data.get("days", "")
+        
+        # Parse topics, posts, and days from form data
+        topics_list = []
+        if topics:
+            # Topics come as: "Topic A" , "Topic B"
+            # Remove quotes and split by comma
+            topics_list = [t.strip().strip('"').strip("'") for t in topics.split(",") if t.strip()]
+        
+        posts_list = []
+        if posts:
+            # Posts come as: "Your post here"
+            posts_list = [posts.strip().strip('"').strip("'")]
+        
+        days_list = []
+        if days:
+            # Days come as: Monday, Tuesday
+            days_list = [d.strip() for d in days.split(",") if d.strip()]
+        
+        if not topics_list or not days_list:
+            return {"status": "error", "message": "Topics and days are required"}
+        
+        # Initialize LLM and agent
+        llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
+        agent = IdeaGeneratorAgent(llm)
+        
+        # Generate ideas
+        ideas = await agent.generate_ideas(topics_list, posts_list, days_list)
+        
+        return {
+            "status": "success",
+            "ideas": ideas
+        }
+    except Exception as e:
+        logger.error(f"Error generating ideas: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {"status": "error", "message": str(e)}
+
 # Initialize Research Agent Prompts endpoint
 @app.post("/admin/initialize-research-agent-prompts")
 def initialize_research_agent_prompts(admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
