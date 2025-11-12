@@ -866,6 +866,8 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | **OSError: Can't find model 'en_core_web_md'** | **spaCy model not downloaded** | **python -m spacy download en_core_web_md** |
 | **ModuleNotFoundError: No module named 'spacy'** | **Missing spacy package** | **pip install spacy>=3.7.0** |
 | **ModuleNotFoundError: No module named 'duckduckgo_search'** | **Missing duckduckgo-search** | **pip install duckduckgo-search>=6.0.0** |
+| **ModuleNotFoundError: No module named 'topicwizard'** | **Missing topic-wizard package** | **pip install topic-wizard>=0.5.0** |
+| **TopicWizard visualization shows "Insufficient Data"** | **Campaign has <3 documents** | **Scrape more content (need at least 3 documents for topic modeling)** |
 | **SyntaxError: invalid syntax** | **Code syntax error** | **Check database.py line 928 for missing newline** |
 | Email not sending       | SMTP configuration   | Check `.env` SMTP settings |
 | Service won't start     | Port conflict        | Kill processes on port 8000 |
@@ -1488,6 +1490,12 @@ curl https://themachine.vernalcontentum.com/deploy/commit
   nltk.download('averaged_perceptron_tagger')
   nltk.download('maxent_ne_chunker')
   ```
+- **TopicWizard (OPTIONAL but RECOMMENDED):** After installing `topic-wizard>=0.5.0` (in requirements.txt), no additional installation steps required
+  - **Dependencies:** Requires `scikit-learn>=1.0.0` (already in requirements.txt as `scikit-learn>=1.4.2`)
+  - **Compatibility:** Fully compatible with existing NMF, LDA, and BERTopic models
+  - **Usage:** Used for interactive topic model visualization in Research Assistant → Topical Map tab
+  - **No conflicts:** Compatible with all existing dependencies (numpy, scipy, scikit-learn, gensim)
+  - **Note:** TopicWizard visualization endpoint (`/campaigns/{campaign_id}/topicwizard`) requires at least 3 documents to function
 
 #### **ResolutionImpossible Prevention**
 - **Golden Rule:** Never pin a package to a version below what any dependencies require
