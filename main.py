@@ -578,30 +578,31 @@ class AnalyzeRequest(BaseModel):
 
 # Analyze endpoint (for campaign building)
 @app.post("/analyze")
-def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session = Depends(get_db)):
+def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Analyze campaign - Stub endpoint (returns task_id for now)
     TODO: Implement full analysis workflow
     
     IMPORTANT: This endpoint should NOT delete campaigns. It only starts analysis.
+    REQUIRES AUTHENTICATION
     """
     try:
-        # Try to get user from token
-        user_id = None
-        try:
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header.startswith("Bearer "):
-                token = auth_header.replace("Bearer ", "")
-                from utils import verify_token
-                payload = verify_token(token)
-                user_id = int(payload.get("sub"))
-                logger.info(f"Token verified for user_id: {user_id}")
-        except Exception as auth_error:
-            logger.warning(f"Authentication failed for /analyze: {auth_error}")
-            user_id = 1  # Fallback
-        
+        user_id = current_user.id
         campaign_id = analyze_data.campaign_id or f"campaign-{uuid.uuid4()}"
         campaign_name = analyze_data.campaign_name or "Unknown Campaign"
+        
+        # If campaign_id is provided, verify ownership
+        if analyze_data.campaign_id:
+            from models import Campaign
+            campaign = db.query(Campaign).filter(
+                Campaign.campaign_id == campaign_id,
+                Campaign.user_id == current_user.id
+            ).first()
+            if not campaign:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Campaign not found or access denied"
+                )
         
         logger.info(f"🔍 /analyze POST endpoint called for campaign: {campaign_name} (ID: {campaign_id}) by user {user_id}")
         logger.info(f"🔍 Request data: campaign_name={analyze_data.campaign_name}, type={analyze_data.type}, keywords={len(analyze_data.keywords or [])} keywords")
@@ -1158,11 +1159,32 @@ def analyze_campaign(analyze_data: AnalyzeRequest, request: Request, db: Session
         )
 
 @app.get("/analyze/status/{task_id}")
-def get_analyze_status(task_id: str):
+def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
     """
     Get analysis status - In-memory progress simulation.
     Progress advances deterministically based on time since start.
+    REQUIRES AUTHENTICATION
     """
+    # Verify task belongs to user (check campaign ownership)
+    if task_id in TASKS:
+        task_campaign_id = TASKS[task_id].get("campaign_id")
+        if task_campaign_id:
+            from models import Campaign
+            from database import SessionLocal
+            session = SessionLocal()
+            try:
+                campaign = session.query(Campaign).filter(
+                    Campaign.campaign_id == task_campaign_id,
+                    Campaign.user_id == current_user.id
+                ).first()
+                if not campaign:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Task not found or access denied"
+                    )
+            finally:
+                session.close()
+    
     if task_id not in TASKS:
         # Be resilient across restarts: report pending instead of 404 so UI keeps polling
         return {
@@ -1216,21 +1238,45 @@ def get_analyze_status(task_id: str):
 
 # Optional helper: get status by campaign_id
 @app.get("/analyze/status/by_campaign/{campaign_id}")
-def get_status_by_campaign(campaign_id: str):
+def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get analysis status by campaign ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied"
+        )
+    
     task_id = CAMPAIGN_TASK_INDEX.get(campaign_id)
     if not task_id:
         raise HTTPException(status_code=404, detail="No task for campaign")
-    return get_analyze_status(task_id)
+    return get_analyze_status(task_id, current_user)
 
 # Debug endpoint to check raw data for a campaign
 @app.get("/campaigns/{campaign_id}/debug")
-def debug_campaign_data(campaign_id: str, db: Session = Depends(get_db)):
-    """Debug endpoint to check what raw data exists for a campaign"""
+def debug_campaign_data(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Debug endpoint to check what raw data exists for a campaign - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied"
+        )
+    
     try:
-        from models import CampaignRawData, Campaign
+        from models import CampaignRawData
         
-        # Check campaign exists
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        # Campaign ownership already verified above
         
         # Check raw data
         raw_data_count = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).count()
@@ -1458,7 +1504,7 @@ def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_
 
 # Research data endpoint: returns urls, raw samples, word cloud, topics and entities
 @app.get("/campaigns/{campaign_id}/research")
-def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depends(get_db)):
+def get_campaign_research(campaign_id: str, limit: int = 20, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Aggregate research outputs for a campaign.
     - urls: list of source_url
@@ -1469,7 +1515,20 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
     - hashtags: generated from topics/keywords (cached in DB)
     
     Caches wordCloud, topics, hashtags, and entities in database to avoid re-computation.
+    REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
     """
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied"
+        )
+    
     try:
         from models import CampaignRawData, CampaignResearchData
         import json
@@ -1604,9 +1663,8 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
                 text_len = len(r.extracted_text) if r.extracted_text else 0
                 logger.warning(f"⚠️ Row {i+1}: source_url={r.source_url[:50] if r.source_url else 'None'}, text_length={text_len}, is_error={r.source_url and r.source_url.startswith(('error:', 'placeholder:')) if r.source_url else False}")
 
+        # Campaign ownership already verified above
         # Get campaign info for better topic extraction
-        from models import Campaign
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
         campaign_query = campaign.query if campaign else ""
         campaign_keywords = campaign.keywords.split(",") if campaign and campaign.keywords else []
         campaign_urls = campaign.urls.split(",") if campaign and campaign.urls else []
@@ -2020,11 +2078,24 @@ def get_campaign_research(campaign_id: str, limit: int = 20, db: Session = Depen
 
 # Compare topics endpoint: re-process raw data with alternative method
 @app.get("/campaigns/{campaign_id}/compare-topics")
-def compare_topics(campaign_id: str, method: str = "system", db: Session = Depends(get_db)):
+def compare_topics(campaign_id: str, method: str = "system", current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Re-process raw scraped data with alternative topic extraction method.
     Returns topics in the same format as research endpoint.
+    REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
     """
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied"
+        )
+    
     try:
         from models import CampaignRawData, SystemSettings
         from text_processing import extract_topics
@@ -2044,9 +2115,8 @@ def compare_topics(campaign_id: str, method: str = "system", db: Session = Depen
                 "message": "No raw data available for comparison"
             }
         
+        # Campaign ownership already verified above
         # Get campaign info
-        from models import Campaign
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
         campaign_query = campaign.query if campaign else ""
         campaign_keywords = campaign.keywords.split(",") if campaign and campaign.keywords else []
         campaign_urls = campaign.urls.split(",") if campaign and campaign.urls else []
@@ -2103,16 +2173,27 @@ def compare_topics(campaign_id: str, method: str = "system", db: Session = Depen
 
 # TopicWizard Visualization endpoint
 @app.get("/campaigns/{campaign_id}/topicwizard")
-def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db)):
+def get_topicwizard_visualization(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Generate TopicWizard visualization for campaign topics.
     Returns HTML page with interactive TopicWizard interface.
     
     Note: TopicWizard may have compatibility issues with Python 3.12 and numba/llvmlite.
     If import fails, returns a fallback visualization using the topic model data.
+    REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
     """
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content="<html><body><h1>Campaign not found or access denied</h1></body></html>", status_code=404)
+    
     try:
-        from models import CampaignRawData, Campaign
+        from models import CampaignRawData
         from sklearn.decomposition import NMF
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.pipeline import Pipeline
@@ -2126,11 +2207,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             logger.warning(f"⚠️ TopicWizard not available (known issue with Python 3.12/numba): {tw_err}")
             TOPICWIZARD_AVAILABLE = False
         
-        # Get campaign data
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
-        if not campaign:
-            return HTMLResponse(content="<html><body><h1>Campaign not found</h1></body></html>", status_code=404)
-        
+        # Campaign ownership already verified above
         # Get scraped texts
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
         texts = []
@@ -2850,15 +2927,28 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
 
 # Research Agent Recommendations endpoint
 @app.post("/campaigns/{campaign_id}/research-agent-recommendations")
-def get_research_agent_recommendations(campaign_id: str, request_data: ResearchAgentRequest, db: Session = Depends(get_db)):
+def get_research_agent_recommendations(campaign_id: str, request_data: ResearchAgentRequest, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Generate LLM-based recommendations for research agents (Keyword, Micro Sentiment, Topical Map, Knowledge Graph, Hashtag Generator).
     Uses prompts from system_settings table.
     Caches insights in database to avoid re-calling LLM for the same campaign/agent combination.
+    REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
     """
+    # Verify campaign ownership
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied"
+        )
+    
     try:
         agent_type = request_data.agent_type
-        from models import CampaignRawData, Campaign, SystemSettings, CampaignResearchInsights
+        from models import CampaignRawData, SystemSettings, CampaignResearchInsights
         
         # Check if insights already exist in database (cache)
         existing_insights = db.query(CampaignResearchInsights).filter(
@@ -2874,11 +2964,6 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
                 "agent_type": agent_type,
                 "cached": True
             }
-        
-        # Get campaign data
-        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
-        if not campaign:
-            return {"status": "error", "message": "Campaign not found"}
         
         # Get raw data for context
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
