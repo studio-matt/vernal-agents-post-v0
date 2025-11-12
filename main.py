@@ -30,14 +30,16 @@ app = FastAPI()
 # Add CORS middleware
 # Note: When allow_credentials=True, cannot use allow_origins=["*"]
 # Must specify exact origins
+ALLOWED_ORIGINS = [
+    "https://machine.vernalcontentum.com",
+    "https://themachine.vernalcontentum.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://machine.vernalcontentum.com",
-        "https://themachine.vernalcontentum.com",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -45,18 +47,38 @@ app.add_middleware(
 )
 
 # Explicitly handle OPTIONS requests for CORS preflight
+ALLOWED_ORIGINS = [
+    "https://machine.vernalcontentum.com",
+    "https://themachine.vernalcontentum.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):
     """Handle CORS preflight OPTIONS requests"""
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-        }
-    )
+    origin = request.headers.get("Origin", "")
+    # Validate origin is in allowed list
+    if origin in ALLOWED_ORIGINS:
+        return JSONResponse(
+            content={},
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "3600",
+            }
+        )
+    else:
+        # Origin not allowed
+        return JSONResponse(
+            content={"error": "Origin not allowed"},
+            status_code=403,
+            headers={
+                "Access-Control-Allow-Origin": origin if origin else "*",
+            }
+        )
 
 # --- ROUTER INCLUDES MUST BE HERE ---
 # This is REQUIRED for FastAPI to properly register endpoints
