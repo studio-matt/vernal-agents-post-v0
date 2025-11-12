@@ -2335,7 +2335,10 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         
         # Generate visualization based on type
         logger.info(f"🎨 Generating {visualization_type} visualization with {len(topics_data)} topics")
-        logger.info(f"   Settings: color_scheme={color_scheme}, size_scaling={size_scaling}, show_title={show_title}, show_info_box={show_info_box}")
+        logger.info(f"   Basic Settings: color_scheme={color_scheme}, size_scaling={size_scaling}, show_title={show_title}, show_info_box={show_info_box}")
+        logger.info(f"   Styling: opacity={opacity}, font_size={font_size}, font_weight={font_weight}, border_radius={border_radius}, border_width={border_width}")
+        logger.info(f"   Layout: orientation={orientation}, alignment={alignment}, padding={padding}, margin={margin}, spacing={spacing}")
+        logger.info(f"   Animation: hover_effects={hover_effects}, animation_speed={animation_speed}, shadow_enabled={shadow_enabled}")
         logger.info(f"   Background: {background_color}, min_size={min_size}, max_size={max_size}")
         topics_html = ""
         total_topics = len(topics_data)
