@@ -514,6 +514,15 @@ python -m spacy download en_core_web_md
 **Without the language model, NLP processing fails with "Can't find model 'en_core_web_md'" error.**
 **This is MANDATORY - spaCy is a core dependency for entity extraction and NLP features.**
 
+**TopicWizard (OPTIONAL - for topic visualization)**
+```bash
+# TopicWizard is installed via requirements.txt: topic-wizard>=0.5.0
+# No additional installation steps required - uses existing scikit-learn pipeline
+# Used for interactive topic model visualization in Research Assistant
+```
+**TopicWizard requires scikit-learn>=1.0.0 (already satisfied by scikit-learn>=1.4.2).**
+**No known dependency conflicts with existing packages.**
+
 ### 4. **Restart Systemd Service**
 ```bash
 sudo systemctl restart vernal-agents
@@ -1107,7 +1116,8 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 5. **Activate environment:** `source venv/bin/activate`
 6. **Install dependencies:** `pip install -r requirements.txt --no-cache-dir`
 7. **Download spaCy model (MANDATORY):** `python -m spacy download en_core_web_md`
-8. **Restart service:** `sudo systemctl restart vernal-agents`
+8. **Verify TopicWizard (OPTIONAL):** `python3 -c "import topicwizard; print('✅ TopicWizard available')"` (for topic visualization)
+9. **Restart service:** `sudo systemctl restart vernal-agents`
 9. **Run health check:** `./full_health_check.sh` (see script below)
 10. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
 
@@ -1621,5 +1631,19 @@ anthropic>=0.69.0,<1.0.0  # langchain-anthropic requires langchain-core>=1.0.0,<
 - Upgrade crewai to >=0.28.0 to align with browser-use
 - Use langchain-openai >=0.0.5 for langchain v1.x compatibility
 - Test in Docker before deploying to catch conflicts early
+
+#### **TopicWizard Dependency Compatibility** (v14)
+- **Package:** `topic-wizard>=0.5.0` - Interactive topic model visualization
+- **Dependencies:** Requires `scikit-learn>=1.0.0` (satisfied by `scikit-learn>=1.4.2`)
+- **Compatibility:** ✅ Fully compatible with all existing dependencies
+  - Uses existing `scikit-learn` (NMF, TfidfVectorizer) - no conflicts
+  - Compatible with `numpy>=1.21.0`, `scipy>=1.12.0` (already in requirements)
+  - No conflicts with `gensim`, `bertopic`, or other NLP packages
+- **Usage:** TopicWizard visualization endpoint (`/campaigns/{campaign_id}/topicwizard`)
+  - Requires at least 3 documents to generate visualization
+  - Uses system model settings from database (TF-IDF, NMF parameters)
+  - Limits to 100 documents for performance
+- **No Post-Installation Steps:** TopicWizard works immediately after `pip install topic-wizard`
+- **Verification:** `python3 -c "import topicwizard; print('✅ TopicWizard available')"`
 
 ---
