@@ -3,7 +3,7 @@ Authentication API Endpoints
 Handles user registration, login, and authentication
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -112,6 +112,68 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+def get_optional_user(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Get current user if authenticated, None otherwise.
+    Used for backward compatibility during migration.
+    TODO: Remove after all endpoints are migrated to require authentication.
+    """
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+            from utils import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("sub")
+            if user_id:
+                from models import User
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                return user
+    except Exception:
+        pass
+    return None
+
+def get_admin_user(current_user = Depends(get_current_user)):
+    """
+    Verify user has admin privileges.
+    Returns the user if admin, raises 403 if not.
+    """
+    # Check if user has is_admin field and it's True
+    # For now, we'll check if the field exists, otherwise default to False
+    is_admin = getattr(current_user, 'is_admin', False)
+    
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+def verify_campaign_ownership(
+    campaign_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verify user owns the campaign.
+    Returns the campaign if owned by user, raises 404 if not found or not owned.
+    """
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id
+    ).first()
+    
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found or access denied"
+        )
+    return campaign
 
 # Authentication endpoints
 @auth_router.post("/signup", response_model=SignupResponse)

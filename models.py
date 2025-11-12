@@ -70,6 +70,7 @@ class User(Base):
     password = Column(String(255), nullable=False)
     contact = Column(String(50), nullable=True)
     is_verified = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False, nullable=False)  # Admin role flag
     created_at = Column(DateTime, default=datetime.now())
     updated_at = Column(DateTime, default=datetime.now(), onupdate=datetime.now())
     platform_connections = relationship("PlatformConnection", back_populates="user")
