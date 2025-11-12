@@ -1991,14 +1991,24 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
     """
     Generate TopicWizard visualization for campaign topics.
     Returns HTML page with interactive TopicWizard interface.
+    
+    Note: TopicWizard may have compatibility issues with Python 3.12 and numba/llvmlite.
+    If import fails, returns a fallback visualization using the topic model data.
     """
     try:
         from models import CampaignRawData, Campaign
         from sklearn.decomposition import NMF
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.pipeline import Pipeline
-        import topicwizard
         from fastapi.responses import HTMLResponse
+        
+        # Try to import TopicWizard (may fail on Python 3.12 due to numba/llvmlite issues)
+        try:
+            import topicwizard
+            TOPICWIZARD_AVAILABLE = True
+        except (ImportError, AttributeError, Exception) as tw_err:
+            logger.warning(f"⚠️ TopicWizard not available (known issue with Python 3.12/numba): {tw_err}")
+            TOPICWIZARD_AVAILABLE = False
         
         # Get campaign data
         campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
@@ -2078,19 +2088,58 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         ])
         
         # Fit the pipeline
-        logger.info(f"Fitting TopicWizard pipeline with {len(texts)} documents, {min(num_topics, len(texts) - 1)} topics")
+        logger.info(f"Fitting topic model pipeline with {len(texts)} documents, {min(num_topics, len(texts) - 1)} topics")
         topic_pipeline.fit(texts)
         
-        # Generate TopicWizard HTML
-        # TopicWizard.visualize() launches a browser, so we need to use it differently
-        # Instead, we'll create a simple HTML page that embeds TopicWizard
-        # For now, let's create a standalone HTML page that can be embedded
+        # Extract topic information for visualization
+        vectorizer = topic_pipeline.named_steps['vectorizer']
+        nmf_model = topic_pipeline.named_steps['topic_model']
+        
+        # Get document-topic matrix
+        X = vectorizer.transform(texts)
+        doc_topic_matrix = nmf_model.transform(X)
+        
+        # Get topic-word matrix and top words per topic
+        topic_word_matrix = nmf_model.components_
+        feature_names = vectorizer.get_feature_names_out()
+        
+        topics_data = []
+        for topic_idx in range(min(num_topics, len(texts) - 1)):
+            # Get top 10 words for this topic
+            top_word_indices = topic_word_matrix[topic_idx].argsort()[-10:][::-1]
+            top_words = [feature_names[idx] for idx in top_word_indices]
+            top_weights = [topic_word_matrix[topic_idx][idx] for idx in top_word_indices]
+            
+            # Calculate topic strength (document coverage)
+            topic_strength = doc_topic_matrix[:, topic_idx].sum()
+            coverage_pct = (topic_strength / doc_topic_matrix.sum()) * 100 if doc_topic_matrix.sum() > 0 else 0
+            
+            topics_data.append({
+                'id': topic_idx,
+                'top_words': top_words,
+                'top_weights': top_weights,
+                'coverage': round(coverage_pct, 1)
+            })
+        
+        # Sort by coverage
+        topics_data.sort(key=lambda x: x['coverage'], reverse=True)
+        
+        # Generate HTML visualization
+        topics_html = ""
+        for topic in topics_data:
+            words_html = ", ".join([f"<strong>{word}</strong>" if i < 3 else word for i, word in enumerate(topic['top_words'][:8])])
+            topics_html += f"""
+            <div class="topic-card">
+                <h3>Topic {topic['id'] + 1} ({topic['coverage']}% coverage)</h3>
+                <p class="topic-words">{words_html}</p>
+            </div>
+            """
         
         html_content = f"""
 <!DOCTYPE html>
 <html>
 <head>
-    <title>TopicWizard - Campaign {campaign_id}</title>
+    <title>Topic Visualization - Campaign {campaign_id}</title>
     <meta charset="utf-8">
     <style>
         body {{
@@ -2120,11 +2169,32 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         .info p {{
             margin: 5px 0;
         }}
-        iframe {{
-            width: 100%;
-            height: 800px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        .topics-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }}
+        .topic-card {{
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3d545f;
+        }}
+        .topic-card h3 {{
+            margin: 0 0 10px 0;
+            color: #3d545f;
+            font-size: 16px;
+        }}
+        .topic-words {{
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }}
+        .topic-words strong {{
+            color: #3d545f;
+            font-weight: 600;
         }}
         .note {{
             background: #fff3cd;
@@ -2133,22 +2203,28 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
             margin-top: 10px;
             font-size: 14px;
         }}
+        .warning {{
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #721c24;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>TopicWizard Visualization</h1>
+        <h1>Topic Model Visualization</h1>
         <div class="info">
             <p><strong>Campaign ID:</strong> {campaign_id}</p>
             <p><strong>Documents:</strong> {len(texts)}</p>
             <p><strong>Topics:</strong> {min(num_topics, len(texts) - 1)}</p>
         </div>
-        <div class="note">
-            <strong>Note:</strong> TopicWizard interactive visualization requires a separate service. 
-            This is a placeholder. To enable full TopicWizard, run: <code>python -m topicwizard.visualize</code> 
-            with the pipeline data.
+        {"<div class='warning'><strong>Note:</strong> TopicWizard interactive visualization is not available due to Python 3.12 compatibility issues with numba/llvmlite. Showing topic model results instead.</div>" if not TOPICWIZARD_AVAILABLE else ""}
+        <div class="topics-grid">
+            {topics_html}
         </div>
-        <p>Topic model has been trained. Interactive visualization coming soon.</p>
     </div>
 </body>
 </html>
@@ -2157,9 +2233,9 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         return HTMLResponse(content=html_content)
         
     except ImportError as e:
-        logger.error(f"TopicWizard not available: {e}")
+        logger.error(f"Required packages not available: {e}")
         return HTMLResponse(
-            content="<html><body><h1>TopicWizard Not Available</h1><p>Please install topic-wizard: pip install topic-wizard</p></body></html>",
+            content=f"<html><body><h1>Error</h1><p>Required packages not available: {str(e)}</p><p>Please install: pip install scikit-learn topic-wizard</p></body></html>",
             status_code=503
         )
     except Exception as e:

@@ -876,6 +876,7 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | **ModuleNotFoundError: No module named 'spacy'** | **Missing spacy package** | **pip install spacy>=3.7.0** |
 | **ModuleNotFoundError: No module named 'duckduckgo_search'** | **Missing duckduckgo-search** | **pip install duckduckgo-search>=6.0.0** |
 | **ModuleNotFoundError: No module named 'topicwizard'** | **Missing topic-wizard package** | **pip install topic-wizard>=0.5.0** |
+| **TopicWizard import fails with numba/llvmlite error** | **Python 3.12 compatibility issue** | **Endpoint falls back to basic visualization. Known issue: numba/llvmlite with Python 3.12. Workaround: Use Python 3.11 or wait for numba update** |
 | **TopicWizard visualization shows "Insufficient Data"** | **Campaign has <3 documents** | **Scrape more content (need at least 3 documents for topic modeling)** |
 | **SyntaxError: invalid syntax** | **Code syntax error** | **Check database.py line 928 for missing newline** |
 | Email not sending       | SMTP configuration   | Check `.env` SMTP settings |
@@ -1635,15 +1636,20 @@ anthropic>=0.69.0,<1.0.0  # langchain-anthropic requires langchain-core>=1.0.0,<
 #### **TopicWizard Dependency Compatibility** (v14)
 - **Package:** `topic-wizard>=0.5.0` - Interactive topic model visualization
 - **Dependencies:** Requires `scikit-learn>=1.0.0` (satisfied by `scikit-learn>=1.4.2`)
-- **Compatibility:** ✅ Fully compatible with all existing dependencies
-  - Uses existing `scikit-learn` (NMF, TfidfVectorizer) - no conflicts
-  - Compatible with `numpy>=1.21.0`, `scipy>=1.12.0` (already in requirements)
-  - No conflicts with `gensim`, `bertopic`, or other NLP packages
+- **Compatibility:** ⚠️ **KNOWN ISSUE with Python 3.12**
+  - TopicWizard uses `umap-learn` which depends on `numba`/`llvmlite`
+  - Python 3.12 has compatibility issues with numba/llvmlite (AttributeError during import)
+  - **Workaround:** Endpoint gracefully falls back to basic HTML visualization if TopicWizard import fails
+  - **Full compatibility:** ✅ Uses existing `scikit-learn` (NMF, TfidfVectorizer) - no conflicts
+  - **Compatible with:** `numpy>=1.21.0`, `scipy>=1.12.0` (already in requirements)
+  - **No conflicts with:** `gensim`, `bertopic`, or other NLP packages
 - **Usage:** TopicWizard visualization endpoint (`/campaigns/{campaign_id}/topicwizard`)
   - Requires at least 3 documents to generate visualization
   - Uses system model settings from database (TF-IDF, NMF parameters)
   - Limits to 100 documents for performance
-- **No Post-Installation Steps:** TopicWizard works immediately after `pip install topic-wizard`
-- **Verification:** `python3 -c "import topicwizard; print('✅ TopicWizard available')"`
+  - **Fallback:** If TopicWizard import fails, shows basic HTML with topics and top words
+- **No Post-Installation Steps:** TopicWizard works immediately after `pip install topic-wizard` (if Python < 3.12)
+- **Verification:** `python3 -c "import topicwizard; print('✅ TopicWizard available')"` (may fail on Python 3.12)
+- **Python 3.12 Workaround:** Endpoint automatically falls back to basic visualization - no action needed
 
 ---
