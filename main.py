@@ -102,11 +102,11 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to import authentication helpers: {e}")
     # Define fallback functions if import fails
-    def get_current_user(*args, **kwargs):
+    def get_current_user(request: Request = None, db: Session = None):
         raise HTTPException(status_code=401, detail="Authentication not available")
-    def verify_campaign_ownership(*args, **kwargs):
+    def verify_campaign_ownership(campaign_id: str = None, current_user = None, db: Session = None):
         raise HTTPException(status_code=401, detail="Authentication not available")
-    def get_admin_user(*args, **kwargs):
+    def get_admin_user(current_user = None):
         raise HTTPException(status_code=401, detail="Authentication not available")
 
 # Global variables for lazy initialization
