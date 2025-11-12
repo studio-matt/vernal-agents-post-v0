@@ -22,6 +22,7 @@ def insert_visualizer_settings():
     try:
         # Default visualizer settings
         default_settings = [
+            # Basic settings
             ("visualizer_max_documents", "100"),
             ("visualizer_top_words_per_topic", "10"),
             ("visualizer_grid_columns", "0"),
@@ -36,6 +37,30 @@ def insert_visualizer_settings():
             ("visualizer_background_color", "#ffffff"),
             ("visualizer_min_size", "20"),
             ("visualizer_max_size", "100"),
+            # Advanced styling
+            ("visualizer_opacity", "0.7"),
+            ("visualizer_font_size", "14"),
+            ("visualizer_font_weight", "600"),
+            ("visualizer_spacing", "20"),
+            ("visualizer_border_radius", "8"),
+            ("visualizer_border_width", "2"),
+            ("visualizer_border_color", "#333333"),
+            ("visualizer_shadow_enabled", "false"),
+            # Layout
+            ("visualizer_orientation", "horizontal"),
+            ("visualizer_alignment", "center"),
+            ("visualizer_padding", "20"),
+            ("visualizer_margin", "10"),
+            # Animation
+            ("visualizer_hover_effects", "true"),
+            ("visualizer_animation_speed", "300"),
+            # Visualization-specific
+            ("visualizer_word_map_layout", "force"),
+            ("visualizer_word_map_link_distance", "50"),
+            ("visualizer_topic_map_clustering", "true"),
+            ("visualizer_topic_map_distance", "100"),
+            ("visualizer_document_map_point_size", "5"),
+            ("visualizer_document_map_color_by", "topic"),
         ]
         
         inserted_count = 0

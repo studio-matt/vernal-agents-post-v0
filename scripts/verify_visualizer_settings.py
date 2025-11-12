@@ -82,3 +82,4 @@ if __name__ == "__main__":
     success = verify_visualizer_settings()
     sys.exit(0 if success else 1)
 
+

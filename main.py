@@ -2062,14 +2062,38 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 sort_order = "coverage"  # "coverage" or "topic_id"
                 show_coverage = True
                 show_top_weights = False
-                visualization_type = "scatter"  # "columns", "scatter", "bubble", "network", "word-cloud"
-                color_scheme = "rainbow"  # "single", "gradient", "rainbow", "categorical"
+                visualization_type = "scatter"  # All types: "columns", "scatter", "bubble", "network", "word-cloud", "word_map", "topic_map", "document_map", "heatmap", "treemap"
+                color_scheme = "rainbow"  # "single", "gradient", "rainbow", "categorical", "viridis", "plasma", "inferno"
                 size_scaling = True
                 show_title = False
                 show_info_box = False
                 background_color = "#ffffff"
                 min_size = 20
                 max_size = 100
+                # Advanced styling
+                opacity = 0.7
+                font_size = 14
+                font_weight = 600
+                spacing = 20
+                border_radius = 8
+                border_width = 2
+                border_color = "#333333"
+                shadow_enabled = False
+                # Layout
+                orientation = "horizontal"
+                alignment = "center"
+                padding = 20
+                margin = 10
+                # Animation
+                hover_effects = True
+                animation_speed = 300
+                # Visualization-specific
+                word_map_layout = "force"
+                word_map_link_distance = 50
+                topic_map_clustering = True
+                topic_map_distance = 100
+                document_map_point_size = 5
+                document_map_color_by = "topic"
                 
                 visualizer_settings = db_settings.query(SystemSettings).filter(
                     SystemSettings.setting_key.like("visualizer_%")
@@ -2097,10 +2121,12 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                     elif key == "show_top_weights":
                         show_top_weights = value.lower() == "true" if value else False
                     elif key == "visualization_type":
-                        visualization_type = value if value in ["columns", "scatter", "bubble", "network", "word-cloud"] else "scatter"
+                        valid_types = ["columns", "scatter", "bubble", "network", "word-cloud", "word_map", "topic_map", "document_map", "heatmap", "treemap"]
+                        visualization_type = value if value in valid_types else "scatter"
                         logger.info(f"📊 Loaded visualization_type: {visualization_type} (raw DB value: '{value}')")
                     elif key == "color_scheme":
-                        color_scheme = value if value in ["single", "gradient", "rainbow", "categorical"] else "rainbow"
+                        valid_schemes = ["single", "gradient", "rainbow", "categorical", "viridis", "plasma", "inferno"]
+                        color_scheme = value if value in valid_schemes else "rainbow"
                     elif key == "size_scaling":
                         size_scaling = value.lower() == "true" if value else True
                     elif key == "show_title":
@@ -2113,6 +2139,50 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                         min_size = int(value) if value else 20
                     elif key == "max_size":
                         max_size = int(value) if value else 100
+                    # Advanced styling
+                    elif key == "opacity":
+                        opacity = float(value) if value else 0.7
+                    elif key == "font_size":
+                        font_size = int(value) if value else 14
+                    elif key == "font_weight":
+                        font_weight = int(value) if value else 600
+                    elif key == "spacing":
+                        spacing = int(value) if value else 20
+                    elif key == "border_radius":
+                        border_radius = int(value) if value else 8
+                    elif key == "border_width":
+                        border_width = int(value) if value else 2
+                    elif key == "border_color":
+                        border_color = value if value else "#333333"
+                    elif key == "shadow_enabled":
+                        shadow_enabled = value.lower() == "true" if value else False
+                    # Layout
+                    elif key == "orientation":
+                        orientation = value if value in ["horizontal", "vertical"] else "horizontal"
+                    elif key == "alignment":
+                        alignment = value if value in ["left", "center", "right"] else "center"
+                    elif key == "padding":
+                        padding = int(value) if value else 20
+                    elif key == "margin":
+                        margin = int(value) if value else 10
+                    # Animation
+                    elif key == "hover_effects":
+                        hover_effects = value.lower() == "true" if value else True
+                    elif key == "animation_speed":
+                        animation_speed = int(value) if value else 300
+                    # Visualization-specific
+                    elif key == "word_map_layout":
+                        word_map_layout = value if value in ["force", "circular", "hierarchical"] else "force"
+                    elif key == "word_map_link_distance":
+                        word_map_link_distance = int(value) if value else 50
+                    elif key == "topic_map_clustering":
+                        topic_map_clustering = value.lower() == "true" if value else True
+                    elif key == "topic_map_distance":
+                        topic_map_distance = int(value) if value else 100
+                    elif key == "document_map_point_size":
+                        document_map_point_size = int(value) if value else 5
+                    elif key == "document_map_color_by":
+                        document_map_color_by = value if value in ["topic", "coverage", "document"] else "topic"
             finally:
                 db_settings.close()
         except Exception as e:
@@ -2201,13 +2271,13 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         
         # Helper function to get color for a topic based on scheme
         def get_topic_color(topic_idx, total_topics, coverage):
+            ratio = topic_idx / max(total_topics, 1)
             if color_scheme == "rainbow":
                 # Rainbow: hue from 0 to 360
-                hue = (topic_idx / max(total_topics, 1)) * 360
+                hue = ratio * 360
                 return f"hsl({hue}, 70%, 60%)"
             elif color_scheme == "gradient":
                 # Gradient: blue to purple
-                ratio = topic_idx / max(total_topics, 1)
                 r = int(59 + (147 - 59) * ratio)
                 g = int(130 + (112 - 130) * ratio)
                 b = int(246 + (219 - 246) * ratio)
@@ -2216,6 +2286,35 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 # Categorical: distinct colors
                 colors = ["#3b82f6", "#22c55e", "#a855f7", "#eab308", "#ef4444", "#64748b", "#f97316", "#06b6d4", "#8b5cf6", "#ec4899"]
                 return colors[topic_idx % len(colors)]
+            elif color_scheme == "viridis":
+                # Viridis: yellow-green-blue (scientific colormap)
+                if ratio < 0.25:
+                    r, g, b = int(68 + (72 - 68) * (ratio / 0.25)), int(1 + (40 - 1) * (ratio / 0.25)), int(84 + (54 - 84) * (ratio / 0.25))
+                elif ratio < 0.5:
+                    r, g, b = int(72 + (33 - 72) * ((ratio - 0.25) / 0.25)), int(40 + (144 - 40) * ((ratio - 0.25) / 0.25)), int(54 + (140 - 54) * ((ratio - 0.25) / 0.25))
+                elif ratio < 0.75:
+                    r, g, b = int(33 + (28 - 33) * ((ratio - 0.5) / 0.25)), int(144 + (127 - 144) * ((ratio - 0.5) / 0.25)), int(140 + (135 - 140) * ((ratio - 0.5) / 0.25))
+                else:
+                    r, g, b = int(28 + (253 - 28) * ((ratio - 0.75) / 0.25)), int(127 + (231 - 127) * ((ratio - 0.75) / 0.25)), int(135 + (37 - 135) * ((ratio - 0.75) / 0.25))
+                return f"rgb({r}, {g}, {b})"
+            elif color_scheme == "plasma":
+                # Plasma: purple-pink-yellow (high contrast)
+                if ratio < 0.33:
+                    r, g, b = int(13 + (75 - 13) * (ratio / 0.33)), int(8 + (10 - 8) * (ratio / 0.33)), int(135 + (130 - 135) * (ratio / 0.33))
+                elif ratio < 0.66:
+                    r, g, b = int(75 + (190 - 75) * ((ratio - 0.33) / 0.33)), int(10 + (40 - 10) * ((ratio - 0.33) / 0.33)), int(130 + (50 - 130) * ((ratio - 0.33) / 0.33))
+                else:
+                    r, g, b = int(190 + (253 - 190) * ((ratio - 0.66) / 0.34)), int(40 + (231 - 40) * ((ratio - 0.66) / 0.34)), int(50 + (37 - 50) * ((ratio - 0.66) / 0.34))
+                return f"rgb({r}, {g}, {b})"
+            elif color_scheme == "inferno":
+                # Inferno: black-red-yellow (dark theme)
+                if ratio < 0.33:
+                    r, g, b = int(0 + (20 - 0) * (ratio / 0.33)), int(0 + (11 - 0) * (ratio / 0.33)), int(4 + (52 - 4) * (ratio / 0.33))
+                elif ratio < 0.66:
+                    r, g, b = int(20 + (153 - 20) * ((ratio - 0.33) / 0.33)), int(11 + (52 - 11) * ((ratio - 0.33) / 0.33)), int(52 + (4 - 52) * ((ratio - 0.33) / 0.33))
+                else:
+                    r, g, b = int(153 + (252 - 153) * ((ratio - 0.66) / 0.34)), int(52 + (141 - 52) * ((ratio - 0.66) / 0.34)), int(4 + (89 - 4) * ((ratio - 0.66) / 0.34))
+                return f"rgb({r}, {g}, {b})"
             else:  # single
                 # Single: monochromatic with variations
                 base = 61  # #3d545f
@@ -2322,6 +2421,107 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
                 font_size = max(12, min(24, size / 4))
                 topics_html += f'<span class="cloud-word" style="font-size: {font_size}px; color: {color}; margin: 5px;">{words}</span>'
             topics_html += '</div>'
+            
+        elif visualization_type == "word_map":
+            # Word map: shows relationships between words
+            svg_width = 1000
+            svg_height = 600
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            # Place words in a force-directed layout
+            for i, topic in enumerate(topics_data):
+                angle = (i / total_topics) * 2 * 3.14159
+                x = svg_width / 2 + 200 * (0.8 if i % 2 == 0 else 1.2) * (i / total_topics)
+                y = svg_height / 2 + 200 * (0.8 if i % 3 == 0 else 1.2) * ((i * 1.3) / total_topics)
+                x = max(50, min(svg_width - 50, x))
+                y = max(50, min(svg_height - 50, y))
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                # Draw word nodes
+                for j, word in enumerate(topic['top_words'][:3]):
+                    word_x = x + (j - 1) * word_map_link_distance
+                    word_y = y + (j % 2) * 20
+                    topics_html += f'<circle cx="{word_x}" cy="{word_y}" r="15" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
+                    topics_html += f'<text x="{word_x}" y="{word_y + 5}" text-anchor="middle" font-size="{font_size}" fill="#333" font-weight="{font_weight}">{word}</text>'
+            topics_html += '</svg>'
+            
+        elif visualization_type == "topic_map":
+            # Topic map: shows topic similarity/clustering
+            svg_width = 1000
+            svg_height = 600
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            center_x, center_y = svg_width / 2, svg_height / 2
+            for i, topic in enumerate(topics_data):
+                angle = (i / total_topics) * 2 * 3.14159
+                distance = topic_map_distance if topic_map_clustering else 150
+                x = center_x + distance * (1 + (i % 3) * 0.2) * (0.9 if i % 2 == 0 else 1.1) * (i / total_topics)
+                y = center_y + distance * (1 + (i % 3) * 0.2) * (0.9 if i % 2 == 0 else 1.1) * ((i * 1.4) / total_topics)
+                x = max(60, min(svg_width - 60, x))
+                y = max(60, min(svg_height - 60, y))
+                size = get_topic_size(topic['coverage'], max_coverage)
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                topics_html += f'<circle cx="{x}" cy="{y}" r="{size/2}" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
+                label_text = ", ".join(topic['top_words'][:2])
+                topics_html += f'<text x="{x}" y="{y + size/2 + 15}" text-anchor="middle" font-size="{font_size}" fill="#333" font-weight="{font_weight}">{label_text}</text>'
+            topics_html += '</svg>'
+            
+        elif visualization_type == "document_map":
+            # Document map: shows document clustering
+            svg_width = 1000
+            svg_height = 600
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            # Represent documents as points colored by topic
+            for i, topic in enumerate(topics_data):
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                # Place multiple points per topic to represent documents
+                num_points = max(3, int(topic['coverage'] / 10))
+                for j in range(num_points):
+                    angle = (i / total_topics + j / num_points) * 2 * 3.14159
+                    x = svg_width / 2 + 150 * (1 + j * 0.1) * (0.8 if i % 2 == 0 else 1.2) * (i / total_topics)
+                    y = svg_height / 2 + 150 * (1 + j * 0.1) * (0.8 if i % 3 == 0 else 1.2) * ((i * 1.3) / total_topics)
+                    x = max(20, min(svg_width - 20, x))
+                    y = max(20, min(svg_height - 20, y))
+                    topics_html += f'<circle cx="{x}" cy="{y}" r="{document_map_point_size}" fill="{color}" opacity="{opacity}"/>'
+            topics_html += '</svg>'
+            
+        elif visualization_type == "heatmap":
+            # Heatmap: topic-document matrix
+            topics_html = '<div class="heatmap-container">'
+            topics_html += '<table class="heatmap-table">'
+            # Header row
+            topics_html += '<tr><th>Topic</th>'
+            for i in range(min(10, len(texts))):
+                topics_html += f'<th>Doc {i+1}</th>'
+            topics_html += '</tr>'
+            # Data rows
+            for i, topic in enumerate(topics_data):
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                topics_html += f'<tr><td style="font-weight: {font_weight};">Topic {i+1}</td>'
+                for j in range(min(10, len(texts))):
+                    intensity = (i + j) % 10 / 10  # Simplified intensity
+                    bg_color = color.replace('rgb', 'rgba').replace(')', f', {intensity})')
+                    topics_html += f'<td style="background: {bg_color}; padding: 5px;"></td>'
+                topics_html += '</tr>'
+            topics_html += '</table></div>'
+            
+        elif visualization_type == "treemap":
+            # Treemap: hierarchical coverage visualization
+            svg_width = 1000
+            svg_height = 600
+            topics_html = f'<svg width="{svg_width}" height="{svg_height}" style="background: {background_color}; border-radius: {border_radius}px;">'
+            # Calculate total coverage for sizing
+            total_coverage = sum(t['coverage'] for t in topics_data)
+            current_x, current_y = 0, 0
+            row_height = svg_height / max(3, int(len(topics_data) ** 0.5))
+            for i, topic in enumerate(topics_data):
+                width = (topic['coverage'] / total_coverage) * svg_width if total_coverage > 0 else svg_width / len(topics_data)
+                if current_x + width > svg_width:
+                    current_x = 0
+                    current_y += row_height
+                color = get_topic_color(i, total_topics, topic['coverage'])
+                topics_html += f'<rect x="{current_x}" y="{current_y}" width="{width}" height="{row_height}" fill="{color}" opacity="{opacity}" stroke="{border_color}" stroke-width="{border_width}"/>'
+                label_text = ", ".join(topic['top_words'][:2])
+                topics_html += f'<text x="{current_x + width/2}" y="{current_y + row_height/2}" text-anchor="middle" font-size="{font_size}" fill="#333" font-weight="{font_weight}">{label_text}</text>'
+                current_x += width
+            topics_html += '</svg>'
             
         else:  # columns (default)
             # Column cards (grid layout)

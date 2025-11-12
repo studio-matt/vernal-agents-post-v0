@@ -57,3 +57,4 @@ if __name__ == "__main__":
     success = create_research_data_table()
     sys.exit(0 if success else 1)
 
+
