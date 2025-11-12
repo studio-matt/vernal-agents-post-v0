@@ -2178,7 +2178,12 @@ def compare_topics(campaign_id: str, method: str = "system", current_user = Depe
 
 # TopicWizard Visualization endpoint
 @app.get("/campaigns/{campaign_id}/topicwizard")
-def get_topicwizard_visualization(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_topicwizard_visualization(
+    campaign_id: str,
+    request: Request,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
     Generate TopicWizard visualization for campaign topics.
     Returns HTML page with interactive TopicWizard interface.
@@ -2186,7 +2191,53 @@ def get_topicwizard_visualization(campaign_id: str, current_user = Depends(get_c
     Note: TopicWizard may have compatibility issues with Python 3.12 and numba/llvmlite.
     If import fails, returns a fallback visualization using the topic model data.
     REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
+    
+    Supports authentication via:
+    - Authorization header (Bearer token) - preferred
+    - Query parameter 'token' - for iframe requests
     """
+    # Get token from header or query parameter (for iframe support)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.replace("Bearer ", "")
+    elif not token:
+        # Try to get from query parameter
+        token = request.query_params.get("token")
+    
+    if not token:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            content="<html><body><h1>Authentication Required</h1><p>Please provide a valid authentication token.</p></body></html>",
+            status_code=401
+        )
+    
+    # Verify token and get user
+    try:
+        from utils import verify_token
+        from models import User
+        payload = verify_token(token)
+        user_id = payload.get("sub")
+        if not user_id:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(
+                content="<html><body><h1>Invalid Token</h1><p>Token is missing user ID.</p></body></html>",
+                status_code=401
+            )
+        current_user = db.query(User).filter(User.id == int(user_id)).first()
+        if not current_user:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(
+                content="<html><body><h1>User Not Found</h1><p>User associated with token not found.</p></body></html>",
+                status_code=401
+            )
+    except Exception as e:
+        logger.error(f"Authentication error in topicwizard endpoint: {e}")
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            content=f"<html><body><h1>Authentication Failed</h1><p>Invalid or expired token.</p></body></html>",
+            status_code=401
+        )
+    
     # Verify campaign ownership
     from models import Campaign
     campaign = db.query(Campaign).filter(
@@ -2932,13 +2983,64 @@ def get_topicwizard_visualization(campaign_id: str, current_user = Depends(get_c
 
 # Knowledge Graph Visualization endpoint
 @app.get("/campaigns/{campaign_id}/knowledge-graph")
-def get_knowledge_graph_visualization(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_knowledge_graph_visualization(
+    campaign_id: str, 
+    request: Request,
+    token: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     """
     Generate knowledge graph visualization for campaign using NetworkX and pyvis.
     Uses existing extracted data: entities, topics, and word cloud from /research endpoint.
     Returns HTML page with interactive knowledge graph.
     REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
+    
+    Supports authentication via:
+    - Authorization header (Bearer token) - preferred
+    - Query parameter 'token' - for iframe requests
     """
+    # Get token from header or query parameter (for iframe support)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.replace("Bearer ", "")
+    elif not token:
+        # Try to get from query parameter
+        token = request.query_params.get("token")
+    
+    if not token:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            content="<html><body><h1>Authentication Required</h1><p>Please provide a valid authentication token.</p></body></html>",
+            status_code=401
+        )
+    
+    # Verify token and get user
+    try:
+        from utils import verify_token
+        from models import User
+        payload = verify_token(token)
+        user_id = payload.get("sub")
+        if not user_id:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(
+                content="<html><body><h1>Invalid Token</h1><p>Token is missing user ID.</p></body></html>",
+                status_code=401
+            )
+        current_user = db.query(User).filter(User.id == int(user_id)).first()
+        if not current_user:
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(
+                content="<html><body><h1>User Not Found</h1><p>User associated with token not found.</p></body></html>",
+                status_code=401
+            )
+    except Exception as e:
+        logger.error(f"Authentication error in knowledge graph endpoint: {e}")
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(
+            content=f"<html><body><h1>Authentication Failed</h1><p>Invalid or expired token.</p></body></html>",
+            status_code=401
+        )
+    
     # Verify campaign ownership
     from models import Campaign
     campaign = db.query(Campaign).filter(
