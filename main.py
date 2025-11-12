@@ -47,13 +47,6 @@ app.add_middleware(
 )
 
 # Explicitly handle OPTIONS requests for CORS preflight
-ALLOWED_ORIGINS = [
-    "https://machine.vernalcontentum.com",
-    "https://themachine.vernalcontentum.com",
-    "http://localhost:3000",
-    "http://localhost:3001",
-]
-
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):
     """Handle CORS preflight OPTIONS requests"""
