@@ -3308,21 +3308,21 @@ def get_author_personalities(current_user = Depends(get_current_user), db: Sessi
         )
 
 @app.post("/author_personalities")
-def create_author_personality(personality_data: AuthorPersonalityCreate, db: Session = Depends(get_db)):
-    """Create author personality - REAL database save"""
+def create_author_personality(personality_data: AuthorPersonalityCreate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Create a new author personality - REQUIRES AUTHENTICATION"""
     try:
         from models import AuthorPersonality
-        logger.info(f"Creating author personality: {personality_data.name}")
+        logger.info(f"Creating author personality: {personality_data.name} for user {current_user.id}")
         
         # Generate unique ID
         personality_id = str(uuid.uuid4())
         
-        # Create personality in database
+        # Create personality in database with user_id
         personality = AuthorPersonality(
             id=personality_id,
             name=personality_data.name,
             description=personality_data.description,
-            user_id=None  # Can be extended to associate with logged-in user
+            user_id=current_user.id  # Associate with logged-in user
         )
         
         db.add(personality)
@@ -3353,15 +3353,18 @@ def create_author_personality(personality_data: AuthorPersonalityCreate, db: Ses
         )
 
 @app.put("/author_personalities/{personality_id}")
-def update_author_personality(personality_id: str, personality_data: AuthorPersonalityUpdate, db: Session = Depends(get_db)):
-    """Update author personality - REAL database update"""
+def update_author_personality(personality_id: str, personality_data: AuthorPersonalityUpdate, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Update an author personality - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
         from models import AuthorPersonality
-        personality = db.query(AuthorPersonality).filter(AuthorPersonality.id == personality_id).first()
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
         if not personality:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Author personality not found"
+                detail="Author personality not found or access denied"
             )
         
         # Update fields if provided
@@ -3400,15 +3403,18 @@ def update_author_personality(personality_id: str, personality_data: AuthorPerso
         )
 
 @app.delete("/author_personalities/{personality_id}")
-def delete_author_personality(personality_id: str, db: Session = Depends(get_db)):
-    """Delete author personality - REAL database deletion"""
+def delete_author_personality(personality_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete an author personality - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
         from models import AuthorPersonality
-        personality = db.query(AuthorPersonality).filter(AuthorPersonality.id == personality_id).first()
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
         if not personality:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Author personality not found"
+                detail="Author personality not found or access denied"
             )
         db.delete(personality)
         db.commit()
