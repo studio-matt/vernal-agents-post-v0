@@ -9,8 +9,13 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Add parent directory to path so we can import database and models
+script_dir = Path(__file__).parent
+parent_dir = script_dir.parent
+sys.path.insert(0, str(parent_dir))
+
 # Load environment variables from .env
-env_path = Path(__file__).parent.parent / '.env'
+env_path = parent_dir / '.env'
 load_dotenv(env_path)
 
 from database import SessionLocal
