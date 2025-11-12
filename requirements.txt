@@ -48,6 +48,7 @@ hdbscan>=0.8.33
 numba>=0.59.1
 llvmlite>=0.42.0
 pynndescent>=0.5.11
+topic-wizard>=0.5.0  # Interactive topic model visualization
 
 # =============================================================================
 # DOCUMENT PROCESSING

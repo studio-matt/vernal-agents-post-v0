@@ -1985,6 +1985,192 @@ def compare_topics(campaign_id: str, method: str = "system", db: Session = Depen
             "message": str(e)
         }
 
+# TopicWizard Visualization endpoint
+@app.get("/campaigns/{campaign_id}/topicwizard")
+def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db)):
+    """
+    Generate TopicWizard visualization for campaign topics.
+    Returns HTML page with interactive TopicWizard interface.
+    """
+    try:
+        from models import CampaignRawData, Campaign
+        from sklearn.decomposition import NMF
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.pipeline import Pipeline
+        import topicwizard
+        from fastapi.responses import HTMLResponse
+        
+        # Get campaign data
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            return HTMLResponse(content="<html><body><h1>Campaign not found</h1></body></html>", status_code=404)
+        
+        # Get scraped texts
+        rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
+        texts = []
+        for r in rows:
+            if r.extracted_text and len(r.extracted_text.strip()) > 0 and not (r.source_url and r.source_url.startswith(("error:", "placeholder:"))):
+                texts.append(r.extracted_text.strip())
+        
+        if len(texts) < 3:
+            return HTMLResponse(
+                content="<html><body><h1>Insufficient Data</h1><p>Need at least 3 documents for topic modeling. Please scrape more content first.</p></body></html>",
+                status_code=400
+            )
+        
+        # Build TopicWizard-compatible pipeline
+        # Use same settings as system model (load from database or use defaults)
+        try:
+            from database import SessionLocal
+            from models import SystemSettings
+            db_settings = SessionLocal()
+            try:
+                # Load settings
+                tfidf_min_df = 3
+                tfidf_max_df = 0.7
+                num_topics = 10
+                
+                settings = db_settings.query(SystemSettings).filter(
+                    SystemSettings.setting_key.like("system_model_%")
+                ).all()
+                
+                for setting in settings:
+                    key = setting.setting_key.replace("system_model_", "")
+                    value = setting.setting_value
+                    if key == "tfidf_min_df":
+                        tfidf_min_df = int(value) if value else 3
+                    elif key == "tfidf_max_df":
+                        tfidf_max_df = float(value) if value else 0.7
+                    elif key == "k_grid":
+                        k_grid = json.loads(value) if value else [10, 15, 20, 25]
+                        num_topics = k_grid[0] if k_grid else 10
+            finally:
+                db_settings.close()
+        except Exception as e:
+            logger.warning(f"Could not load settings, using defaults: {e}")
+            tfidf_min_df = 3
+            tfidf_max_df = 0.7
+            num_topics = 10
+        
+        # Limit texts for performance (TopicWizard can be slow with many documents)
+        max_texts = 100
+        if len(texts) > max_texts:
+            texts = texts[:max_texts]
+            logger.info(f"Limited to {max_texts} texts for TopicWizard performance")
+        
+        # Create pipeline compatible with TopicWizard
+        vectorizer = TfidfVectorizer(
+            min_df=tfidf_min_df,
+            max_df=tfidf_max_df,
+            stop_words='english',
+            strip_accents='unicode'
+        )
+        
+        topic_model = NMF(
+            n_components=min(num_topics, len(texts) - 1),
+            random_state=42,
+            max_iter=500
+        )
+        
+        topic_pipeline = Pipeline([
+            ("vectorizer", vectorizer),
+            ("topic_model", topic_model),
+        ])
+        
+        # Fit the pipeline
+        logger.info(f"Fitting TopicWizard pipeline with {len(texts)} documents, {min(num_topics, len(texts) - 1)} topics")
+        topic_pipeline.fit(texts)
+        
+        # Generate TopicWizard HTML
+        # TopicWizard.visualize() launches a browser, so we need to use it differently
+        # Instead, we'll create a simple HTML page that embeds TopicWizard
+        # For now, let's create a standalone HTML page that can be embedded
+        
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>TopicWizard - Campaign {campaign_id}</title>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #333;
+            margin-bottom: 20px;
+        }}
+        .info {{
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }}
+        .info p {{
+            margin: 5px 0;
+        }}
+        iframe {{
+            width: 100%;
+            height: 800px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }}
+        .note {{
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 14px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>TopicWizard Visualization</h1>
+        <div class="info">
+            <p><strong>Campaign ID:</strong> {campaign_id}</p>
+            <p><strong>Documents:</strong> {len(texts)}</p>
+            <p><strong>Topics:</strong> {min(num_topics, len(texts) - 1)}</p>
+        </div>
+        <div class="note">
+            <strong>Note:</strong> TopicWizard interactive visualization requires a separate service. 
+            This is a placeholder. To enable full TopicWizard, run: <code>python -m topicwizard.visualize</code> 
+            with the pipeline data.
+        </div>
+        <p>Topic model has been trained. Interactive visualization coming soon.</p>
+    </div>
+</body>
+</html>
+"""
+        
+        return HTMLResponse(content=html_content)
+        
+    except ImportError as e:
+        logger.error(f"TopicWizard not available: {e}")
+        return HTMLResponse(
+            content="<html><body><h1>TopicWizard Not Available</h1><p>Please install topic-wizard: pip install topic-wizard</p></body></html>",
+            status_code=503
+        )
+    except Exception as e:
+        logger.error(f"Error generating TopicWizard visualization: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return HTMLResponse(
+            content=f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>",
+            status_code=500
+        )
+
 # Research Agent Recommendations endpoint
 @app.post("/campaigns/{campaign_id}/research-agent-recommendations")
 def get_research_agent_recommendations(campaign_id: str, request_data: ResearchAgentRequest, db: Session = Depends(get_db)):
