@@ -2467,7 +2467,11 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
 </html>
 """
         
-        return HTMLResponse(content=html_content)
+        response = HTMLResponse(content=html_content)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
         
     except ImportError as e:
         logger.error(f"Required packages not available: {e}")
@@ -2480,7 +2484,7 @@ def get_topicwizard_visualization(campaign_id: str, db: Session = Depends(get_db
         import traceback
         logger.error(traceback.format_exc())
         return HTMLResponse(
-            content=f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>",
+            content=f"<html><body><h1>Error</h1><p>{str(e)}</p><p>Check backend logs for details.</p></body></html>",
             status_code=500
         )
 
