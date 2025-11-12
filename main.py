@@ -37,6 +37,43 @@ ALLOWED_ORIGINS = [
     "http://localhost:3001",
 ]
 
+# Add middleware to handle CORS preflight OPTIONS requests
+@app.middleware("http")
+async def cors_handler(request: Request, call_next):
+    """Handle CORS preflight and add CORS headers to all responses"""
+    origin = request.headers.get("Origin", "")
+    
+    # Handle OPTIONS preflight requests
+    if request.method == "OPTIONS":
+        if origin in ALLOWED_ORIGINS:
+            return JSONResponse(
+                content={},
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Max-Age": "3600",
+                }
+            )
+        else:
+            return JSONResponse(
+                content={"error": "Origin not allowed"},
+                status_code=403
+            )
+    
+    # Process the request
+    response = await call_next(request)
+    
+    # Add CORS headers to all responses
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
