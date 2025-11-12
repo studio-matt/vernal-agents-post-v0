@@ -44,34 +44,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=3600,
 )
-
-# Explicitly handle OPTIONS requests for CORS preflight
-@app.options("/{full_path:path}")
-async def options_handler(request: Request, full_path: str):
-    """Handle CORS preflight OPTIONS requests"""
-    origin = request.headers.get("Origin", "")
-    # Validate origin is in allowed list
-    if origin in ALLOWED_ORIGINS:
-        return JSONResponse(
-            content={},
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Max-Age": "3600",
-            }
-        )
-    else:
-        # Origin not allowed
-        return JSONResponse(
-            content={"error": "Origin not allowed"},
-            status_code=403,
-            headers={
-                "Access-Control-Allow-Origin": origin if origin else "*",
-            }
-        )
 
 # --- ROUTER INCLUDES MUST BE HERE ---
 # This is REQUIRED for FastAPI to properly register endpoints
