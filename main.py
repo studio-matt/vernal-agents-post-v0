@@ -3634,9 +3634,7 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
 # Generate Ideas endpoint (for content queue)
 @app.post("/generate-ideas")
 async def generate_ideas_endpoint(
-    topics: str = None,
-    posts: str = None,
-    days: str = None,
+    request: Request,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -3649,6 +3647,7 @@ async def generate_ideas_endpoint(
     try:
         from machine_agent import IdeaGeneratorAgent
         from langchain_openai import ChatOpenAI
+        from fastapi import Form
         import os
         from dotenv import load_dotenv
         
