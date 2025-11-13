@@ -144,8 +144,9 @@ Generate the content following the instructions above.
 
 
 class IdeaGeneratorAgent:
-    def __init__(self, llm):
+    def __init__(self, llm, db_session=None):
         self.llm = llm
+        self.db_session = db_session
 
     async def generate_ideas(self, topics: List[str], posts: List[str], days: List[str]) -> List[str]:
         try:
@@ -156,16 +157,20 @@ class IdeaGeneratorAgent:
                 context += f"Post {i}: {post}\n"
             context += "\nNumber of ideas to generate: " + str(len(days))
 
-            # Craft the prompt
-            prompt = f"""
-            You are an expert in idea generation. Given the following topics and scraped posts, generate exactly {len(days)} creative, one-line ideas that are meaningful, actionable, and relevant to the provided topics and posts. Each idea should be a concise, complete sentence or phrase (e.g., "Leverage AI for Whale Communication Studies"). Avoid vague or incomplete ideas, and do not include explanations or additional text. Return the result as a JSON array of strings, with no markdown formatting.
+            # Get prompt from database settings, fallback to default
+            prompt_template = self._get_prompt_from_settings()
+            if not prompt_template:
+                # Fallback to default prompt
+                prompt_template = """You are an expert in idea generation. Given the following topics and scraped posts, generate exactly {num_ideas} creative, one-line ideas that are meaningful, actionable, and relevant to the provided topics and posts. Each idea should be a concise, complete sentence or phrase (e.g., "Leverage AI for Whale Communication Studies"). Avoid vague or incomplete ideas, and do not include explanations or additional text. Return the result as a JSON array of strings, with no markdown formatting.
 
-            Example output:
-            ["Leverage AI for Whale Communication Studies", "Study Humpback Whale Bubble Rings", "Explore Nonhuman Intelligence Insights"]
+Example output:
+["Leverage AI for Whale Communication Studies", "Study Humpback Whale Bubble Rings", "Explore Nonhuman Intelligence Insights"]
 
-            Context:
-            {context}
-            """
+Context:
+{context}"""
+            
+            # Format the prompt with context and num_ideas
+            prompt = prompt_template.format(num_ideas=len(days), context=context)
 
             # Call the LLM
             response = await self.llm.ainvoke(prompt)
@@ -193,6 +198,21 @@ class IdeaGeneratorAgent:
         except Exception as e:
             logger.error(f"Idea generation error: {str(e)}")
             return self._generate_fallback_ideas(topics, len(days))
+
+    def _get_prompt_from_settings(self) -> Optional[str]:
+        """Get the idea generator prompt from database settings."""
+        if not self.db_session:
+            return None
+        try:
+            from models import SystemSettings
+            setting = self.db_session.query(SystemSettings).filter(
+                SystemSettings.setting_key == "research_agent_idea-generator_prompt"
+            ).first()
+            if setting and setting.setting_value:
+                return setting.setting_value
+        except Exception as e:
+            logger.warning(f"Could not load idea generator prompt from settings: {e}")
+        return None
 
     def _generate_fallback_ideas(self, topics: List[str], num_ideas: int) -> List[str]:
         """Generate fallback ideas based on topics."""

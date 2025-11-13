@@ -3684,7 +3684,7 @@ async def generate_ideas_endpoint(
         
         # Initialize LLM and agent
         llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
-        agent = IdeaGeneratorAgent(llm)
+        agent = IdeaGeneratorAgent(llm, db_session=db)
         
         # Generate ideas
         ideas = await agent.generate_ideas(topics_list, posts_list, days_list)
@@ -3769,6 +3769,14 @@ Based on this data, provide:
 4. Suggested hashtag strategies for different platforms
 
 Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+            
+            "research_agent_idea-generator_prompt": """You are an expert in idea generation. Given the following topics and scraped posts, generate exactly {num_ideas} creative, one-line ideas that are meaningful, actionable, and relevant to the provided topics and posts. Each idea should be a concise, complete sentence or phrase (e.g., "Leverage AI for Whale Communication Studies"). Avoid vague or incomplete ideas, and do not include explanations or additional text. Return the result as a JSON array of strings, with no markdown formatting.
+
+Example output:
+["Leverage AI for Whale Communication Studies", "Study Humpback Whale Bubble Rings", "Explore Nonhuman Intelligence Insights"]
+
+Context:
+{context}""",
         }
         
         # Add keyword expansion prompt
@@ -3800,6 +3808,7 @@ Expansion:"""
                         "topical-map": "Topical Map Agent",
                         "knowledge-graph": "Knowledge Graph Agent",
                         "hashtag-generator": "Hashtag Generator Agent",
+                        "idea-generator": "Idea Generator Agent",
                     }
                     description = f"Default prompt for {agent_labels.get(agent_type, agent_type)}"
                 
