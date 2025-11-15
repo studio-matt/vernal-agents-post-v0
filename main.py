@@ -3691,7 +3691,7 @@ async def generate_ideas_endpoint(
         
         return {
             "status": "success",
-            "ideas": ideas
+            "ideas": ideas  
         }
     except Exception as e:
         logger.error(f"Error generating ideas: {e}")
@@ -4003,6 +4003,420 @@ def delete_author_personality(personality_id: str, current_user = Depends(get_cu
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete author personality: {str(e)}"
         )
+
+# Campaign Planning Endpoint
+@app.post("/campaigns/{campaign_id}/plan")
+async def create_campaign_plan(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a campaign plan based on weeks, scheduling settings, and content queue items.
+    Generates parent/children idea hierarchy and knowledge graph locations.
+    
+    Request body:
+    {
+        "scheduling": {
+            "weeks": 4,
+            "posts_per_day": {"facebook": 3, "instagram": 2},
+            "posts_per_week": {"facebook": 15, "instagram": 10},
+            "start_date": "2025-01-01",
+            "day_frequency": "selected_days",  # daily, selected_days, every_other, every_first, etc.
+            "post_frequency_type": "weeks",
+            "post_frequency_value": 4
+        },
+        "content_queue_items": [...],  # Checked items from content queue
+        "landing_page_url": "https://example.com/landing"
+    }
+    """
+    try:
+        from models import Campaign, SystemSettings
+        import json
+        from datetime import datetime, timedelta
+        from machine_agent import IdeaGeneratorAgent
+        from langchain_openai import ChatOpenAI
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        
+        # Verify campaign ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        scheduling = request_data.get("scheduling", {})
+        content_queue_items = request_data.get("content_queue_items", [])
+        landing_page_url = request_data.get("landing_page_url", "")
+        max_refactoring = request_data.get("max_refactoring", 3)  # Default max refactoring attempts
+        
+        weeks = scheduling.get("weeks", 4)
+        posts_per_day = scheduling.get("posts_per_day", {})
+        start_date_str = scheduling.get("start_date")
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else datetime.now()
+        
+        # Get knowledge graph location selection prompt from admin settings
+        kg_location_prompt_setting = db.query(SystemSettings).filter(
+            SystemSettings.setting_key == "knowledge_graph_location_selection_prompt"
+        ).first()
+        
+        kg_location_prompt = kg_location_prompt_setting.setting_value if kg_location_prompt_setting else """Given a parent idea and existing knowledge graph locations used, select a new location on the knowledge graph that:
+1. Supports the same core topic as the parent idea
+2. Has not been used recently for this campaign
+3. Provides a different angle or perspective
+4. Can drive traffic to the landing page
+
+Return the knowledge graph location (node name or entity) that should be used for the next post."""
+        
+        # Initialize LLM for planning
+        api_key = os.getenv("OPENAI_API_KEY") or (current_user.openai_key if hasattr(current_user, 'openai_key') else None)
+        if not api_key:
+            raise HTTPException(status_code=400, detail="OPENAI_API_KEY not configured")
+        
+        llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
+        
+        # Build context from content queue items
+        queue_context = "\n".join([
+            f"- {item.get('title', item.get('text', str(item)))}"
+            for item in content_queue_items
+        ])
+        
+        # Generate campaign plan with parent/children structure
+        plan = {
+            "weeks": [],
+            "landing_page_url": landing_page_url,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # For each week, generate parent ideas and children
+        for week_num in range(1, weeks + 1):
+            week_plan = {
+                "week_num": week_num,
+                "parent_ideas": [],
+                "knowledge_graph_locations": []
+            }
+            
+            # Generate parent ideas for this week (one per day, or based on scheduling)
+            # For simplicity, generate one parent idea per day of the week
+            days_in_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            
+            for day in days_in_week[:5]:  # Weekdays only for now
+                # Generate parent idea for this day
+                parent_prompt = f"""Based on the following content queue items, generate a parent idea for {day} of week {week_num}:
+
+Content Queue Items:
+{queue_context}
+
+Generate a parent idea that:
+1. Is based on the content queue items
+2. Can be broken down into supporting children concepts
+3. Drives traffic to: {landing_page_url}
+4. Is suitable for multiple posts on the same day
+
+Return only the parent idea, no additional text."""
+                
+                parent_response = llm.invoke(parent_prompt)
+                parent_idea = parent_response.content.strip()
+                
+                # Generate children concepts for this parent
+                children_prompt = f"""Given this parent idea: "{parent_idea}"
+
+Generate 3-5 children concepts that support this parent idea. Each child should:
+1. Focus on a different aspect of the parent
+2. Be suitable for a single post
+3. Drive traffic to: {landing_page_url}
+
+Return as a numbered list."""
+                
+                children_response = llm.invoke(children_prompt)
+                children_text = children_response.content.strip()
+                children = [line.strip() for line in children_text.split("\n") if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith("-"))]
+                
+                # Clean up children (remove numbering)
+                children = [c.split(". ", 1)[-1] if ". " in c else c.replace("- ", "").strip() for c in children]
+                
+                # Select knowledge graph location for this parent idea
+                kg_location_prompt_full = f"""{kg_location_prompt}
+
+Parent Idea: {parent_idea}
+Existing Locations Used: {', '.join(week_plan['knowledge_graph_locations']) if week_plan['knowledge_graph_locations'] else 'None'}
+
+Select a knowledge graph location for this parent idea."""
+                
+                kg_response = llm.invoke(kg_location_prompt_full)
+                kg_location = kg_response.content.strip()
+                
+                week_plan["parent_ideas"].append({
+                    "day": day,
+                    "idea": parent_idea,
+                    "children": children,
+                    "knowledge_graph_location": kg_location
+                })
+                week_plan["knowledge_graph_locations"].append(kg_location)
+            
+            plan["weeks"].append(week_plan)
+        
+        # Save plan to campaign
+        campaign.campaign_plan_json = json.dumps(plan)
+        campaign.scheduling_settings_json = json.dumps(scheduling)
+        campaign.content_queue_items_json = json.dumps(content_queue_items)
+        db.commit()
+        
+        return {
+            "status": "success",
+            "plan": plan,
+            "message": f"Campaign plan created for {weeks} weeks"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating campaign plan: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Content Pre-population Endpoint
+@app.post("/campaigns/{campaign_id}/prepopulate-content")
+async def prepopulate_campaign_content(
+    campaign_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Pre-populate content for the entire campaign lifecycle based on the campaign plan.
+    Creates draft content for all scheduled posts that can be edited until scheduled time.
+    Images are NOT generated until push time to save tokens.
+    """
+    try:
+        from models import Campaign, Content, SystemSettings
+        from crewai_workflows import create_content_generation_crew
+        import json
+        from datetime import datetime, timedelta
+        
+        # Verify campaign ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        if not campaign.campaign_plan_json:
+            raise HTTPException(status_code=400, detail="Campaign plan not found. Please create a plan first.")
+        
+        plan = json.loads(campaign.campaign_plan_json)
+        scheduling = json.loads(campaign.scheduling_settings_json) if campaign.scheduling_settings_json else {}
+        content_queue_items = json.loads(campaign.content_queue_items_json) if campaign.content_queue_items_json else []
+        
+        start_date_str = scheduling.get("start_date")
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d") if start_date_str else datetime.now()
+        posts_per_day = scheduling.get("posts_per_day", {})
+        landing_page_url = plan.get("landing_page_url", "")
+        
+        # Build context from content queue items
+        queue_context = "\n".join([
+            f"- {item.get('title', item.get('text', str(item)))}"
+            for item in content_queue_items
+        ])
+        
+        generated_content = []
+        
+        # Generate content for each week in the plan
+        for week_data in plan.get("weeks", []):
+            week_num = week_data.get("week_num", 1)
+            
+            for parent_data in week_data.get("parent_ideas", []):
+                day = parent_data.get("day")
+                parent_idea = parent_data.get("idea")
+                children = parent_data.get("children", [])
+                kg_location = parent_data.get("knowledge_graph_location", "")
+                
+                # Calculate actual date for this day
+                day_offset = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(day)
+                week_start = start_date + timedelta(weeks=week_num - 1)
+                # Find the Monday of this week
+                days_since_monday = (week_start.weekday()) % 7
+                monday_of_week = week_start - timedelta(days=days_since_monday)
+                post_date = monday_of_week + timedelta(days=day_offset)
+                
+                # Generate content for each platform
+                for platform, posts_count in posts_per_day.items():
+                    # Generate posts for this platform on this day
+                    # If multiple posts, use different children or knowledge graph locations
+                    for post_num in range(posts_count):
+                        # Select content source (parent idea, child, or knowledge graph location)
+                        if post_num == 0:
+                            # First post uses parent idea
+                            content_source = parent_idea
+                        elif post_num <= len(children):
+                            # Use child concept
+                            content_source = children[post_num - 1]
+                        else:
+                            # Use knowledge graph location (refactored)
+                            content_source = f"{parent_idea} (focusing on {kg_location})"
+                        
+                        # Build writing context
+                        writing_context = f"""Content Queue Foundation:
+{queue_context}
+
+Parent Idea: {parent_idea}
+Content Source: {content_source}
+Knowledge Graph Location: {kg_location}
+Landing Page: {landing_page_url}
+
+Generate content for {platform} that:
+1. Is based on the content source above
+2. Drives traffic to the landing page
+3. Focuses on the knowledge graph location
+4. Is suitable for {platform} platform"""
+                        
+                        # Generate content using CrewAI workflow
+                        try:
+                            crew_result = create_content_generation_crew(
+                                text=writing_context,
+                                week=week_num,
+                                platform=platform.lower(),
+                                days_list=[day],
+                                author_personality=None  # Can be added later
+                            )
+                            
+                            if crew_result.get("success"):
+                                content_text = crew_result.get("data", {}).get("content", "")
+                                title = crew_result.get("data", {}).get("title", f"{platform} Post - {day}")
+                                
+                                # Create content record (draft, not finalized)
+                                content = Content(
+                                    user_id=current_user.id,
+                                    campaign_id=campaign_id,
+                                    week=week_num,
+                                    day=day,
+                                    content=content_text,
+                                    title=title,
+                                    status="draft",  # Draft status until scheduled
+                                    date_upload=post_date,
+                                    platform=platform.lower(),
+                                    file_name=f"{campaign_id}_{week_num}_{day}_{platform}_{post_num}.txt",
+                                    file_type="text",
+                                    platform_post_no=str(post_num + 1),
+                                    schedule_time=post_date.replace(hour=9, minute=0),  # Default 9 AM
+                                    is_draft=True,
+                                    can_edit=True,
+                                    knowledge_graph_location=kg_location,
+                                    parent_idea=parent_idea,
+                                    landing_page_url=landing_page_url
+                                )
+                                
+                                db.add(content)
+                                generated_content.append({
+                                    "id": content.id,
+                                    "week": week_num,
+                                    "day": day,
+                                    "platform": platform,
+                                    "title": title,
+                                    "status": "draft"
+                                })
+                        except Exception as e:
+                            logger.error(f"Error generating content for {platform} on {day}: {e}")
+                            # Continue with other posts
+                            continue
+        
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Pre-populated {len(generated_content)} content items",
+            "content": generated_content
+        }
+        
+    except Exception as e:
+        logger.error(f"Error pre-populating content: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Update writing endpoint to accept content queue items
+@app.post("/campaigns/{campaign_id}/generate-content")
+async def generate_campaign_content(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate content for a campaign using content queue items as foundation.
+    Updated to accept content_queue_items and use them as context.
+    """
+    try:
+        from models import Campaign
+        from crewai_workflows import create_content_generation_crew
+        import json
+        
+        # Verify campaign ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Get content queue items from request or campaign
+        content_queue_items = request_data.get("content_queue_items", [])
+        if not content_queue_items and campaign.content_queue_items_json:
+            content_queue_items = json.loads(campaign.content_queue_items_json)
+        
+        # Build context from content queue items
+        queue_context = "\n".join([
+            f"- {item.get('title', item.get('text', str(item)))}"
+            for item in content_queue_items
+        ])
+        
+        # Get other parameters
+        platform = request_data.get("platform", "linkedin")
+        week = request_data.get("week", 1)
+        day = request_data.get("day", "Monday")
+        parent_idea = request_data.get("parent_idea", "")
+        kg_location = request_data.get("knowledge_graph_location", "")
+        landing_page_url = request_data.get("landing_page_url", "")
+        
+        # Build writing context
+        writing_context = f"""Content Queue Foundation:
+{queue_context}
+
+{f'Parent Idea: {parent_idea}' if parent_idea else ''}
+{f'Knowledge Graph Location: {kg_location}' if kg_location else ''}
+{f'Landing Page: {landing_page_url}' if landing_page_url else ''}
+
+Generate content for {platform} based on the content queue items above."""
+        
+        # Generate content using CrewAI workflow
+        crew_result = create_content_generation_crew(
+            text=writing_context,
+            week=week,
+            platform=platform.lower(),
+            days_list=[day],
+            author_personality=request_data.get("author_personality")
+        )
+        
+        return {
+            "status": "success" if crew_result.get("success") else "error",
+            "data": crew_result.get("data"),
+            "error": crew_result.get("error")
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating campaign content: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

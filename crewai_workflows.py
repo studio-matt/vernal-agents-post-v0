@@ -60,6 +60,12 @@ def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
                         SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_global"
                     ).first()
                     
+                    # Also check alternative format (without "qc_" prefix in key)
+                    if not global_setting:
+                        global_setting = db.query(SystemSettings).filter(
+                            SystemSettings.setting_key == f"qc_agent_{qc_agent_id.replace('qc_', '')}_global"
+                        ).first()
+                    
                     if global_setting and global_setting.setting_value == "true":
                         # Create agent from global QC agent ID
                         qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)

@@ -120,8 +120,14 @@ class Content(Base):
     platform_post_no = Column(String(50), nullable=False)
     schedule_time = Column(DateTime, nullable=False)
     image_url = Column(String(255), nullable=True)
+    campaign_id = Column(String(255), nullable=True)  # Link to campaign
+    is_draft = Column(Boolean, default=True)  # True until scheduled/published
+    can_edit = Column(Boolean, default=True)  # True until sent out
+    knowledge_graph_location = Column(Text, nullable=True)  # Knowledge graph node/location this content is based on
+    parent_idea = Column(Text, nullable=True)  # Parent idea this content supports
+    landing_page_url = Column(String(500), nullable=True)  # Landing page URL this content drives traffic to
     user = relationship("User", back_populates="contents")    
-
+    
     def __repr__(self):
         return f"<Content(id={self.id}, week={self.week}, day={self.day}, platform={self.platform})>"
 
@@ -195,6 +201,10 @@ class Campaign(Base):
     preprocessing_settings_json = Column(Text, nullable=True)  # JSON string for preprocessingSettings
     entity_settings_json = Column(Text, nullable=True)  # JSON string for entitySettings
     modeling_settings_json = Column(Text, nullable=True)  # JSON string for modelingSettings
+    # Campaign scheduling and planning fields
+    scheduling_settings_json = Column(Text, nullable=True)  # JSON string for scheduling: {weeks, posts_per_day, posts_per_week, start_date, day_frequency, post_frequency_type, post_frequency_value}
+    campaign_plan_json = Column(Text, nullable=True)  # JSON string for campaign plan: {weeks: [{week_num, parent_ideas: [{idea, children: [...]}], knowledge_graph_locations: [...]}]}
+    content_queue_items_json = Column(Text, nullable=True)  # JSON string for checked items from content queue
     
     def __repr__(self):
         return f"<Campaign(id={self.id}, campaign_id={self.campaign_id}, name={self.campaign_name})>"
