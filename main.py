@@ -560,6 +560,10 @@ class AnalyzeRequest(BaseModel):
     trendingTopics: Optional[List[str]] = []
     topics: Optional[List[str]] = []
     type: Optional[str] = "keyword"
+    # Site Builder specific fields
+    site_base_url: Optional[str] = None
+    target_keywords: Optional[List[str]] = None
+    top_ideas_count: Optional[int] = 10
     depth: Optional[int] = 1
     max_pages: Optional[int] = 10
     batch_size: Optional[int] = 1
@@ -664,16 +668,54 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
                 time.sleep(3)  # Simulate setup time
 
-                # Step 2: Web scraping with DuckDuckGo + Playwright
-                logger.info(f"📝 Step 2: Starting web scraping for campaign {cid}")
-                set_task("fetching_content", 25, "Searching web and scraping content")
+                # Step 2: Web scraping with DuckDuckGo + Playwright (or Site Builder sitemap parsing)
+                logger.info(f"📝 Step 2: Starting content collection for campaign {cid} (type: {data.type})")
+                set_task("fetching_content", 25, "Collecting content from site" if data.type == "site_builder" else "Searching web and scraping content")
                 
-                urls = data.urls or []
-                keywords = data.keywords or []
-                depth = data.depth if hasattr(data, 'depth') and data.depth else 1
-                max_pages = data.max_pages if hasattr(data, 'max_pages') and data.max_pages else 10
-                include_images = data.include_images if hasattr(data, 'include_images') else False
-                include_links = data.include_links if hasattr(data, 'include_links') else False
+                # Handle Site Builder campaign type
+                if data.type == "site_builder":
+                    from sitemap_parser import parse_sitemap_from_site
+                    from gap_analysis import identify_content_gaps, rank_gaps_by_priority
+                    from text_processing import extract_topics
+                    import json
+                    
+                    # Get site URL and target keywords
+                    site_url = getattr(data, 'site_base_url', None) or (data.urls[0] if data.urls else None)
+                    target_keywords = getattr(data, 'target_keywords', None) or data.keywords or []
+                    top_ideas_count = getattr(data, 'top_ideas_count', 10)
+                    
+                    if not site_url:
+                        logger.error(f"❌ Site Builder campaign requires site_base_url")
+                        set_task("error", 0, "Site URL is required for Site Builder campaigns")
+                        return
+                    
+                    logger.info(f"🏗️ Site Builder: Parsing sitemap from {site_url}")
+                    set_task("parsing_sitemap", 30, f"Parsing sitemap from {site_url}")
+                    
+                    # Parse sitemap to get all URLs
+                    sitemap_urls = parse_sitemap_from_site(site_url, max_urls=200)  # Limit to 200 URLs for performance
+                    logger.info(f"✅ Found {len(sitemap_urls)} URLs from sitemap")
+                    
+                    if not sitemap_urls:
+                        logger.warning(f"⚠️ No URLs found in sitemap for {site_url}")
+                        set_task("error", 0, "No URLs found in sitemap. Check if sitemap.xml exists.")
+                        return
+                    
+                    # Use sitemap URLs for scraping
+                    urls = sitemap_urls
+                    keywords = []  # Don't use keywords for Site Builder
+                    depth = 1  # Only scrape the URLs from sitemap
+                    max_pages = len(sitemap_urls)  # Scrape all URLs from sitemap
+                    include_images = False
+                    include_links = False
+                else:
+                    # Standard campaign types (keyword, url, trending)
+                    urls = data.urls or []
+                    keywords = data.keywords or []
+                    depth = data.depth if hasattr(data, 'depth') and data.depth else 1
+                    max_pages = data.max_pages if hasattr(data, 'max_pages') and data.max_pages else 10
+                    include_images = data.include_images if hasattr(data, 'include_images') else False
+                    include_links = data.include_links if hasattr(data, 'include_links') else False
                 
                 logger.info(f"📝 Scraping settings: URLs={len(urls)}, Keywords={len(keywords)}, depth={depth}, max_pages={max_pages}")
                 logger.info(f"📝 URL list: {urls}")
@@ -1003,6 +1045,84 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 set_task("processing_content", 60, f"Processing {created} scraped pages")
                 # Content is already processed during scraping, minimal delay
                 time.sleep(2)
+
+                # Step 3.5: Gap Analysis for Site Builder campaigns
+                if data.type == "site_builder" and valid_count > 0:
+                    try:
+                        from gap_analysis import identify_content_gaps, rank_gaps_by_priority
+                        from text_processing import extract_topics
+                        
+                        logger.info(f"🏗️ Site Builder: Starting gap analysis for campaign {cid}")
+                        set_task("gap_analysis", 70, "Analyzing content gaps")
+                        
+                        # Get scraped texts for topic extraction
+                        all_rows = session.query(CampaignRawData).filter(
+                            CampaignRawData.campaign_id == cid,
+                            ~CampaignRawData.source_url.startswith(("error:", "placeholder:"))
+                        ).all()
+                        
+                        texts = [row.extracted_text for row in all_rows if row.extracted_text and len(row.extracted_text.strip()) > 50]
+                        
+                        if texts:
+                            # Extract topics from existing content
+                            logger.info(f"🔍 Extracting topics from {len(texts)} pages...")
+                            existing_topics = extract_topics(
+                                texts=texts,
+                                topic_tool="system",  # Use system model for speed
+                                num_topics=20,
+                                iterations=25,
+                                query=data.query or "",
+                                keywords=[],
+                                urls=[]
+                            )
+                            logger.info(f"✅ Extracted {len(existing_topics)} topics from site content")
+                            
+                            # Build knowledge graph structure from existing topics
+                            # (Simplified - full KG would come from research endpoint)
+                            existing_kg = {
+                                "nodes": [{"id": t.lower(), "label": t} for t in existing_topics[:50]],
+                                "edges": []  # Simplified - full edges would come from research endpoint
+                            }
+                            
+                            # Perform gap analysis
+                            target_keywords = getattr(data, 'target_keywords', None) or data.keywords or []
+                            if target_keywords:
+                                gaps = identify_content_gaps(
+                                    existing_topics=existing_topics,
+                                    knowledge_graph=existing_kg,
+                                    target_keywords=target_keywords,
+                                    existing_urls=[row.source_url for row in all_rows[:100]]
+                                )
+                                
+                                # Rank and filter gaps
+                                top_ideas_count = getattr(data, 'top_ideas_count', 10)
+                                top_gaps = rank_gaps_by_priority(gaps, top_n=top_ideas_count)
+                                
+                                logger.info(f"✅ Gap analysis complete: {len(gaps)} total gaps, {len(top_gaps)} top priority gaps")
+                                
+                                # Store gap analysis results in campaign
+                                camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                                if camp:
+                                    camp.gap_analysis_results_json = json.dumps({
+                                        "total_gaps": len(gaps),
+                                        "top_gaps": top_gaps,
+                                        "existing_topics": existing_topics[:50],
+                                        "target_keywords": target_keywords,
+                                        "coverage_score": len([g for g in gaps if g.get("priority") == "high"]) / len(gaps) if gaps else 0
+                                    })
+                                    camp.site_base_url = site_url
+                                    camp.target_keywords_json = json.dumps(target_keywords)
+                                    camp.top_ideas_count = top_ideas_count
+                                    session.commit()
+                                    logger.info(f"✅ Saved gap analysis results to campaign {cid}")
+                            else:
+                                logger.warning(f"⚠️ No target keywords provided for gap analysis")
+                        else:
+                            logger.warning(f"⚠️ No valid text content found for gap analysis")
+                    except Exception as gap_error:
+                        logger.error(f"❌ Gap analysis failed: {gap_error}")
+                        import traceback
+                        logger.error(traceback.format_exc())
 
                 # Step 4: extracting entities
                 set_task("extracting_entities", 75, "Extracting entities from scraped content")
