@@ -103,8 +103,18 @@ def parse_sitemap_index(sitemap_url: str) -> List[str]:
         
         # Check if it's a sitemap index
         if root.tag.endswith("sitemapindex"):
-            for sitemap_elem in root.findall(".//sitemap:sitemap", SITEMAP_NS):
+            # Try namespaced first
+            sitemap_elems = root.findall(".//sitemap:sitemap", SITEMAP_NS)
+            if not sitemap_elems:
+                # Fallback: try without namespace
+                sitemap_elems = root.findall(".//sitemap")
+            
+            for sitemap_elem in sitemap_elems:
+                # Try both namespaced and non-namespaced loc elements
                 loc_elem = sitemap_elem.find("sitemap:loc", SITEMAP_NS)
+                if loc_elem is None:
+                    loc_elem = sitemap_elem.find("loc")
+                
                 if loc_elem is not None and loc_elem.text:
                     sitemap_urls.append(loc_elem.text.strip())
                     logger.debug(f"Found sitemap in index: {loc_elem.text.strip()}")
@@ -146,8 +156,18 @@ def parse_sitemap(sitemap_url: str, base_url: str = None) -> List[str]:
             return urls
         
         # Parse regular sitemap
-        for url_elem in root.findall(".//sitemap:url", SITEMAP_NS):
+        # Try namespaced first (standard sitemap format)
+        url_elems = root.findall(".//sitemap:url", SITEMAP_NS)
+        if not url_elems:
+            # Fallback: try without namespace (some sitemaps don't use namespaces)
+            url_elems = root.findall(".//url")
+        
+        for url_elem in url_elems:
+            # Try both namespaced and non-namespaced loc elements
             loc_elem = url_elem.find("sitemap:loc", SITEMAP_NS)
+            if loc_elem is None:
+                loc_elem = url_elem.find("loc")
+            
             if loc_elem is not None and loc_elem.text:
                 url = loc_elem.text.strip()
                 # Resolve relative URLs if base_url provided

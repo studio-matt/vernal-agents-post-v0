@@ -697,8 +697,22 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     logger.info(f"✅ Found {len(sitemap_urls)} URLs from sitemap")
                     
                     if not sitemap_urls:
-                        logger.warning(f"⚠️ No URLs found in sitemap for {site_url}")
-                        set_task("error", 0, "No URLs found in sitemap. Check if sitemap.xml exists.")
+                        logger.error(f"❌ Site Builder: No URLs found in sitemap for {site_url}")
+                        logger.error(f"❌ This could mean: sitemap.xml doesn't exist, sitemap is empty, or parser failed")
+                        set_task("error", 0, f"No URLs found in sitemap for {site_url}. Check if sitemap.xml exists.")
+                        
+                        # Create error row so user can see what went wrong
+                        error_row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"error:sitemap_parsing_failed",
+                            fetched_at=datetime.utcnow(),
+                            raw_html=None,
+                            extracted_text=f"Site Builder: Failed to parse sitemap from {site_url}. No URLs found. Please check if sitemap.xml exists at {site_url}/sitemap.xml",
+                            meta_json=json.dumps({"type": "error", "reason": "sitemap_parsing_failed", "site_url": site_url})
+                        )
+                        session.add(error_row)
+                        session.commit()
+                        logger.error(f"❌ Created error row for campaign {cid} - sitemap parsing failed")
                         return
                     
                     # Use sitemap URLs for scraping
