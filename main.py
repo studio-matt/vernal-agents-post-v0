@@ -3661,6 +3661,8 @@ async def generate_ideas_endpoint(
         topics = form_data.get("topics", "")
         posts = form_data.get("posts", "")
         days = form_data.get("days", "")
+        num_ideas_str = form_data.get("num_ideas", "")
+        recommendations = form_data.get("recommendations", "")  # New: recommendations context
         
         # Parse topics, posts, and days from form data
         topics_list = []
@@ -3679,15 +3681,36 @@ async def generate_ideas_endpoint(
             # Days come as: Monday, Tuesday
             days_list = [d.strip() for d in days.split(",") if d.strip()]
         
-        if not topics_list or not days_list:
-            return {"status": "error", "message": "Topics and days are required"}
+        # Parse num_ideas - use provided value or fall back to days count
+        try:
+            num_ideas = int(num_ideas_str) if num_ideas_str else len(days_list) if days_list else 1
+        except ValueError:
+            num_ideas = len(days_list) if days_list else 1
+        
+        # If we have recommendations but no topics, extract topics from recommendations
+        if not topics_list and recommendations:
+            # Extract keywords from recommendations (look for bold text, quoted text, etc.)
+            import re
+            # Extract **bold** text
+            bold_keywords = re.findall(r'\*\*([^*]+)\*\*', recommendations)
+            # Extract "quoted" text
+            quoted_keywords = re.findall(r'"([^"]+)"', recommendations)
+            # Extract capitalized phrases (potential topics)
+            capitalized = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', recommendations)
+            topics_list = list(set(bold_keywords + quoted_keywords + capitalized[:5]))  # Limit capitalized to avoid noise
+        
+        if not topics_list:
+            return {"status": "error", "message": "Topics are required"}
+        
+        if num_ideas < 1:
+            return {"status": "error", "message": "Number of ideas must be at least 1"}
         
         # Initialize LLM and agent
         llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
         agent = IdeaGeneratorAgent(llm, db_session=db)
         
-        # Generate ideas
-        ideas = await agent.generate_ideas(topics_list, posts_list, days_list)
+        # Generate ideas - pass num_ideas and recommendations context
+        ideas = await agent.generate_ideas(topics_list, posts_list, days_list, num_ideas=num_ideas, recommendations=recommendations)
         
         return {
             "status": "success",
@@ -3715,65 +3738,74 @@ def initialize_research_agent_prompts(admin_user = Depends(get_admin_user), db: 
 {context}
 
 Based on this data, provide:
-1. A summary of what the word cloud analysis reveals about the campaign's focus
-2. Areas where content could be expanded for better balance
-3. Specific recommendations for improving keyword coverage
-4. Actionable insights about underrepresented topics
+- A summary of what the word cloud analysis reveals about the campaign's focus
+- Areas where content could be expanded for better balance
+- Specific recommendations for improving keyword coverage
+- Actionable insights about underrepresented topics
 
-Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+IMPORTANT: Format your response as plain text recommendations without titles, numbering, or markdown headers. Each recommendation should be a clear, actionable insight. Do not include "Recommendations:" or numbered lists (1., 2., etc.). Just provide the insights directly.""",
             
             "research_agent_micro-sentiment_prompt": """Analyze the sentiment data from a content campaign scrape:
 
 {context}
 
 Based on this data, provide:
-1. Overall sentiment assessment
-2. Sentiment breakdown by topic/theme
-3. Areas with lower positive sentiment that need attention
-4. Recommendations for improving sentiment in specific areas
+- Overall sentiment assessment
+- Sentiment breakdown by topic/theme
+- Areas with lower positive sentiment that need attention
+- Recommendations for improving sentiment in specific areas
 
-Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+IMPORTANT: Format your response as plain text recommendations without titles, numbering, or markdown headers. Each recommendation should be a clear, actionable insight. Do not include "Recommendations:" or numbered lists (1., 2., etc.). Just provide the insights directly.""",
             
             "research_agent_topical-map_prompt": """Analyze the topical map data from a content campaign scrape:
 
 {context}
 
 Based on this data, provide:
-1. A summary of the main topics identified
-2. Topic relationships and coverage analysis
-3. Gaps or underrepresented topics
-4. Recommendations for expanding topic coverage
+- A summary of the main topics identified
+- Topic relationships and coverage analysis
+- Gaps or underrepresented topics
+- Recommendations for expanding topic coverage
 
-Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+IMPORTANT: Format your response as plain text recommendations without titles, numbering, or markdown headers. Each recommendation should be a clear, actionable insight. Do not include "Recommendations:" or numbered lists (1., 2., etc.). Just provide the insights directly.""",
             
             "research_agent_knowledge-graph_prompt": """Analyze the knowledge graph data from a content campaign scrape:
 
 {context}
 
 Based on this data, provide:
-1. Assessment of entity relationships and structure
-2. Analysis of connection strengths between concepts
-3. Identification of weakly connected areas
-4. Recommendations for strengthening relationships in the knowledge graph
+- Assessment of entity relationships and structure
+- Analysis of connection strengths between concepts
+- Identification of weakly connected areas
+- Recommendations for strengthening relationships in the knowledge graph
 
-Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+IMPORTANT: Format your response as plain text recommendations without titles, numbering, or markdown headers. Each recommendation should be a clear, actionable insight. Do not include "Recommendations:" or numbered lists (1., 2., etc.). Just provide the insights directly.""",
             
             "research_agent_hashtag-generator_prompt": """Analyze the hashtag data from a content campaign scrape:
 
 {context}
 
 Based on this data, provide:
-1. Assessment of hashtag mix (industry-standard, trending, niche, campaign-specific)
-2. Analysis of hashtag performance potential
-3. Recommendations for optimal hashtag combinations
-4. Suggested hashtag strategies for different platforms
+- Assessment of hashtag mix (industry-standard, trending, niche, campaign-specific)
+- Analysis of hashtag performance potential
+- Recommendations for optimal hashtag combinations
+- Suggested hashtag strategies for different platforms
 
-Format your response as structured recommendations that can be displayed to users. Each recommendation should be a clear, actionable insight.""",
+IMPORTANT: Format your response as plain text recommendations without titles, numbering, or markdown headers. Each recommendation should be a clear, actionable insight. Do not include "Recommendations:" or numbered lists (1., 2., etc.). Just provide the insights directly.""",
             
-            "research_agent_idea-generator_prompt": """You are an expert in idea generation. Given the following topics and scraped posts, generate exactly {num_ideas} creative, one-line ideas that are meaningful, actionable, and relevant to the provided topics and posts. Each idea should be a concise, complete sentence or phrase (e.g., "Leverage AI for Whale Communication Studies"). Avoid vague or incomplete ideas, and do not include explanations or additional text. Return the result as a JSON array of strings, with no markdown formatting.
+            "research_agent_idea-generator_prompt": """You are an expert in idea generation. Given the following topics and scraped posts, generate exactly {num_ideas} creative, one-line ideas that are meaningful, actionable, and relevant to the provided topics and posts.
+
+CRITICAL INSTRUCTIONS:
+- Focus STRICTLY on the topics provided in the "Topics:" section below
+- Each idea must directly relate to these specific topics
+- If recommendations or insights are provided, extract the actual topics/keywords from them and use those for idea generation
+- Each idea should be a concise, complete sentence or phrase (e.g., "Create a comprehensive guide on pug health issues")
+- Avoid vague or incomplete ideas
+- Do not include explanations or additional text
+- Return ONLY a JSON array of strings, with no markdown formatting, no numbering, no titles
 
 Example output:
-["Leverage AI for Whale Communication Studies", "Study Humpback Whale Bubble Rings", "Explore Nonhuman Intelligence Insights"]
+["Create a comprehensive guide on pug health issues", "Develop practical tips for pug grooming and care", "Explore pug personality traits and socialization"]
 
 Context:
 {context}""",

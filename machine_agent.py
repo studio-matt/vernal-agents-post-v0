@@ -148,14 +148,27 @@ class IdeaGeneratorAgent:
         self.llm = llm
         self.db_session = db_session
 
-    async def generate_ideas(self, topics: List[str], posts: List[str], days: List[str]) -> List[str]:
+    async def generate_ideas(self, topics: List[str], posts: List[str], days: List[str], num_ideas: Optional[int] = None, recommendations: Optional[str] = None) -> List[str]:
         try:
+            # Use provided num_ideas or fall back to days count
+            if num_ideas is None:
+                num_ideas = len(days) if days else 1
+            
             # Prepare context
             context = "Topics:\n" + "\n".join(f"- {topic}" for topic in topics) + "\n\n"
+            
+            # Add recommendations context if provided (from research assistant insights)
+            if recommendations:
+                context += "Research Recommendations (use these to understand what content is needed):\n"
+                context += recommendations + "\n\n"
+                context += "IMPORTANT: Extract the actual topics/keywords from the recommendations above and generate ideas that directly address those topics. Focus on the specific areas mentioned (e.g., 'pug health issues', 'pug care', 'pug characteristics' from the recommendations).\n\n"
+            
             context += "Scraped Posts:\n"
             for i, post in enumerate(posts[:5], 1):  # Limit to 5 posts to avoid token overflow
                 context += f"Post {i}: {post}\n"
-            context += "\nNumber of ideas to generate: " + str(len(days))
+            if days:
+                context += f"\nActive Days: {', '.join(days)}\n"
+            context += f"\nNumber of ideas to generate: {num_ideas}"
 
             # Get prompt from database settings, fallback to default
             prompt_template = self._get_prompt_from_settings()
@@ -170,7 +183,7 @@ Context:
 {context}"""
             
             # Format the prompt with context and num_ideas
-            prompt = prompt_template.format(num_ideas=len(days), context=context)
+            prompt = prompt_template.format(num_ideas=num_ideas, context=context)
 
             # Call the LLM
             response = await self.llm.ainvoke(prompt)
@@ -184,20 +197,20 @@ Context:
                 ideas = json.loads(response_text)
                 if not (isinstance(ideas, list) and all(isinstance(idea, str) for idea in ideas)):
                     logger.error("LLM returned invalid idea format")
-                    return self._generate_fallback_ideas(topics, len(days))
-                ideas = ideas[:len(days)]  # Trim to number of days
-                if len(ideas) < len(days):
-                    logger.warning("LLM returned fewer ideas than requested; padding with fallback")
-                    ideas.extend(self._generate_fallback_ideas(topics, len(days) - len(ideas)))
+                    return self._generate_fallback_ideas(topics, num_ideas)
+                ideas = ideas[:num_ideas]  # Trim to requested number of ideas
+                if len(ideas) < num_ideas:
+                    logger.warning(f"LLM returned fewer ideas than requested ({len(ideas)} < {num_ideas}); padding with fallback")
+                    ideas.extend(self._generate_fallback_ideas(topics, num_ideas - len(ideas)))
                 logger.info(f"Generated {len(ideas)} ideas: {ideas}")
                 return ideas
             except json.JSONDecodeError:
                 logger.error(f"LLM response is not valid JSON: {response_text}")
-                return self._generate_fallback_ideas(topics, len(days))
+                return self._generate_fallback_ideas(topics, num_ideas)
 
         except Exception as e:
             logger.error(f"Idea generation error: {str(e)}")
-            return self._generate_fallback_ideas(topics, len(days))
+            return self._generate_fallback_ideas(topics, num_ideas)
 
     def _get_prompt_from_settings(self) -> Optional[str]:
         """Get the idea generator prompt from database settings."""
