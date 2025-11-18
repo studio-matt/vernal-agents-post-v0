@@ -760,9 +760,12 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     urls = valid_urls
                     keywords = []  # Don't use keywords for Site Builder
                     depth = 1  # Only scrape the URLs from sitemap
-                    max_pages = len(sitemap_urls)  # Scrape all URLs from sitemap
+                    max_pages = len(valid_urls)  # Scrape all validated URLs from sitemap
                     include_images = False
                     include_links = False
+                    
+                    logger.info(f"🏗️ Site Builder: Ready to scrape {len(valid_urls)} URLs")
+                    logger.info(f"🏗️ Site Builder: First 5 URLs: {valid_urls[:5]}")
                 else:
                     # Standard campaign types (keyword, url, trending)
                     urls = data.urls or []
@@ -844,10 +847,28 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         # Log detailed results for diagnostics
                         if len(scraped_results) == 0:
                             logger.error(f"❌ CRITICAL: Scraping returned 0 results for campaign {cid}")
+                            logger.error(f"❌ Campaign type: {data.type}")
                             logger.error(f"❌ Keywords used: {keywords}")
-                            logger.error(f"❌ URLs provided: {urls}")
+                            logger.error(f"❌ URLs provided: {len(urls) if urls else 0} URLs")
+                            if urls:
+                                logger.error(f"❌ First 5 URLs: {urls[:5]}")
                             logger.error(f"❌ Query: {data.query or '(empty)'}")
+                            logger.error(f"❌ Depth: {depth}, Max pages: {max_pages}")
                             logger.error(f"❌ This likely means scraping failed - check Playwright/DuckDuckGo availability")
+                            
+                            # Create error row for Site Builder campaigns
+                            if data.type == "site_builder":
+                                error_row = CampaignRawData(
+                                    campaign_id=cid,
+                                    source_url=f"error:scraping_failed",
+                                    fetched_at=datetime.utcnow(),
+                                    raw_html=None,
+                                    extracted_text=f"Site Builder: Sitemap parsing succeeded ({len(urls)} URLs found), but scraping returned 0 results.\n\nPossible reasons:\n- Network/timeout issues accessing URLs\n- URLs require authentication\n- URLs are blocked by robots.txt\n- Playwright/scraping service unavailable\n\nPlease check backend logs for details.",
+                                    meta_json=json.dumps({"type": "error", "reason": "scraping_failed", "urls_count": len(urls), "urls": urls[:10]})
+                                )
+                                session.add(error_row)
+                                session.commit()
+                                logger.error(f"❌ Created error row for campaign {cid} - scraping failed after sitemap parsing")
                         else:
                             logger.info(f"📊 Scraping results breakdown:")
                             success_count = 0
