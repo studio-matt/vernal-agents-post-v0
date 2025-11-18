@@ -630,6 +630,12 @@ class AnalyzeRequest(BaseModel):
     pass_threshold: Optional[float] = 0.7
 
 # Analyze endpoint (for campaign building)
+# Test endpoint to verify /analyze is reachable
+@app.post("/analyze/test")
+def test_analyze_endpoint():
+    """Simple test endpoint to verify /analyze route is working"""
+    return {"status": "ok", "message": "Test endpoint is reachable"}
+
 @app.post("/analyze")
 def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """
@@ -1872,8 +1878,40 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
         try:
             logger.info(f"🔍 About to start background thread for task {task_id}")
             # Convert analyze_data to dict for thread safety
-            analyze_data_dict = analyze_data.dict() if hasattr(analyze_data, 'dict') else analyze_data.model_dump() if hasattr(analyze_data, 'model_dump') else dict(analyze_data)
-            logger.info(f"🔍 Converted analyze_data to dict, keys: {list(analyze_data_dict.keys())}")
+            try:
+                # Try Pydantic v2 method first
+                if hasattr(analyze_data, 'model_dump'):
+                    analyze_data_dict = analyze_data.model_dump()
+                    logger.info(f"🔍 Used model_dump() to convert to dict")
+                # Fallback to Pydantic v1 method
+                elif hasattr(analyze_data, 'dict'):
+                    analyze_data_dict = analyze_data.dict()
+                    logger.info(f"🔍 Used dict() to convert to dict")
+                else:
+                    # Last resort: manual conversion
+                    analyze_data_dict = {
+                        'campaign_id': getattr(analyze_data, 'campaign_id', None),
+                        'campaign_name': getattr(analyze_data, 'campaign_name', None),
+                        'type': getattr(analyze_data, 'type', 'keyword'),
+                        'site_base_url': getattr(analyze_data, 'site_base_url', None),
+                        'target_keywords': getattr(analyze_data, 'target_keywords', None),
+                        'top_ideas_count': getattr(analyze_data, 'top_ideas_count', 10),
+                        'most_recent_urls': getattr(analyze_data, 'most_recent_urls', None),
+                        'keywords': getattr(analyze_data, 'keywords', []),
+                        'urls': getattr(analyze_data, 'urls', []),
+                        'description': getattr(analyze_data, 'description', None),
+                        'query': getattr(analyze_data, 'query', None),
+                    }
+                    logger.info(f"🔍 Used manual conversion to dict")
+                logger.info(f"🔍 Converted analyze_data to dict, keys: {list(analyze_data_dict.keys())}")
+            except Exception as dict_error:
+                logger.error(f"❌ CRITICAL: Failed to convert analyze_data to dict: {dict_error}")
+                import traceback
+                logger.error(f"❌ Dict conversion traceback: {traceback.format_exc()}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to prepare analysis data: {str(dict_error)}"
+                )
             
             # Reconstruct AnalyzeRequest from dict in the background thread
             thread = threading.Thread(target=run_analysis_background, args=(task_id, campaign_id, analyze_data_dict), daemon=True)
