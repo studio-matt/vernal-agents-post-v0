@@ -767,26 +767,66 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
         
         # Create task and seed progress (in-memory)
         # Only create task if validation passed (for Site Builder, this means site_base_url exists)
-        task_id = str(uuid.uuid4())
-        TASKS[task_id] = {
-            "campaign_id": campaign_id,
-            "campaign_name": campaign_name,
-            "started_at": datetime.utcnow().isoformat(),
-            "progress": 5,  # start at 5%
-            "current_step": "initializing",
-            "progress_message": "Starting analysis",
-        }
-        CAMPAIGN_TASK_INDEX[campaign_id] = task_id
-        
-        logger.info(f"✅ Analysis task created (stub): task_id={task_id}, campaign_id={campaign_id}, user_id={user_id}")
+        try:
+            task_id = str(uuid.uuid4())
+            logger.info(f"🔍 Generated task_id: {task_id}")
+            
+            TASKS[task_id] = {
+                "campaign_id": campaign_id,
+                "campaign_name": campaign_name,
+                "started_at": datetime.utcnow().isoformat(),
+                "progress": 5,  # start at 5%
+                "current_step": "initializing",
+                "progress_message": "Starting analysis",
+            }
+            logger.info(f"🔍 Created TASKS entry for task_id: {task_id}")
+            
+            CAMPAIGN_TASK_INDEX[campaign_id] = task_id
+            logger.info(f"🔍 Created CAMPAIGN_TASK_INDEX entry: {campaign_id} -> {task_id}")
+            
+            logger.info(f"✅ Analysis task created (stub): task_id={task_id}, campaign_id={campaign_id}, user_id={user_id}")
+        except Exception as task_creation_error:
+            logger.error(f"❌ CRITICAL: Failed to create task: {task_creation_error}")
+            import traceback
+            logger.error(f"❌ Task creation traceback: {traceback.format_exc()}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create analysis task: {str(task_creation_error)}"
+            )
         
         # Kick off a lightweight background job to simulate real steps and persist raw data
-        def run_analysis_background(tid: str, cid: str, data: AnalyzeRequest):
+        def run_analysis_background(tid: str, cid: str, data: Dict[str, Any]):
             from database import SessionLocal
             from models import CampaignRawData, Campaign
+            from pydantic import ValidationError
             session = SessionLocal()
             try:
                 logger.info(f"🔵 Background thread started for task {tid}, campaign {cid}")
+                
+                # Reconstruct AnalyzeRequest from dict
+                try:
+                    analyze_data = AnalyzeRequest(**data)
+                    logger.info(f"✅ Reconstructed AnalyzeRequest from dict")
+                except (ValidationError, TypeError) as ve:
+                    logger.error(f"❌ Failed to reconstruct AnalyzeRequest from dict: {ve}")
+                    # Create a minimal AnalyzeRequest with just the essential fields
+                    analyze_data = AnalyzeRequest(
+                        campaign_id=data.get('campaign_id'),
+                        campaign_name=data.get('campaign_name'),
+                        type=data.get('type', 'keyword'),
+                        site_base_url=data.get('site_base_url'),
+                        target_keywords=data.get('target_keywords'),
+                        top_ideas_count=data.get('top_ideas_count', 10),
+                        most_recent_urls=data.get('most_recent_urls'),
+                        keywords=data.get('keywords', []),
+                        urls=data.get('urls', []),
+                        description=data.get('description'),
+                        query=data.get('query'),
+                    )
+                    logger.info(f"✅ Created minimal AnalyzeRequest from dict")
+                
+                # Use analyze_data instead of data from now on
+                data = analyze_data
                 
                 # Helper to update task atomically
                 def set_task(step: str, prog: int, msg: str):
@@ -1827,7 +1867,31 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 session.close()
                 logger.info(f"🔵 Background thread finished for task {tid}, campaign {cid}")
 
-        threading.Thread(target=run_analysis_background, args=(task_id, campaign_id, analyze_data), daemon=True).start()
+        # Start background thread
+        # Convert Pydantic model to dict to avoid serialization issues when passing to thread
+        try:
+            logger.info(f"🔍 About to start background thread for task {task_id}")
+            # Convert analyze_data to dict for thread safety
+            analyze_data_dict = analyze_data.dict() if hasattr(analyze_data, 'dict') else analyze_data.model_dump() if hasattr(analyze_data, 'model_dump') else dict(analyze_data)
+            logger.info(f"🔍 Converted analyze_data to dict, keys: {list(analyze_data_dict.keys())}")
+            
+            # Reconstruct AnalyzeRequest from dict in the background thread
+            thread = threading.Thread(target=run_analysis_background, args=(task_id, campaign_id, analyze_data_dict), daemon=True)
+            thread.start()
+            logger.info(f"✅ Background thread started successfully for task {task_id}")
+        except Exception as thread_error:
+            logger.error(f"❌ CRITICAL: Failed to start background thread: {thread_error}")
+            import traceback
+            logger.error(f"❌ Thread start traceback: {traceback.format_exc()}")
+            # Remove task from TASKS since thread failed to start
+            if task_id in TASKS:
+                del TASKS[task_id]
+            if campaign_id in CAMPAIGN_TASK_INDEX:
+                del CAMPAIGN_TASK_INDEX[campaign_id]
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to start analysis thread: {str(thread_error)}"
+            )
 
         return {
             "status": "started",
