@@ -725,21 +725,26 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 logger.error(f"❌ Campaign {campaign_id} has site_base_url=NULL in database")
                 
                 # Create error row so user can see what went wrong
-                from models import CampaignRawData
-                from datetime import datetime
-                error_row = CampaignRawData(
-                    campaign_id=campaign_id,
-                    source_url=f"error:missing_site_base_url",
-                    fetched_at=datetime.utcnow(),
-                    raw_html=None,
-                    extracted_text=f"Site Builder: Campaign is missing site_base_url.\n\nThis campaign was created without a site URL. Please:\n1. Edit the campaign and set the Site Base URL\n2. Click 'Build Campaign' again\n\nCurrent campaign data:\n- Type: {analyze_data.type}\n- Request site_base_url: {analyze_data.site_base_url}\n- Request URLs: {analyze_data.urls if hasattr(analyze_data, 'urls') else 'N/A'}",
-                    meta_json=json.dumps({"type": "error", "reason": "missing_site_base_url", "campaign_type": analyze_data.type})
-                )
-                db.add(error_row)
-                if campaign:
-                    campaign.status = "INCOMPLETE"
-                db.commit()
-                logger.error(f"❌ Created error row for campaign {campaign_id} - missing site_base_url")
+                try:
+                    from models import CampaignRawData
+                    from datetime import datetime
+                    error_row = CampaignRawData(
+                        campaign_id=campaign_id,
+                        source_url=f"error:missing_site_base_url",
+                        fetched_at=datetime.utcnow(),
+                        raw_html=None,
+                        extracted_text=f"Site Builder: Campaign is missing site_base_url.\n\nThis campaign was created without a site URL. Please:\n1. Edit the campaign and set the Site Base URL\n2. Click 'Build Campaign' again\n\nCurrent campaign data:\n- Type: {analyze_data.type}\n- Request site_base_url: {analyze_data.site_base_url}\n- Request URLs: {analyze_data.urls if hasattr(analyze_data, 'urls') else 'N/A'}",
+                        meta_json=json.dumps({"type": "error", "reason": "missing_site_base_url", "campaign_type": analyze_data.type})
+                    )
+                    db.add(error_row)
+                    if campaign:
+                        campaign.status = "INCOMPLETE"
+                    db.commit()
+                    logger.error(f"❌ Created error row for campaign {campaign_id} - missing site_base_url")
+                except Exception as error_row_error:
+                    logger.error(f"❌ Failed to create error row: {error_row_error}")
+                    # Don't fail the request, just log the error
+                    db.rollback()
                 
                 # Return error response - don't create task
                 raise HTTPException(
