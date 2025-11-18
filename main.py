@@ -754,12 +754,15 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     
                     # Parse sitemap to get all URLs
                     logger.info(f"🏗️ Site Builder: Starting sitemap parsing for {site_url}")
-                    # Use max_pages from settings, or default to 200 for Site Builder
-                    max_sitemap_urls = data.max_pages if hasattr(data, 'max_pages') and data.max_pages else 200
+                    # For Site Builder, ignore max_pages from extraction settings
+                    # Use a high limit to get all URLs, then filter by most_recent_urls if provided
+                    max_sitemap_urls = 10000  # High limit to get all URLs from sitemap
                     # Get most_recent_urls setting if provided
                     most_recent_urls = getattr(data, 'most_recent_urls', None)
                     if most_recent_urls:
                         logger.info(f"📅 Site Builder: Will filter to {most_recent_urls} most recent URLs by date")
+                    else:
+                        logger.info(f"🏗️ Site Builder: Will collect all URLs from sitemap (no date filter)")
                     sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls, most_recent=most_recent_urls)
                     logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
                     
@@ -2768,7 +2771,38 @@ def get_topicwizard_visualization(
         
         # Fit the pipeline
         logger.info(f"Fitting topic model pipeline with {len(texts)} documents, {min(num_topics, len(texts) - 1)} topics")
-        topic_pipeline.fit(texts)
+        try:
+            topic_pipeline.fit(texts)
+        except ValueError as e:
+            if "no terms remain" in str(e).lower() or "after pruning" in str(e).lower():
+                logger.warning(f"⚠️ TopicWizard: No terms remain after pruning. Adjusting min_df/max_df parameters.")
+                # Try with more lenient parameters
+                vectorizer = TfidfVectorizer(
+                    min_df=1,  # Allow terms that appear in at least 1 document
+                    max_df=0.95,  # Allow terms that appear in up to 95% of documents
+                    stop_words='english',
+                    strip_accents='unicode'
+                )
+                topic_model = NMF(
+                    n_components=min(num_topics, len(texts) - 1),
+                    random_state=42,
+                    max_iter=500
+                )
+                topic_pipeline = Pipeline([
+                    ("vectorizer", vectorizer),
+                    ("topic_model", topic_model),
+                ])
+                try:
+                    topic_pipeline.fit(texts)
+                    logger.info("✅ TopicWizard: Successfully fitted with adjusted parameters")
+                except Exception as e2:
+                    logger.error(f"❌ TopicWizard: Still failed after parameter adjustment: {e2}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"TopicWizard failed: {str(e2)}. Try reducing min_df or increasing max_df, or ensure you have sufficient text data."
+                    )
+            else:
+                raise
         
         # Extract topic information for visualization
         vectorizer = topic_pipeline.named_steps['vectorizer']
