@@ -221,12 +221,13 @@ def parse_sitemap_from_site(site_url: str, max_urls: int = 1000) -> List[str]:
             return []
         
         base_url = f"{parsed_base.scheme}://{parsed_base.netloc}"
-        logger.info(f"🔍 Parsing sitemap for site: {base_url} (from input: {site_url})")
+        logger.info(f"🔍 Auto-discovering sitemap for site: {base_url} (from input: {site_url})")
+        logger.info(f"🔍 Will try common sitemap locations and robots.txt to find sitemap automatically")
         
         all_urls: Set[str] = set()
         errors_encountered = []
         
-        # Strategy 1: Try common sitemap URLs
+        # Strategy 1: Try common sitemap URLs (auto-discovery)
         potential_sitemaps = find_sitemap_urls(base_url)
         logger.info(f"🔍 Trying {len(potential_sitemaps)} potential sitemap locations: {potential_sitemaps[:3]}...")
         
