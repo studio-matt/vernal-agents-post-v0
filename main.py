@@ -647,37 +647,79 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             logger.info(f"🏗️ Site Builder: target_keywords={analyze_data.target_keywords}")
             logger.info(f"🏗️ Site Builder: top_ideas_count={analyze_data.top_ideas_count}")
         
-        # Verify campaign exists and update Site Builder fields if provided
+        # CRITICAL: Validate Site Builder requirements BEFORE creating task
+        # This prevents campaigns from showing progress when they should fail immediately
+        if analyze_data.type == "site_builder":
+            from models import Campaign
+            import json
+            campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+            
+            # Get site_base_url - check request first, then database
+            site_url = analyze_data.site_base_url
+            if not site_url and campaign:
+                site_url = campaign.site_base_url
+            
+            # Update campaign with site_base_url if provided in request but missing in DB
+            if site_url and campaign and not campaign.site_base_url:
+                campaign.site_base_url = site_url
+                db.commit()
+                logger.info(f"✅ Saved site_base_url to database during validation: {site_url}")
+            
+            # Update other Site Builder fields if provided
+            if campaign:
+                updated = False
+                if analyze_data.target_keywords:
+                    campaign.target_keywords_json = json.dumps(analyze_data.target_keywords)
+                    updated = True
+                if analyze_data.top_ideas_count:
+                    campaign.top_ideas_count = analyze_data.top_ideas_count
+                    updated = True
+                if updated:
+                    db.commit()
+                    logger.info(f"✅ Campaign {campaign_id} updated with Site Builder fields")
+            
+            # FAIL IMMEDIATELY if site_base_url is missing - don't create task
+            if not site_url or not site_url.strip():
+                logger.error(f"❌ Site Builder campaign requires site_base_url - FAILING BEFORE TASK CREATION")
+                logger.error(f"❌ Request data.site_base_url: {analyze_data.site_base_url}")
+                logger.error(f"❌ Campaign {campaign_id} has site_base_url=NULL in database")
+                
+                # Create error row so user can see what went wrong
+                from models import CampaignRawData
+                from datetime import datetime
+                error_row = CampaignRawData(
+                    campaign_id=campaign_id,
+                    source_url=f"error:missing_site_base_url",
+                    fetched_at=datetime.utcnow(),
+                    raw_html=None,
+                    extracted_text=f"Site Builder: Campaign is missing site_base_url.\n\nThis campaign was created without a site URL. Please:\n1. Edit the campaign and set the Site Base URL\n2. Click 'Build Campaign' again\n\nCurrent campaign data:\n- Type: {analyze_data.type}\n- Request site_base_url: {analyze_data.site_base_url}\n- Request URLs: {analyze_data.urls if hasattr(analyze_data, 'urls') else 'N/A'}",
+                    meta_json=json.dumps({"type": "error", "reason": "missing_site_base_url", "campaign_type": analyze_data.type})
+                )
+                db.add(error_row)
+                if campaign:
+                    campaign.status = "INCOMPLETE"
+                db.commit()
+                logger.error(f"❌ Created error row for campaign {campaign_id} - missing site_base_url")
+                
+                # Return error response - don't create task
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Site URL is required for Site Builder campaigns. Please edit the campaign and set the Site Base URL."
+                )
+        
+        # Verify campaign exists and update Site Builder fields if provided (for non-Site Builder campaigns)
         try:
             from models import Campaign
             campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
             if campaign:
                 logger.info(f"✅ Campaign {campaign_id} found in database (user_id: {campaign.user_id}, site_base_url: {campaign.site_base_url})")
-                # Update Site Builder fields if provided in analyze request
-                if analyze_data.type == "site_builder":
-                    updated = False
-                    if analyze_data.site_base_url and not campaign.site_base_url:
-                        campaign.site_base_url = analyze_data.site_base_url
-                        updated = True
-                        logger.info(f"✅ Updated campaign {campaign_id} with site_base_url: {analyze_data.site_base_url}")
-                    if analyze_data.target_keywords:
-                        import json
-                        campaign.target_keywords_json = json.dumps(analyze_data.target_keywords)
-                        updated = True
-                        logger.info(f"✅ Updated campaign {campaign_id} with target_keywords")
-                    if analyze_data.top_ideas_count:
-                        campaign.top_ideas_count = analyze_data.top_ideas_count
-                        updated = True
-                        logger.info(f"✅ Updated campaign {campaign_id} with top_ideas_count: {analyze_data.top_ideas_count}")
-                    if updated:
-                        db.commit()
-                        logger.info(f"✅ Campaign {campaign_id} updated with Site Builder fields")
             else:
                 logger.warning(f"⚠️ Campaign {campaign_id} not found in database - analysis will continue anyway")
         except Exception as db_err:
             logger.warning(f"⚠️ Skipping campaign existence check: {db_err}")
         
         # Create task and seed progress (in-memory)
+        # Only create task if validation passed (for Site Builder, this means site_base_url exists)
         task_id = str(uuid.uuid4())
         TASKS[task_id] = {
             "campaign_id": campaign_id,
