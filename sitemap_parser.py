@@ -206,56 +206,89 @@ def parse_sitemap_from_site(site_url: str, max_urls: int = 1000) -> List[str]:
     Returns:
         List of URLs found in the sitemap(s)
     """
-    site_url = site_url.rstrip("/")
-    parsed_base = urlparse(site_url)
-    base_url = f"{parsed_base.scheme}://{parsed_base.netloc}"
-    
-    all_urls: Set[str] = set()
-    
-    # Strategy 1: Try common sitemap URLs
-    potential_sitemaps = find_sitemap_urls(base_url)
-    
-    for sitemap_url in potential_sitemaps:
-        if len(all_urls) >= max_urls:
-            break
+    try:
+        # Normalize the site URL
+        site_url = site_url.strip().rstrip("/")
         
-        try:
-            # Check if it's robots.txt
-            if "robots.txt" in sitemap_url:
-                sitemap_urls_from_robots = get_sitemap_from_robots_txt(sitemap_url)
-                for robots_sitemap_url in sitemap_urls_from_robots:
-                    urls = parse_sitemap(robots_sitemap_url, base_url)
+        # Validate URL format
+        if not site_url.startswith(("http://", "https://")):
+            logger.error(f"❌ Invalid URL format: {site_url}. Must start with http:// or https://")
+            return []
+        
+        parsed_base = urlparse(site_url)
+        if not parsed_base.netloc:
+            logger.error(f"❌ Invalid URL: {site_url}. Missing domain name.")
+            return []
+        
+        base_url = f"{parsed_base.scheme}://{parsed_base.netloc}"
+        logger.info(f"🔍 Parsing sitemap for site: {base_url} (from input: {site_url})")
+        
+        all_urls: Set[str] = set()
+        errors_encountered = []
+        
+        # Strategy 1: Try common sitemap URLs
+        potential_sitemaps = find_sitemap_urls(base_url)
+        logger.info(f"🔍 Trying {len(potential_sitemaps)} potential sitemap locations: {potential_sitemaps[:3]}...")
+        
+        for sitemap_url in potential_sitemaps:
+            if len(all_urls) >= max_urls:
+                break
+            
+            try:
+                # Check if it's robots.txt
+                if "robots.txt" in sitemap_url:
+                    logger.debug(f"🔍 Checking robots.txt: {sitemap_url}")
+                    sitemap_urls_from_robots = get_sitemap_from_robots_txt(sitemap_url)
+                    if sitemap_urls_from_robots:
+                        logger.info(f"✅ Found {len(sitemap_urls_from_robots)} sitemap(s) in robots.txt")
+                    for robots_sitemap_url in sitemap_urls_from_robots:
+                        urls = parse_sitemap(robots_sitemap_url, base_url)
+                        all_urls.update(urls)
+                        if len(all_urls) >= max_urls:
+                            break
+                else:
+                    logger.debug(f"🔍 Trying sitemap: {sitemap_url}")
+                    urls = parse_sitemap(sitemap_url, base_url)
                     all_urls.update(urls)
-                    if len(all_urls) >= max_urls:
-                        break
-            else:
-                urls = parse_sitemap(sitemap_url, base_url)
-                all_urls.update(urls)
-                if urls:
-                    logger.info(f"Successfully parsed sitemap from {sitemap_url}, found {len(urls)} URLs")
-                    # If we found URLs, we can stop trying other locations
-                    if len(all_urls) >= 10:  # Found at least some URLs
-                        break
-        except Exception as e:
-            logger.warning(f"Failed to parse {sitemap_url}: {e}")
-            continue
-    
-    # Filter URLs to only include same domain
-    filtered_urls = []
-    base_domain = parsed_base.netloc
-    
-    for url in all_urls:
-        if len(filtered_urls) >= max_urls:
-            break
-        try:
-            parsed = urlparse(url)
-            if parsed.netloc == base_domain or parsed.netloc == "":
-                filtered_urls.append(url)
-        except Exception:
-            continue
-    
-    logger.info(f"Total URLs extracted from {site_url}: {len(filtered_urls)}")
-    return filtered_urls[:max_urls]
+                    if urls:
+                        logger.info(f"✅ Successfully parsed sitemap from {sitemap_url}, found {len(urls)} URLs")
+                        # If we found URLs, we can stop trying other locations
+                        if len(all_urls) >= 10:  # Found at least some URLs
+                            break
+            except Exception as e:
+                error_msg = f"Failed to parse {sitemap_url}: {str(e)}"
+                logger.warning(f"⚠️ {error_msg}")
+                errors_encountered.append(error_msg)
+                continue
+        
+        # Filter URLs to only include same domain
+        filtered_urls = []
+        base_domain = parsed_base.netloc
+        
+        for url in all_urls:
+            if len(filtered_urls) >= max_urls:
+                break
+            try:
+                parsed = urlparse(url)
+                if parsed.netloc == base_domain or parsed.netloc == "":
+                    filtered_urls.append(url)
+            except Exception:
+                continue
+        
+        if filtered_urls:
+            logger.info(f"✅ Total URLs extracted from {site_url}: {len(filtered_urls)}")
+        else:
+            logger.warning(f"⚠️ No URLs extracted from {site_url}")
+            if errors_encountered:
+                logger.warning(f"⚠️ Errors encountered: {errors_encountered[:3]}")
+            logger.warning(f"⚠️ Tried sitemap locations: {potential_sitemaps}")
+        
+        return filtered_urls[:max_urls]
+    except Exception as e:
+        logger.error(f"❌ Critical error in parse_sitemap_from_site for {site_url}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return []
 
 
 if __name__ == "__main__":
