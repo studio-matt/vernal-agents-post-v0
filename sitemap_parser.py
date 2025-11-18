@@ -248,13 +248,16 @@ def parse_sitemap_from_site(site_url: str, max_urls: int = 1000, most_recent: Op
         base_url = f"{parsed_base.scheme}://{parsed_base.netloc}"
         logger.info(f"🔍 Auto-discovering sitemap for site: {base_url} (from input: {site_url})")
         logger.info(f"🔍 Will try common sitemap locations and robots.txt to find sitemap automatically")
+        logger.info(f"🔍 Base domain: {parsed_base.netloc}, Scheme: {parsed_base.scheme}")
         
         all_urls_with_dates: List[Tuple[str, Optional[datetime]]] = []
         errors_encountered = []
         
         # Strategy 1: Try common sitemap URLs (auto-discovery)
         potential_sitemaps = find_sitemap_urls(base_url)
-        logger.info(f"🔍 Trying {len(potential_sitemaps)} potential sitemap locations: {potential_sitemaps[:3]}...")
+        logger.info(f"🔍 Trying {len(potential_sitemaps)} potential sitemap locations:")
+        for i, sitemap_loc in enumerate(potential_sitemaps[:5], 1):
+            logger.info(f"   [{i}] {sitemap_loc}")
         
         for sitemap_url in potential_sitemaps:
             if len(all_urls_with_dates) >= max_urls * 2:  # Collect more if we need to filter by date
@@ -273,31 +276,60 @@ def parse_sitemap_from_site(site_url: str, max_urls: int = 1000, most_recent: Op
                         if len(all_urls_with_dates) >= max_urls * 2:
                             break
                 else:
-                    logger.debug(f"🔍 Trying sitemap: {sitemap_url}")
+                    logger.info(f"🔍 Trying sitemap: {sitemap_url}")
                     urls_with_dates = parse_sitemap(sitemap_url, base_url)
-                    all_urls_with_dates.extend(urls_with_dates)
                     if urls_with_dates:
                         logger.info(f"✅ Successfully parsed sitemap from {sitemap_url}, found {len(urls_with_dates)} URLs")
+                        all_urls_with_dates.extend(urls_with_dates)
                         # If we found URLs, we can stop trying other locations
                         if len(all_urls_with_dates) >= 10:  # Found at least some URLs
+                            logger.info(f"✅ Found sufficient URLs ({len(all_urls_with_dates)}), stopping search")
                             break
+                    else:
+                        logger.debug(f"⚠️ No URLs found in {sitemap_url} (may not exist or be empty)")
             except Exception as e:
                 error_msg = f"Failed to parse {sitemap_url}: {str(e)}"
                 logger.warning(f"⚠️ {error_msg}")
                 errors_encountered.append(error_msg)
                 continue
         
-        # Filter URLs to only include same domain
+        # Filter URLs to only include same domain (but allow subdomains and relative URLs)
         base_domain = parsed_base.netloc
+        # Extract root domain (e.g., "example.com" from "www.example.com" or "blog.example.com")
+        base_domain_parts = base_domain.split('.')
+        if len(base_domain_parts) >= 2:
+            root_domain = '.'.join(base_domain_parts[-2:])  # Get last 2 parts (e.g., "example.com")
+        else:
+            root_domain = base_domain
+        
         filtered_urls_with_dates = []
+        filtered_out_count = 0
         
         for url, date in all_urls_with_dates:
             try:
                 parsed = urlparse(url)
-                if parsed.netloc == base_domain or parsed.netloc == "":
+                # Allow: same domain, subdomains of same root, relative URLs, or empty netloc
+                url_domain = parsed.netloc
+                if not url_domain or url_domain == "":
+                    # Relative URL - keep it
                     filtered_urls_with_dates.append((url, date))
-            except Exception:
+                elif url_domain == base_domain:
+                    # Exact match - keep it
+                    filtered_urls_with_dates.append((url, date))
+                elif url_domain.endswith('.' + root_domain) or url_domain == root_domain:
+                    # Subdomain or root domain match - keep it
+                    filtered_urls_with_dates.append((url, date))
+                else:
+                    # Different domain - filter it out
+                    filtered_out_count += 1
+                    logger.debug(f"🔍 Filtered out URL from different domain: {url} (domain: {url_domain}, expected: {base_domain})")
+            except Exception as e:
+                logger.warning(f"⚠️ Error parsing URL {url}: {e}")
+                filtered_out_count += 1
                 continue
+        
+        if filtered_out_count > 0:
+            logger.info(f"🔍 Filtered out {filtered_out_count} URLs from different domains (kept {len(filtered_urls_with_dates)} URLs from {base_domain})")
         
         # If most_recent is specified, sort by date and take only the most recent N
         if most_recent and most_recent > 0:
@@ -317,11 +349,17 @@ def parse_sitemap_from_site(site_url: str, max_urls: int = 1000, most_recent: Op
         
         if filtered_urls:
             logger.info(f"✅ Total URLs extracted from {site_url}: {len(filtered_urls)}")
+            logger.info(f"✅ First 5 URLs: {filtered_urls[:5]}")
         else:
-            logger.warning(f"⚠️ No URLs extracted from {site_url}")
+            logger.error(f"❌ No URLs extracted from {site_url}")
+            logger.error(f"❌ Total URLs found before filtering: {len(all_urls_with_dates)}")
+            logger.error(f"❌ URLs after domain filtering: {len(filtered_urls_with_dates)}")
             if errors_encountered:
-                logger.warning(f"⚠️ Errors encountered: {errors_encountered[:3]}")
-            logger.warning(f"⚠️ Tried sitemap locations: {potential_sitemaps}")
+                logger.error(f"❌ Errors encountered during parsing: {errors_encountered[:5]}")
+            logger.error(f"❌ Tried sitemap locations: {potential_sitemaps}")
+            # Log sample URLs that were found but filtered out
+            if len(all_urls_with_dates) > 0:
+                logger.error(f"❌ Sample URLs found (may have been filtered): {[url for url, _ in all_urls_with_dates[:5]]}")
         
         return filtered_urls
     except Exception as e:

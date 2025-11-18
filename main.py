@@ -750,6 +750,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         return
                     
                     logger.info(f"🏗️ Site Builder: Parsing sitemap from {site_url}")
+                    logger.info(f"🏗️ Site Builder: Site URL details - scheme: {urlparse(site_url).scheme}, netloc: {urlparse(site_url).netloc}")
                     set_task("parsing_sitemap", 30, f"Parsing sitemap from {site_url}")
                     
                     # Parse sitemap to get all URLs
@@ -763,14 +764,27 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.info(f"📅 Site Builder: Will filter to {most_recent_urls} most recent URLs by date")
                     else:
                         logger.info(f"🏗️ Site Builder: Will collect all URLs from sitemap (no date filter)")
+                    
+                    # Test if site URL is accessible before parsing
+                    try:
+                        import requests
+                        test_response = requests.get(site_url, timeout=10, headers={"User-Agent": "Mozilla/5.0 (compatible; SiteBuilderBot/1.0)"})
+                        logger.info(f"✅ Site URL is accessible: {site_url} (status: {test_response.status_code})")
+                    except Exception as test_error:
+                        logger.warning(f"⚠️ Could not access site URL {site_url}: {test_error}")
+                        logger.warning(f"⚠️ This might indicate network issues, but sitemap parsing will still be attempted")
+                    
                     try:
                         sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls, most_recent=most_recent_urls)
                         logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
+                        if len(sitemap_urls) > 0:
+                            logger.info(f"✅ First 5 sitemap URLs: {sitemap_urls[:5]}")
                     except Exception as sitemap_error:
                         logger.error(f"❌ Exception during sitemap parsing: {sitemap_error}")
                         import traceback
                         logger.error(traceback.format_exc())
                         sitemap_urls = []
+                        logger.error(f"❌ Sitemap parsing failed with exception - this is a critical error")
                     
                     if not sitemap_urls:
                         logger.error(f"❌ Site Builder: No URLs found in sitemap for {site_url}")
