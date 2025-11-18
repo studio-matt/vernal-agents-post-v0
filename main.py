@@ -1836,10 +1836,20 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             "campaign_id": campaign_id,
             "campaign_name": campaign_name
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 400, 404) as-is
+        raise
     except Exception as e:
         import traceback
-        logger.error(f"Error in /analyze endpoint: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        error_trace = traceback.format_exc()
+        logger.error(f"❌ CRITICAL: Error in /analyze endpoint: {str(e)}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        logger.error(f"❌ Full traceback:\n{error_trace}")
+        # Log the request data for debugging
+        try:
+            logger.error(f"❌ Request data: campaign_id={analyze_data.campaign_id}, type={analyze_data.type}, site_base_url={getattr(analyze_data, 'site_base_url', None)}")
+        except:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start analysis: {str(e)}"
