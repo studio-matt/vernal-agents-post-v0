@@ -444,7 +444,13 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "extractionSettings": extraction_settings,
                 "preprocessingSettings": preprocessing_settings,
                 "entitySettings": entity_settings,
-                "modelingSettings": modeling_settings
+                "modelingSettings": modeling_settings,
+                # Site Builder specific fields
+                "site_base_url": campaign.site_base_url,
+                "target_keywords": json.loads(campaign.target_keywords_json) if campaign.target_keywords_json else None,
+                "top_ideas_count": campaign.top_ideas_count,
+                # Look Alike specific fields
+                "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
             }
         }
     except HTTPException:
@@ -707,7 +713,64 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 # Step 1: collecting inputs
                 logger.info(f"📝 Step 1: Collecting inputs for campaign {cid}")
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
-                time.sleep(3)  # Simulate setup time
+                
+                # Validate Site Builder requirements EARLY (fail at "Initializing" stage)
+                if data.type == "site_builder":
+                    from models import Campaign
+                    import json
+                    
+                    # Get site URL - check request data first, then database
+                    # DO NOT fall back to urls array - site_base_url must be explicitly set
+                    site_url = getattr(data, 'site_base_url', None)
+                    camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                    
+                    if not site_url:
+                        # Try to get from campaign in database
+                        if camp and camp.site_base_url:
+                            site_url = camp.site_base_url
+                            logger.info(f"✅ Retrieved site_base_url from campaign database: {site_url}")
+                        # NOTE: We intentionally do NOT fall back to data.urls - site_base_url must be explicitly saved
+                        # This ensures the field is properly persisted in the database
+                    elif camp and not camp.site_base_url:
+                        # If site_url is in request but not in database, save it now
+                        camp.site_base_url = site_url
+                        session.commit()
+                        logger.info(f"✅ Saved site_base_url to database during validation: {site_url}")
+                    
+                    # FAIL EARLY if site_base_url is missing (no fallback to urls array)
+                    if not site_url or not site_url.strip():
+                        logger.error(f"❌ Site Builder campaign requires site_base_url - FAILING AT INITIALIZING STAGE")
+                        logger.error(f"❌ Request data.site_base_url: {getattr(data, 'site_base_url', None)}")
+                        logger.error(f"❌ Request data.urls: {data.urls if hasattr(data, 'urls') else 'N/A'}")
+                        logger.error(f"❌ Campaign {cid} has site_base_url=NULL in database")
+                        
+                        # Create error row so user can see what went wrong
+                        error_row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"error:missing_site_base_url",
+                            fetched_at=datetime.utcnow(),
+                            raw_html=None,
+                            extracted_text=f"Site Builder: Campaign is missing site_base_url.\n\nThis campaign was created without a site URL. Please:\n1. Edit the campaign and set the Site Base URL\n2. Click 'Build Campaign' again\n\nCurrent campaign data:\n- Type: {data.type}\n- Request site_base_url: {getattr(data, 'site_base_url', None)}\n- Request URLs: {data.urls if hasattr(data, 'urls') else 'N/A'}",
+                            meta_json=json.dumps({"type": "error", "reason": "missing_site_base_url", "campaign_type": data.type})
+                        )
+                        session.add(error_row)
+                        session.commit()
+                        logger.error(f"❌ Created error row for campaign {cid} - missing site_base_url")
+                        
+                        # Set campaign status to INCOMPLETE
+                        camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                        if camp:
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to missing site_base_url")
+                        
+                        # Set progress to error state - FAIL AT INITIALIZING STAGE
+                        set_task("error", 10, "Site URL is required for Site Builder campaigns. Please edit the campaign and set the Site Base URL.")
+                        logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - site_base_url is missing")
+                        return
+                
+                time.sleep(1)  # Brief pause before proceeding
 
                 # Step 2: Web scraping with DuckDuckGo + Playwright (or Site Builder sitemap parsing)
                 logger.info(f"📝 Step 2: Starting content collection for campaign {cid} (type: {data.type})")
@@ -720,28 +783,28 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     from text_processing import extract_topics
                     import json
                     
-                    # Get site URL and target keywords
-                    # First try from request data, then from campaign in database, then from urls
+                    # Get site URL and target keywords (we already validated it exists above)
+                    # Use the site_url we validated in Step 1 - no need to check again
+                    # If we got here, site_url was already validated and set
                     site_url = getattr(data, 'site_base_url', None)
                     if not site_url:
-                        # Try to get from campaign in database
+                        # Try to get from campaign in database (should already be there from validation)
                         camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
                         if camp and camp.site_base_url:
                             site_url = camp.site_base_url
                             logger.info(f"✅ Retrieved site_base_url from campaign database: {site_url}")
-                        elif data.urls and len(data.urls) > 0:
-                            # Normalize to base domain (remove path)
-                            from urllib.parse import urlparse
-                            temp_url = data.urls[0]
-                            parsed = urlparse(temp_url)
-                            site_url = f"{parsed.scheme}://{parsed.netloc}"
-                            logger.info(f"✅ Using first URL from request and normalizing to base domain: {temp_url} -> {site_url}")
+                        else:
+                            # This should never happen if validation worked, but log error if it does
+                            logger.error(f"❌ site_url is missing after validation - this should not happen")
+                            logger.error(f"❌ Request data.site_base_url: {getattr(data, 'site_base_url', None)}")
+                            logger.error(f"❌ Campaign {cid} site_base_url in database: {camp.site_base_url if camp else 'campaign not found'}")
                     
                     target_keywords = getattr(data, 'target_keywords', None) or data.keywords or []
                     top_ideas_count = getattr(data, 'top_ideas_count', 10)
                     
                     logger.info(f"🏗️ Site Builder: site_url={site_url}, target_keywords={target_keywords}, top_ideas_count={top_ideas_count}")
                     
+                    # This check should never trigger now since we validate above, but keep as safety
                     if not site_url:
                         logger.error(f"❌ Site Builder campaign requires site_base_url")
                         logger.error(f"❌ Request data.site_base_url: {getattr(data, 'site_base_url', None)}")
