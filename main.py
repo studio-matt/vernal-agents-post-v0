@@ -255,6 +255,18 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
             sample_campaigns = db.query(Campaign).limit(5).all()
             sample_user_ids = [c.user_id for c in sample_campaigns]
             logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
+        # Get user info for campaigns (to show username/email)
+        from models import User
+        user_cache = {}
+        for campaign in campaigns:
+            if campaign.user_id and campaign.user_id not in user_cache:
+                user = db.query(User).filter(User.id == campaign.user_id).first()
+                if user:
+                    user_cache[campaign.user_id] = {
+                        "username": user.username,
+                        "email": user.email
+                    }
+        
         return {
             "status": "success",
             "campaigns": [
@@ -271,6 +283,8 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     "topics": campaign.topics.split(",") if campaign.topics else [],
                     "status": campaign.status or "INCOMPLETE",  # Include status field
                     "user_id": campaign.user_id,  # Include user_id in response for debugging
+                    "user_username": user_cache.get(campaign.user_id, {}).get("username") if campaign.user_id else None,
+                    "user_email": user_cache.get(campaign.user_id, {}).get("email") if campaign.user_id else None,
                     "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
                     "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
                 }
@@ -685,15 +699,24 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             # Update other Site Builder fields if provided
             if campaign:
                 updated = False
-                if analyze_data.target_keywords:
-                    campaign.target_keywords_json = json.dumps(analyze_data.target_keywords)
-                    updated = True
-                if analyze_data.top_ideas_count:
-                    campaign.top_ideas_count = analyze_data.top_ideas_count
-                    updated = True
-                if updated:
-                    db.commit()
-                    logger.info(f"✅ Campaign {campaign_id} updated with Site Builder fields")
+                try:
+                    if analyze_data.target_keywords:
+                        # Ensure target_keywords is a list/array that can be serialized
+                        if isinstance(analyze_data.target_keywords, list):
+                            campaign.target_keywords_json = json.dumps(analyze_data.target_keywords)
+                        else:
+                            campaign.target_keywords_json = json.dumps([analyze_data.target_keywords])
+                        updated = True
+                    if analyze_data.top_ideas_count:
+                        campaign.top_ideas_count = analyze_data.top_ideas_count
+                        updated = True
+                    if updated:
+                        db.commit()
+                        logger.info(f"✅ Campaign {campaign_id} updated with Site Builder fields")
+                except Exception as update_error:
+                    logger.error(f"❌ Error updating Site Builder fields: {update_error}")
+                    # Don't fail the request, just log the error
+                    db.rollback()
             
             # FAIL IMMEDIATELY if site_base_url is missing - don't create task
             if not site_url or not site_url.strip():
