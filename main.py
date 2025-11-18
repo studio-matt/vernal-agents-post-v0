@@ -538,14 +538,22 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
 
 @app.delete("/campaigns/{campaign_id}")
 def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Delete campaign - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
+    """Delete campaign - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION (or admin)"""
     try:
         from models import Campaign
-        # Verify ownership
-        campaign = db.query(Campaign).filter(
-            Campaign.campaign_id == campaign_id,
-            Campaign.user_id == current_user.id
-        ).first()
+        # Verify ownership (or allow admin to delete any campaign)
+        is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+        if is_admin:
+            # Admin can delete any campaign
+            campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+            logger.info(f"Admin user {current_user.id} deleting campaign {campaign_id} (owner: {campaign.user_id if campaign else 'not found'})")
+        else:
+            # Regular users can only delete their own campaigns
+            campaign = db.query(Campaign).filter(
+                Campaign.campaign_id == campaign_id,
+                Campaign.user_id == current_user.id
+            ).first()
+        
         if not campaign:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
