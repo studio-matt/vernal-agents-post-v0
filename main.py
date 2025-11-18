@@ -794,7 +794,6 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.error(f"   3. sitemap requires authentication")
                         logger.error(f"   4. sitemap is blocked by robots.txt or CDN")
                         logger.error(f"   5. Network/timeout issues accessing the sitemap")
-                        set_task("error", 0, f"No URLs found in sitemap for {site_url}. Check if sitemap.xml exists.")
                         
                         # Create error row so user can see what went wrong
                         error_row = CampaignRawData(
@@ -808,6 +807,18 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         session.add(error_row)
                         session.commit()
                         logger.error(f"❌ Created error row for campaign {cid} - sitemap parsing failed")
+                        
+                        # Set campaign status to INCOMPLETE and progress to error state
+                        camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                        if camp:
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to sitemap parsing failure")
+                        
+                        # Set progress to error state (NOT 100%)
+                        set_task("error", 95, f"Sitemap parsing failed for {site_url}. No URLs found. Check if sitemap.xml exists.")
+                        logger.error(f"❌ Campaign {cid} analysis failed - sitemap parsing returned no URLs")
                         return
                     
                     # Validate URLs before scraping
