@@ -149,6 +149,10 @@ class CampaignCreate(BaseModel):
     preprocessingSettings: Optional[Dict[str, Any]] = None
     entitySettings: Optional[Dict[str, Any]] = None
     modelingSettings: Optional[Dict[str, Any]] = None
+    # Site Builder specific fields
+    site_base_url: Optional[str] = None
+    target_keywords: Optional[List[str]] = None
+    top_ideas_count: Optional[int] = None
 
 class CampaignUpdate(BaseModel):
     name: Optional[str] = None
@@ -317,6 +321,13 @@ def create_campaign(campaign_data: CampaignCreate, current_user = Depends(get_cu
         if campaign_data.modelingSettings:
             modeling_settings_json = json.dumps(campaign_data.modelingSettings)
         
+        # Handle Site Builder specific fields
+        site_base_url = getattr(campaign_data, 'site_base_url', None)
+        target_keywords_json = None
+        if hasattr(campaign_data, 'target_keywords') and campaign_data.target_keywords:
+            target_keywords_json = json.dumps(campaign_data.target_keywords)
+        top_ideas_count = getattr(campaign_data, 'top_ideas_count', None)
+        
         # Create campaign directly using SQLAlchemy
         campaign = Campaign(
             campaign_id=campaign_id,
@@ -333,7 +344,10 @@ def create_campaign(campaign_data: CampaignCreate, current_user = Depends(get_cu
             extraction_settings_json=extraction_settings_json,
             preprocessing_settings_json=preprocessing_settings_json,
             entity_settings_json=entity_settings_json,
-            modeling_settings_json=modeling_settings_json
+            modeling_settings_json=modeling_settings_json,
+            site_base_url=site_base_url,
+            target_keywords_json=target_keywords_json,
+            top_ideas_count=top_ideas_count
         )
         
         db.add(campaign)
@@ -620,12 +634,37 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
         if analyze_data.keywords:
             logger.info(f"🔍 First keyword: '{analyze_data.keywords[0]}'")
         
-        # Verify campaign exists (optional)
+        # Log Site Builder specific fields
+        if analyze_data.type == "site_builder":
+            logger.info(f"🏗️ Site Builder: site_base_url={analyze_data.site_base_url}")
+            logger.info(f"🏗️ Site Builder: target_keywords={analyze_data.target_keywords}")
+            logger.info(f"🏗️ Site Builder: top_ideas_count={analyze_data.top_ideas_count}")
+        
+        # Verify campaign exists and update Site Builder fields if provided
         try:
             from models import Campaign
             campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
             if campaign:
-                logger.info(f"✅ Campaign {campaign_id} found in database (user_id: {campaign.user_id})")
+                logger.info(f"✅ Campaign {campaign_id} found in database (user_id: {campaign.user_id}, site_base_url: {campaign.site_base_url})")
+                # Update Site Builder fields if provided in analyze request
+                if analyze_data.type == "site_builder":
+                    updated = False
+                    if analyze_data.site_base_url and not campaign.site_base_url:
+                        campaign.site_base_url = analyze_data.site_base_url
+                        updated = True
+                        logger.info(f"✅ Updated campaign {campaign_id} with site_base_url: {analyze_data.site_base_url}")
+                    if analyze_data.target_keywords:
+                        import json
+                        campaign.target_keywords_json = json.dumps(analyze_data.target_keywords)
+                        updated = True
+                        logger.info(f"✅ Updated campaign {campaign_id} with target_keywords")
+                    if analyze_data.top_ideas_count:
+                        campaign.top_ideas_count = analyze_data.top_ideas_count
+                        updated = True
+                        logger.info(f"✅ Updated campaign {campaign_id} with top_ideas_count: {analyze_data.top_ideas_count}")
+                    if updated:
+                        db.commit()
+                        logger.info(f"✅ Campaign {campaign_id} updated with Site Builder fields")
             else:
                 logger.warning(f"⚠️ Campaign {campaign_id} not found in database - analysis will continue anyway")
         except Exception as db_err:
