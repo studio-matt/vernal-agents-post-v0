@@ -816,91 +816,122 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     logger.info(f"🔍 Validating site URL format and accessibility: {site_url}")
                     set_task("validating_url", 18, f"Validating site URL: {site_url}")
                     
-                    from sitemap_parser import validate_url_format, validate_url_accessibility, quick_sitemap_check
-                    
-                    # Step 1: Validate URL format
-                    is_valid_format, format_error = validate_url_format(site_url)
-                    if not is_valid_format:
-                        error_msg = f"Invalid URL format: {format_error}"
-                        logger.error(f"❌ {error_msg}")
+                    try:
+                        from sitemap_parser import validate_url_format, validate_url_accessibility, quick_sitemap_check
+                    except ImportError as import_error:
+                        logger.error(f"❌ Failed to import validation functions: {import_error}")
+                        logger.error(f"❌ This is a critical error - validation cannot proceed")
+                        # Don't fail the campaign, just log and continue without validation
+                        logger.warning(f"⚠️ Continuing without URL validation - this should not happen")
+                        # Skip validation and proceed to sitemap parsing
+                        pass
+                    else:
+                        # Step 1: Validate URL format
+                        try:
+                            is_valid_format, format_error = validate_url_format(site_url)
+                        except Exception as format_validation_error:
+                            logger.error(f"❌ Error during URL format validation: {format_validation_error}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                            # Don't fail - just log and continue
+                            is_valid_format, format_error = True, None
                         
-                        error_row = CampaignRawData(
-                            campaign_id=cid,
-                            source_url=f"error:invalid_url_format",
-                            fetched_at=datetime.utcnow(),
-                            raw_html=None,
-                            extracted_text=f"Site Builder: Invalid URL format.\n\nError: {format_error}\n\nURL provided: {site_url}\n\nPlease edit the campaign and provide a valid URL starting with http:// or https://",
-                            meta_json=json.dumps({"type": "error", "reason": "invalid_url_format", "site_url": site_url, "error": format_error})
-                        )
-                        session.add(error_row)
-                        if camp:
-                            camp.status = "INCOMPLETE"
-                            camp.updated_at = datetime.utcnow()
-                        session.commit()
-                        set_task("error", 18, error_msg)
-                        logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - invalid URL format")
-                        return
-                    
-                    # Step 2: Validate URL accessibility (DNS, connectivity, HTTP status)
-                    logger.info(f"🔍 Checking if site is accessible: {site_url}")
-                    is_accessible, access_error, http_status = validate_url_accessibility(site_url, timeout=10)
-                    if not is_accessible:
-                        error_msg = f"Site is not accessible: {access_error}"
-                        logger.error(f"❌ {error_msg}")
-                        
-                        error_row = CampaignRawData(
-                            campaign_id=cid,
-                            source_url=f"error:site_not_accessible",
-                            fetched_at=datetime.utcnow(),
-                            raw_html=None,
-                            extracted_text=f"Site Builder: Site is not accessible.\n\nError: {access_error}\n\nURL: {site_url}\nHTTP Status: {http_status if http_status else 'N/A (connection failed)'}\n\nPossible reasons:\n- Domain does not exist (DNS error)\n- Server is down or not responding\n- Site requires authentication\n- Network connectivity issues\n\nPlease verify the URL is correct and the site is accessible.",
-                            meta_json=json.dumps({"type": "error", "reason": "site_not_accessible", "site_url": site_url, "error": access_error, "http_status": http_status})
-                        )
-                        session.add(error_row)
-                        if camp:
-                            camp.status = "INCOMPLETE"
-                            camp.updated_at = datetime.utcnow()
-                        session.commit()
-                        set_task("error", 18, error_msg)
-                        logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - site not accessible")
-                        return
-                    
-                    logger.info(f"✅ Site URL is accessible: {site_url} (HTTP {http_status})")
-                    
-                    # Step 3: Quick sitemap check (fail early if sitemap definitely doesn't exist)
-                    logger.info(f"🔍 Performing quick sitemap check: {site_url}")
-                    set_task("checking_sitemap", 20, f"Checking for sitemap at {site_url}")
-                    sitemap_found, sitemap_url, sitemap_error = quick_sitemap_check(site_url, timeout=10)
-                    
-                    if not sitemap_found:
-                        # If quick check fails, we'll still try full parsing, but log a warning
-                        # Only fail if the error indicates the site itself is inaccessible
-                        if sitemap_error and ("not accessible" in sitemap_error.lower() or "dns" in sitemap_error.lower() or "connection" in sitemap_error.lower()):
-                            error_msg = f"Sitemap check failed: {sitemap_error}"
+                        if not is_valid_format:
+                            error_msg = f"Invalid URL format: {format_error}"
                             logger.error(f"❌ {error_msg}")
                             
                             error_row = CampaignRawData(
                                 campaign_id=cid,
-                                source_url=f"error:sitemap_check_failed",
+                                source_url=f"error:invalid_url_format",
                                 fetched_at=datetime.utcnow(),
                                 raw_html=None,
-                                extracted_text=f"Site Builder: Sitemap check failed during initialization.\n\nError: {sitemap_error}\n\nURL: {site_url}\n\nThis usually means:\n- The site is not accessible\n- DNS resolution failed\n- Network connectivity issues\n\nPlease verify the site is accessible and try again.",
-                                meta_json=json.dumps({"type": "error", "reason": "sitemap_check_failed", "site_url": site_url, "error": sitemap_error})
+                                extracted_text=f"Site Builder: Invalid URL format.\n\nError: {format_error}\n\nURL provided: {site_url}\n\nPlease edit the campaign and provide a valid URL starting with http:// or https://",
+                                meta_json=json.dumps({"type": "error", "reason": "invalid_url_format", "site_url": site_url, "error": format_error})
                             )
                             session.add(error_row)
                             if camp:
                                 camp.status = "INCOMPLETE"
                                 camp.updated_at = datetime.utcnow()
                             session.commit()
-                            set_task("error", 20, error_msg)
-                            logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - sitemap check failed")
+                            set_task("error", 18, error_msg)
+                            logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - invalid URL format")
                             return
+                    
+                        # Step 2: Validate URL accessibility (DNS, connectivity, HTTP status)
+                        logger.info(f"🔍 Checking if site is accessible: {site_url}")
+                        try:
+                            is_accessible, access_error, http_status = validate_url_accessibility(site_url, timeout=10)
+                        except Exception as access_validation_error:
+                            logger.error(f"❌ Error during URL accessibility validation: {access_validation_error}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                            # Don't fail - just log and continue (validation is best effort)
+                            is_accessible, access_error, http_status = True, None, None
+                        
+                        if not is_accessible:
+                            error_msg = f"Site is not accessible: {access_error}"
+                            logger.error(f"❌ {error_msg}")
+                            
+                            error_row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=f"error:site_not_accessible",
+                                fetched_at=datetime.utcnow(),
+                                raw_html=None,
+                                extracted_text=f"Site Builder: Site is not accessible.\n\nError: {access_error}\n\nURL: {site_url}\nHTTP Status: {http_status if http_status else 'N/A (connection failed)'}\n\nPossible reasons:\n- Domain does not exist (DNS error)\n- Server is down or not responding\n- Site requires authentication\n- Network connectivity issues\n\nPlease verify the URL is correct and the site is accessible.",
+                                meta_json=json.dumps({"type": "error", "reason": "site_not_accessible", "site_url": site_url, "error": access_error, "http_status": http_status})
+                            )
+                            session.add(error_row)
+                            if camp:
+                                camp.status = "INCOMPLETE"
+                                camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            set_task("error", 18, error_msg)
+                            logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - site not accessible")
+                            return
+                    
+                        logger.info(f"✅ Site URL is accessible: {site_url} (HTTP {http_status})")
+                        
+                        # Step 3: Quick sitemap check (fail early if sitemap definitely doesn't exist)
+                        logger.info(f"🔍 Performing quick sitemap check: {site_url}")
+                        set_task("checking_sitemap", 20, f"Checking for sitemap at {site_url}")
+                        try:
+                            sitemap_found, sitemap_url, sitemap_error = quick_sitemap_check(site_url, timeout=10)
+                        except Exception as sitemap_check_error:
+                            logger.error(f"❌ Error during quick sitemap check: {sitemap_check_error}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                            # Don't fail - just log and continue (will try full parsing)
+                            sitemap_found, sitemap_url, sitemap_error = False, None, None
+                    
+                        if not sitemap_found:
+                            # If quick check fails, we'll still try full parsing, but log a warning
+                            # Only fail if the error indicates the site itself is inaccessible
+                            if sitemap_error and ("not accessible" in sitemap_error.lower() or "dns" in sitemap_error.lower() or "connection" in sitemap_error.lower()):
+                                error_msg = f"Sitemap check failed: {sitemap_error}"
+                                logger.error(f"❌ {error_msg}")
+                                
+                                error_row = CampaignRawData(
+                                    campaign_id=cid,
+                                    source_url=f"error:sitemap_check_failed",
+                                    fetched_at=datetime.utcnow(),
+                                    raw_html=None,
+                                    extracted_text=f"Site Builder: Sitemap check failed during initialization.\n\nError: {sitemap_error}\n\nURL: {site_url}\n\nThis usually means:\n- The site is not accessible\n- DNS resolution failed\n- Network connectivity issues\n\nPlease verify the site is accessible and try again.",
+                                    meta_json=json.dumps({"type": "error", "reason": "sitemap_check_failed", "site_url": site_url, "error": sitemap_error})
+                                )
+                                session.add(error_row)
+                                if camp:
+                                    camp.status = "INCOMPLETE"
+                                    camp.updated_at = datetime.utcnow()
+                                session.commit()
+                                set_task("error", 20, error_msg)
+                                logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - sitemap check failed")
+                                return
+                            else:
+                                # Sitemap not found at common locations, but site is accessible
+                                # We'll proceed to full parsing which will try more locations
+                                logger.warning(f"⚠️ Sitemap not found at common locations, but site is accessible. Will attempt full discovery.")
                         else:
-                            # Sitemap not found at common locations, but site is accessible
-                            # We'll proceed to full parsing which will try more locations
-                            logger.warning(f"⚠️ Sitemap not found at common locations, but site is accessible. Will attempt full discovery.")
-                    else:
-                        logger.info(f"✅ Sitemap found at: {sitemap_url}")
+                            logger.info(f"✅ Sitemap found at: {sitemap_url}")
                 
                 time.sleep(1)  # Brief pause before proceeding
 
