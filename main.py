@@ -867,18 +867,19 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     created = 1
                 elif not urls and not keywords:
                     logger.warning(f"⚠️ No URLs or keywords provided for campaign {cid}")
-                    # Create placeholder row
-                    sample_text = f"Placeholder content for campaign {cid}. No URLs or keywords were provided in the analysis request."
+                    # Create error row (not placeholder) so user knows something went wrong
+                    error_text = f"Site Builder: No URLs or keywords provided for scraping.\n\nCampaign type: {data.type}\nSite URL: {getattr(data, 'site_base_url', 'Not provided')}\nURLs: {len(data.urls or [])}\nKeywords: {len(data.keywords or [])}\n\nThis usually means sitemap parsing failed or returned no URLs."
                     row = CampaignRawData(
                         campaign_id=cid,
-                        source_url="placeholder:no_data",
+                        source_url="error:no_urls_or_keywords",
                         fetched_at=now,
                         raw_html=None,
-                        extracted_text=sample_text,
-                        meta_json=json.dumps({"seed": True, "type": "placeholder", "reason": "no_urls_or_keywords"})
+                        extracted_text=error_text,
+                        meta_json=json.dumps({"type": "error", "reason": "no_urls_or_keywords", "campaign_type": data.type, "site_base_url": getattr(data, 'site_base_url', None)})
                     )
                     session.add(row)
                     created = 1
+                    logger.error(f"❌ Created error row for campaign {cid} - no URLs or keywords provided")
                 else:
                     # Perform real web scraping
                     logger.info(f"🚀 Starting web scraping for campaign {cid}")
@@ -1303,7 +1304,17 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         
                         logger.info(f"📊 Data validation: {valid_data_count} valid rows, {valid_text_count} with text, {error_count} error/placeholder rows")
                         
-                        if valid_data_count > 0:
+                        # For Site Builder campaigns, require at least some valid data
+                        if data.type == "site_builder" and valid_data_count == 0:
+                            logger.error(f"❌ Site Builder campaign {cid} has no valid scraped data!")
+                            logger.error(f"❌ Total rows: {len(all_rows)}, Error rows: {error_count}")
+                            if error_count > 0:
+                                logger.error(f"❌ This indicates sitemap parsing or scraping failed. Check error rows above.")
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to no valid data")
+                        elif valid_data_count > 0:
                             # Store coarse topics from keywords as a ready signal
                             if (data.keywords or []) and not camp.topics:
                                 camp.topics = ",".join((data.keywords or [])[:10])
