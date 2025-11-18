@@ -64,25 +64,22 @@ async def global_exception_handler(request: Request, exc: Exception):
 async def log_requests(request: Request, call_next):
     """Log all incoming requests and responses"""
     import time
-    from starlette.requests import Request as StarletteRequest
     start_time = time.time()
     logger.info(f"📥 INCOMING REQUEST: {request.method} {request.url}")
     logger.info(f"📥 Headers: {dict(request.headers)}")
     
-    # Read body for logging, then restore it for the endpoint
-    body_bytes = b""
-    async def receive():
-        nonlocal body_bytes
-        if not body_bytes:
-            body_bytes = await request.body()
-            if body_bytes:
-                try:
-                    logger.info(f"📥 Body (first 500 chars): {body_bytes.decode('utf-8')[:500]}")
-                except:
-                    logger.info(f"📥 Body (binary, {len(body_bytes)} bytes)")
-        return {"type": "http.request", "body": body_bytes}
+    # Read and log body, then restore it
+    body_bytes = await request.body()
+    if body_bytes:
+        try:
+            body_str = body_bytes.decode('utf-8')
+            logger.info(f"📥 Body (first 500 chars): {body_str[:500]}")
+        except:
+            logger.info(f"📥 Body (binary, {len(body_bytes)} bytes)")
     
-    # Replace the receive function to restore body
+    # Restore body for endpoint
+    async def receive():
+        return {"type": "http.request", "body": body_bytes}
     request._receive = receive
     
     try:
