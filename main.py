@@ -806,6 +806,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         )
                         session.add(error_row)
                         session.commit()
+                        logger.error(f"❌ Created error row for campaign {cid} - all sitemap URLs invalid")
+                        set_task("error", 0, f"All {len(sitemap_urls)} URLs from sitemap are invalid")
                         return
                     
                     logger.info(f"✅ Validated {len(valid_urls)} valid URLs out of {len(sitemap_urls)} total")
