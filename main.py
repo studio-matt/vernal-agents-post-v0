@@ -640,9 +640,11 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
     REQUIRES AUTHENTICATION
     """
     try:
+        logger.info(f"🔍 /analyze endpoint called - starting request processing")
         user_id = current_user.id
         campaign_id = analyze_data.campaign_id or f"campaign-{uuid.uuid4()}"
         campaign_name = analyze_data.campaign_name or "Unknown Campaign"
+        logger.info(f"🔍 User ID: {user_id}, Campaign ID: {campaign_id}, Campaign Name: {campaign_name}")
         
         # If campaign_id is provided, verify ownership (or allow admin)
         if analyze_data.campaign_id:
