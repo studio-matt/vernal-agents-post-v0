@@ -59,6 +59,35 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests and responses"""
+    import time
+    start_time = time.time()
+    logger.info(f"📥 INCOMING REQUEST: {request.method} {request.url}")
+    logger.info(f"📥 Headers: {dict(request.headers)}")
+    try:
+        body = await request.body()
+        if body:
+            logger.info(f"📥 Body (first 500 chars): {body.decode('utf-8')[:500]}")
+        # Recreate the request with the body for the next middleware/handler
+        async def receive():
+            return {"type": "http.request", "body": body}
+        request._receive = receive
+    except Exception as e:
+        logger.warning(f"⚠️ Could not read request body: {e}")
+    
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logger.info(f"📤 RESPONSE: {request.method} {request.url} - Status: {response.status_code} - Time: {process_time:.2f}s")
+        return response
+    except Exception as e:
+        process_time = time.time() - start_time
+        logger.error(f"❌ REQUEST FAILED: {request.method} {request.url} - Error: {str(e)} - Time: {process_time:.2f}s")
+        raise
+
 # Add CORS middleware
 # Note: When allow_credentials=True, cannot use allow_origins=["*"]
 # Must specify exact origins
