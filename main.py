@@ -949,6 +949,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 )
                                 session.add(error_row)
                                 session.commit()
+                                created = 1  # Mark that we created an error row
                                 logger.error(f"❌ Created error row for campaign {cid} - scraping failed after sitemap parsing")
                         else:
                             logger.info(f"📊 Scraping results breakdown:")
@@ -1099,7 +1100,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             else:
                                 logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars{truncation_note}, {len(links)} links, {len(images)} images")
                         
-                        if created == 0:
+                        # Only create error row if we haven't already created one (e.g., for Site Builder with 0 results)
+                        if created == 0 and len(scraped_results) == 0:
                             logger.warning(f"⚠️ Web scraping returned no results for campaign {cid}")
                             # Create error row
                             row = CampaignRawData(
