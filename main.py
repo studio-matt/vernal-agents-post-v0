@@ -720,12 +720,27 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     import json
                     
                     # Get site URL and target keywords
-                    site_url = getattr(data, 'site_base_url', None) or (data.urls[0] if data.urls else None)
+                    # First try from request data, then from campaign in database, then from urls
+                    site_url = getattr(data, 'site_base_url', None)
+                    if not site_url:
+                        # Try to get from campaign in database
+                        camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                        if camp and camp.site_base_url:
+                            site_url = camp.site_base_url
+                            logger.info(f"✅ Retrieved site_base_url from campaign database: {site_url}")
+                        elif data.urls and len(data.urls) > 0:
+                            site_url = data.urls[0]
+                            logger.info(f"✅ Using first URL from request: {site_url}")
+                    
                     target_keywords = getattr(data, 'target_keywords', None) or data.keywords or []
                     top_ideas_count = getattr(data, 'top_ideas_count', 10)
                     
+                    logger.info(f"🏗️ Site Builder: site_url={site_url}, target_keywords={target_keywords}, top_ideas_count={top_ideas_count}")
+                    
                     if not site_url:
                         logger.error(f"❌ Site Builder campaign requires site_base_url")
+                        logger.error(f"❌ Request data.site_base_url: {getattr(data, 'site_base_url', None)}")
+                        logger.error(f"❌ Request data.urls: {data.urls if hasattr(data, 'urls') else 'N/A'}")
                         set_task("error", 0, "Site URL is required for Site Builder campaigns")
                         return
                     
