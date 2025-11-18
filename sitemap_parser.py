@@ -266,15 +266,20 @@ def parse_sitemap_from_site(site_url: str, max_urls: int = 1000, most_recent: Op
             try:
                 # Check if it's robots.txt
                 if "robots.txt" in sitemap_url:
-                    logger.debug(f"🔍 Checking robots.txt: {sitemap_url}")
+                    logger.info(f"🔍 Checking robots.txt: {sitemap_url}")
                     sitemap_urls_from_robots = get_sitemap_from_robots_txt(sitemap_url)
                     if sitemap_urls_from_robots:
-                        logger.info(f"✅ Found {len(sitemap_urls_from_robots)} sitemap(s) in robots.txt")
-                    for robots_sitemap_url in sitemap_urls_from_robots:
-                        urls_with_dates = parse_sitemap(robots_sitemap_url, base_url)
-                        all_urls_with_dates.extend(urls_with_dates)
-                        if len(all_urls_with_dates) >= max_urls * 2:
-                            break
+                        logger.info(f"✅ Found {len(sitemap_urls_from_robots)} sitemap(s) in robots.txt: {sitemap_urls_from_robots}")
+                        for robots_sitemap_url in sitemap_urls_from_robots:
+                            logger.info(f"🔍 Parsing sitemap from robots.txt: {robots_sitemap_url}")
+                            urls_with_dates = parse_sitemap(robots_sitemap_url, base_url)
+                            if urls_with_dates:
+                                logger.info(f"✅ Parsed {len(urls_with_dates)} URLs from {robots_sitemap_url}")
+                            all_urls_with_dates.extend(urls_with_dates)
+                            if len(all_urls_with_dates) >= max_urls * 2:
+                                break
+                    else:
+                        logger.debug(f"⚠️ No sitemap URLs found in robots.txt")
                 else:
                     logger.info(f"🔍 Trying sitemap: {sitemap_url}")
                     urls_with_dates = parse_sitemap(sitemap_url, base_url)
