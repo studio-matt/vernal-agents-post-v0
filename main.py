@@ -808,9 +808,99 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to missing site_base_url")
                         
                         # Set progress to error state - FAIL AT INITIALIZING STAGE
-                        set_task("error", 10, "Site URL is required for Site Builder campaigns. Please edit the campaign and set the Site Base URL.")
+                        set_task("error", 15, "Site URL is required for Site Builder campaigns. Please edit the campaign and set the Site Base URL.")
                         logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - site_base_url is missing")
                         return
+                    
+                    # VALIDATE URL FORMAT AND ACCESSIBILITY AT INITIALIZATION
+                    logger.info(f"🔍 Validating site URL format and accessibility: {site_url}")
+                    set_task("validating_url", 18, f"Validating site URL: {site_url}")
+                    
+                    from sitemap_parser import validate_url_format, validate_url_accessibility, quick_sitemap_check
+                    
+                    # Step 1: Validate URL format
+                    is_valid_format, format_error = validate_url_format(site_url)
+                    if not is_valid_format:
+                        error_msg = f"Invalid URL format: {format_error}"
+                        logger.error(f"❌ {error_msg}")
+                        
+                        error_row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"error:invalid_url_format",
+                            fetched_at=datetime.utcnow(),
+                            raw_html=None,
+                            extracted_text=f"Site Builder: Invalid URL format.\n\nError: {format_error}\n\nURL provided: {site_url}\n\nPlease edit the campaign and provide a valid URL starting with http:// or https://",
+                            meta_json=json.dumps({"type": "error", "reason": "invalid_url_format", "site_url": site_url, "error": format_error})
+                        )
+                        session.add(error_row)
+                        if camp:
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                        session.commit()
+                        set_task("error", 18, error_msg)
+                        logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - invalid URL format")
+                        return
+                    
+                    # Step 2: Validate URL accessibility (DNS, connectivity, HTTP status)
+                    logger.info(f"🔍 Checking if site is accessible: {site_url}")
+                    is_accessible, access_error, http_status = validate_url_accessibility(site_url, timeout=10)
+                    if not is_accessible:
+                        error_msg = f"Site is not accessible: {access_error}"
+                        logger.error(f"❌ {error_msg}")
+                        
+                        error_row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"error:site_not_accessible",
+                            fetched_at=datetime.utcnow(),
+                            raw_html=None,
+                            extracted_text=f"Site Builder: Site is not accessible.\n\nError: {access_error}\n\nURL: {site_url}\nHTTP Status: {http_status if http_status else 'N/A (connection failed)'}\n\nPossible reasons:\n- Domain does not exist (DNS error)\n- Server is down or not responding\n- Site requires authentication\n- Network connectivity issues\n\nPlease verify the URL is correct and the site is accessible.",
+                            meta_json=json.dumps({"type": "error", "reason": "site_not_accessible", "site_url": site_url, "error": access_error, "http_status": http_status})
+                        )
+                        session.add(error_row)
+                        if camp:
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                        session.commit()
+                        set_task("error", 18, error_msg)
+                        logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - site not accessible")
+                        return
+                    
+                    logger.info(f"✅ Site URL is accessible: {site_url} (HTTP {http_status})")
+                    
+                    # Step 3: Quick sitemap check (fail early if sitemap definitely doesn't exist)
+                    logger.info(f"🔍 Performing quick sitemap check: {site_url}")
+                    set_task("checking_sitemap", 20, f"Checking for sitemap at {site_url}")
+                    sitemap_found, sitemap_url, sitemap_error = quick_sitemap_check(site_url, timeout=10)
+                    
+                    if not sitemap_found:
+                        # If quick check fails, we'll still try full parsing, but log a warning
+                        # Only fail if the error indicates the site itself is inaccessible
+                        if sitemap_error and ("not accessible" in sitemap_error.lower() or "dns" in sitemap_error.lower() or "connection" in sitemap_error.lower()):
+                            error_msg = f"Sitemap check failed: {sitemap_error}"
+                            logger.error(f"❌ {error_msg}")
+                            
+                            error_row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=f"error:sitemap_check_failed",
+                                fetched_at=datetime.utcnow(),
+                                raw_html=None,
+                                extracted_text=f"Site Builder: Sitemap check failed during initialization.\n\nError: {sitemap_error}\n\nURL: {site_url}\n\nThis usually means:\n- The site is not accessible\n- DNS resolution failed\n- Network connectivity issues\n\nPlease verify the site is accessible and try again.",
+                                meta_json=json.dumps({"type": "error", "reason": "sitemap_check_failed", "site_url": site_url, "error": sitemap_error})
+                            )
+                            session.add(error_row)
+                            if camp:
+                                camp.status = "INCOMPLETE"
+                                camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            set_task("error", 20, error_msg)
+                            logger.error(f"❌ Campaign {cid} analysis FAILED at Initializing stage - sitemap check failed")
+                            return
+                        else:
+                            # Sitemap not found at common locations, but site is accessible
+                            # We'll proceed to full parsing which will try more locations
+                            logger.warning(f"⚠️ Sitemap not found at common locations, but site is accessible. Will attempt full discovery.")
+                    else:
+                        logger.info(f"✅ Sitemap found at: {sitemap_url}")
                 
                 time.sleep(1)  # Brief pause before proceeding
 
@@ -895,26 +985,85 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     else:
                         logger.info(f"🏗️ Site Builder: Will collect all URLs from sitemap (no date filter)")
                     
-                    # Test if site URL is accessible before parsing
-                    try:
-                        import requests
-                        test_response = requests.get(site_url, timeout=10, headers={"User-Agent": "Mozilla/5.0 (compatible; SiteBuilderBot/1.0)"})
-                        logger.info(f"✅ Site URL is accessible: {site_url} (status: {test_response.status_code})")
-                    except Exception as test_error:
-                        logger.warning(f"⚠️ Could not access site URL {site_url}: {test_error}")
-                        logger.warning(f"⚠️ This might indicate network issues, but sitemap parsing will still be attempted")
-                    
+                    # Parse sitemap (we already validated accessibility at initialization, so this should work)
+                    # But handle network failures gracefully with better error messages
                     try:
                         sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls, most_recent=most_recent_urls)
                         logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
                         if len(sitemap_urls) > 0:
                             logger.info(f"✅ First 5 sitemap URLs: {sitemap_urls[:5]}")
                     except Exception as sitemap_error:
-                        logger.error(f"❌ Exception during sitemap parsing: {sitemap_error}")
-                        import traceback
-                        logger.error(traceback.format_exc())
+                        # Handle different types of errors with appropriate messages
+                        error_str = str(sitemap_error).lower()
                         sitemap_urls = []
-                        logger.error(f"❌ Sitemap parsing failed with exception - this is a critical error")
+                        
+                        # Check for timeout errors
+                        if "timeout" in error_str or "timed out" in error_str:
+                            logger.error(f"❌ Sitemap parsing timed out: {sitemap_error}")
+                            error_row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=f"error:sitemap_timeout",
+                                fetched_at=datetime.utcnow(),
+                                raw_html=None,
+                                extracted_text=f"Site Builder: Sitemap parsing timed out.\n\nURL: {site_url}\n\nThis usually means:\n- The server is slow to respond\n- Network connectivity issues\n- The sitemap is very large\n\nPlease try again or check your network connection.",
+                                meta_json=json.dumps({"type": "error", "reason": "sitemap_timeout", "site_url": site_url})
+                            )
+                            session.add(error_row)
+                            if camp:
+                                camp.status = "INCOMPLETE"
+                                camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            set_task("error", 30, f"Sitemap parsing timed out for {site_url}")
+                            logger.error(f"❌ Campaign {cid} analysis FAILED - sitemap parsing timed out")
+                            return
+                        # Check for connection errors
+                        elif "connection" in error_str or "dns" in error_str or "refused" in error_str:
+                            logger.error(f"❌ Sitemap parsing connection error: {sitemap_error}")
+                            if "dns" in error_str or "name resolution" in error_str:
+                                error_msg = "DNS resolution failed during sitemap parsing"
+                            elif "refused" in error_str:
+                                error_msg = "Connection refused during sitemap parsing"
+                            else:
+                                error_msg = f"Connection error: {str(sitemap_error)}"
+                            
+                            error_row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=f"error:sitemap_connection_error",
+                                fetched_at=datetime.utcnow(),
+                                raw_html=None,
+                                extracted_text=f"Site Builder: Connection error during sitemap parsing.\n\nError: {error_msg}\n\nURL: {site_url}\n\nThis usually means:\n- Network connectivity issues\n- DNS resolution problems\n- Server is not accepting connections\n\nPlease check your network connection and try again.",
+                                meta_json=json.dumps({"type": "error", "reason": "sitemap_connection_error", "site_url": site_url, "error": error_msg})
+                            )
+                            session.add(error_row)
+                            if camp:
+                                camp.status = "INCOMPLETE"
+                                camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            set_task("error", 30, error_msg)
+                            logger.error(f"❌ Campaign {cid} analysis FAILED - sitemap connection error")
+                            return
+                        # Handle all other exceptions
+                        else:
+                            logger.error(f"❌ Exception during sitemap parsing: {sitemap_error}")
+                            import traceback
+                            logger.error(traceback.format_exc())
+                            
+                            error_row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=f"error:sitemap_parsing_exception",
+                                fetched_at=datetime.utcnow(),
+                                raw_html=None,
+                                extracted_text=f"Site Builder: Unexpected error during sitemap parsing.\n\nError: {str(sitemap_error)}\n\nURL: {site_url}\n\nPlease check the backend logs for more details.",
+                                meta_json=json.dumps({"type": "error", "reason": "sitemap_parsing_exception", "site_url": site_url, "error": str(sitemap_error)})
+                            )
+                            session.add(error_row)
+                            if camp:
+                                camp.status = "INCOMPLETE"
+                                camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            set_task("error", 30, f"Sitemap parsing failed: {str(sitemap_error)}")
+                            logger.error(f"❌ Campaign {cid} analysis FAILED - sitemap parsing exception")
+                            return
                     
                     if not sitemap_urls:
                         logger.error(f"❌ Site Builder: No URLs found in sitemap for {site_url}")
@@ -931,24 +1080,20 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             source_url=f"error:sitemap_parsing_failed",
                             fetched_at=datetime.utcnow(),
                             raw_html=None,
-                            extracted_text=f"Site Builder: Failed to parse sitemap from {site_url}. No URLs found.\n\nPossible reasons:\n- sitemap.xml doesn't exist at {site_url}/sitemap.xml\n- sitemap is empty or malformed\n- sitemap requires authentication\n- Network/timeout issues\n\nPlease verify the sitemap exists and is accessible.",
+                            extracted_text=f"Site Builder: Failed to parse sitemap from {site_url}. No URLs found.\n\nPossible reasons:\n- sitemap.xml doesn't exist at {site_url}/sitemap.xml\n- sitemap is empty or malformed\n- sitemap requires authentication\n- Network/timeout issues\n\nPlease verify the sitemap exists and is accessible. You can check by visiting {site_url}/sitemap.xml in your browser.",
                             meta_json=json.dumps({"type": "error", "reason": "sitemap_parsing_failed", "site_url": site_url})
                         )
                         session.add(error_row)
-                        session.commit()
-                        logger.error(f"❌ Created error row for campaign {cid} - sitemap parsing failed")
-                        
-                        # Set campaign status to INCOMPLETE and progress to error state
                         camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
                         if camp:
                             camp.status = "INCOMPLETE"
                             camp.updated_at = datetime.utcnow()
-                            session.commit()
-                            logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to sitemap parsing failure")
+                        session.commit()
+                        logger.error(f"❌ Created error row for campaign {cid} - sitemap parsing failed")
                         
-                        # Set progress to error state (NOT 100%)
-                        set_task("error", 95, f"Sitemap parsing failed for {site_url}. No URLs found. Check if sitemap.xml exists.")
-                        logger.error(f"❌ Campaign {cid} analysis failed - sitemap parsing returned no URLs")
+                        # Set progress to error state at LOW percentage (30%) - FAIL EARLY
+                        set_task("error", 30, f"Sitemap parsing failed for {site_url}. No URLs found. Check if sitemap.xml exists.")
+                        logger.error(f"❌ Campaign {cid} analysis FAILED at parsing stage - sitemap parsing returned no URLs")
                         return
                     
                     # Validate URLs before scraping

@@ -32,6 +32,182 @@ def create_session_with_retry() -> requests.Session:
     return session
 
 
+def validate_url_format(url: str) -> Tuple[bool, Optional[str]]:
+    """
+    Validate URL format and basic structure
+    
+    Args:
+        url: URL string to validate
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not url or not isinstance(url, str):
+        return False, "URL is empty or not a string"
+    
+    url = url.strip()
+    if not url:
+        return False, "URL is empty or whitespace only"
+    
+    # Check for protocol
+    if not url.startswith(("http://", "https://")):
+        return False, "URL must start with http:// or https://"
+    
+    # Parse URL
+    try:
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            return False, "URL is missing domain name"
+        
+        # Check for valid domain characters
+        if len(parsed.netloc) > 253:  # Max domain length
+            return False, "Domain name is too long (max 253 characters)"
+        
+        # Check for invalid characters in domain
+        if ' ' in parsed.netloc:
+            return False, "Domain name contains spaces"
+        
+        return True, None
+    except Exception as e:
+        return False, f"Invalid URL format: {str(e)}"
+
+
+def validate_url_accessibility(url: str, timeout: int = 10) -> Tuple[bool, Optional[str], Optional[int]]:
+    """
+    Validate that a URL is accessible (DNS resolution, connectivity, HTTP status)
+    
+    Args:
+        url: URL to validate
+        timeout: Request timeout in seconds
+    
+    Returns:
+        Tuple of (is_accessible, error_message, http_status_code)
+        http_status_code will be None if request failed before getting a response
+    """
+    try:
+        session = create_session_with_retry()
+        response = session.get(
+            url,
+            timeout=timeout,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; SiteBuilderBot/1.0)"},
+            allow_redirects=True
+        )
+        status_code = response.status_code
+        
+        # Consider 2xx and 3xx as accessible (even if redirected)
+        if 200 <= status_code < 400:
+            return True, None, status_code
+        elif status_code == 404:
+            return False, f"Site returned 404 Not Found - the URL does not exist", status_code
+        elif status_code == 403:
+            return False, f"Site returned 403 Forbidden - access denied", status_code
+        elif status_code == 503:
+            return False, f"Site returned 503 Service Unavailable - server is down", status_code
+        else:
+            return False, f"Site returned HTTP {status_code}", status_code
+            
+    except requests.exceptions.Timeout:
+        return False, "Connection timeout - the site did not respond in time", None
+    except requests.exceptions.ConnectionError as e:
+        error_str = str(e).lower()
+        if "dns" in error_str or "name resolution" in error_str:
+            return False, "DNS resolution failed - domain name does not exist", None
+        elif "refused" in error_str:
+            return False, "Connection refused - the server is not accepting connections", None
+        else:
+            return False, f"Connection error: {str(e)}", None
+    except requests.exceptions.TooManyRedirects:
+        return False, "Too many redirects - the URL redirects in a loop", None
+    except requests.exceptions.RequestException as e:
+        return False, f"Request failed: {str(e)}", None
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)}", None
+
+
+def quick_sitemap_check(site_url: str, timeout: int = 10) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Quickly check if a sitemap exists for the given site URL
+    This is a lightweight check to fail early at initialization
+    
+    Args:
+        site_url: Base URL of the website
+        timeout: Request timeout in seconds
+    
+    Returns:
+        Tuple of (sitemap_found, sitemap_url, error_message)
+        sitemap_url will be None if not found
+    """
+    try:
+        # Normalize URL
+        site_url = site_url.strip().rstrip("/")
+        
+        # Validate format first
+        is_valid, format_error = validate_url_format(site_url)
+        if not is_valid:
+            return False, None, format_error
+        
+        parsed_base = urlparse(site_url)
+        base_url = f"{parsed_base.scheme}://{parsed_base.netloc}"
+        
+        # Check site accessibility first
+        is_accessible, access_error, status_code = validate_url_accessibility(base_url, timeout=timeout)
+        if not is_accessible:
+            return False, None, f"Site is not accessible: {access_error}"
+        
+        # Try the most common sitemap locations first
+        potential_sitemaps = [
+            f"{base_url}/sitemap.xml",
+            f"{base_url}/sitemap_index.xml",
+        ]
+        
+        session = create_session_with_retry()
+        
+        # Quick check: try sitemap.xml first (most common)
+        for sitemap_url in potential_sitemaps[:1]:  # Only check first one for speed
+            try:
+                response = session.head(sitemap_url, timeout=timeout, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; SiteBuilderBot/1.0)"
+                })
+                if response.status_code == 200:
+                    # Verify it's actually XML
+                    content_type = response.headers.get('Content-Type', '').lower()
+                    if 'xml' in content_type:
+                        return True, sitemap_url, None
+            except requests.exceptions.RequestException:
+                continue
+        
+        # If HEAD doesn't work, try robots.txt for sitemap location
+        try:
+            robots_url = f"{base_url}/robots.txt"
+            response = session.get(robots_url, timeout=timeout, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; SiteBuilderBot/1.0)"
+            })
+            if response.status_code == 200:
+                for line in response.text.split("\n"):
+                    line = line.strip()
+                    if line.lower().startswith("sitemap:"):
+                        sitemap_url = line.split(":", 1)[1].strip()
+                        # Quick check if this sitemap exists
+                        try:
+                            sitemap_response = session.head(sitemap_url, timeout=timeout, headers={
+                                "User-Agent": "Mozilla/5.0 (compatible; SiteBuilderBot/1.0)"
+                            })
+                            if sitemap_response.status_code == 200:
+                                return True, sitemap_url, None
+                        except:
+                            pass
+        except:
+            pass
+        
+        # If we get here, no sitemap was found in quick check
+        # This doesn't mean it doesn't exist, but we'll let the full parse try
+        return False, None, "Sitemap not found at common locations. Full parsing will attempt discovery."
+        
+    except Exception as e:
+        logger.error(f"Error in quick_sitemap_check: {e}")
+        return False, None, f"Error checking for sitemap: {str(e)}"
+
+
 def find_sitemap_urls(base_url: str) -> List[str]:
     """
     Find potential sitemap URLs for a given base URL
