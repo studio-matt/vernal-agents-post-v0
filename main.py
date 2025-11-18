@@ -1373,7 +1373,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             if error_count > 0:
                                 logger.error(f"❌ Campaign {cid} scraping failed: {error_count} error rows, 0 valid data rows")
                                 logger.error(f"❌ This indicates scraping did not succeed. Check logs above for scraping errors.")
-                                # Keep progress at 95% to indicate failure
+                                # Keep progress at 95% to indicate failure - NEVER set to 100% if no valid data
                                 set_task("error", 95, f"Scraping failed: {error_count} errors, 0 valid data. Check logs for details.")
                                 
                                 # Extract error messages from error rows for better diagnostics
@@ -1411,8 +1411,13 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 if missing_deps:
                                     camp.description = (camp.description or "") + f"\n[ERROR: Missing dependencies - check logs]"
                             else:
-                                logger.warning(f"⚠️ Campaign {cid} has no scraped data (no rows at all), keeping status as INCOMPLETE")
-                                logger.warning(f"⚠️ This suggests scraping never ran or failed before creating any rows")
+                                # No rows at all - this shouldn't happen but handle it
+                                logger.error(f"❌ Campaign {cid} has no data rows at all (no errors, no valid data)")
+                                logger.error(f"❌ This suggests scraping never ran or failed before creating any rows")
+                                # Keep progress at 95% to indicate failure
+                                set_task("error", 95, "No data was scraped. Check backend logs for details.")
+                            
+                            # Set status to INCOMPLETE for all failure cases
                             camp.status = "INCOMPLETE"
                             camp.updated_at = datetime.utcnow()
                             session.commit()
