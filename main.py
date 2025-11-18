@@ -630,13 +630,22 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
         campaign_id = analyze_data.campaign_id or f"campaign-{uuid.uuid4()}"
         campaign_name = analyze_data.campaign_name or "Unknown Campaign"
         
-        # If campaign_id is provided, verify ownership
+        # If campaign_id is provided, verify ownership (or allow admin)
         if analyze_data.campaign_id:
             from models import Campaign
-            campaign = db.query(Campaign).filter(
-                Campaign.campaign_id == campaign_id,
-                Campaign.user_id == current_user.id
-            ).first()
+            is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
+            if is_admin:
+                # Admin can build any campaign
+                campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+                if campaign:
+                    logger.info(f"Admin user {current_user.id} building campaign {campaign_id} (owner: {campaign.user_id})")
+            else:
+                # Regular users can only build their own campaigns
+                campaign = db.query(Campaign).filter(
+                    Campaign.campaign_id == campaign_id,
+                    Campaign.user_id == current_user.id
+                ).first()
+            
             if not campaign:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
