@@ -1292,14 +1292,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     # Wait a bit longer if no data yet (scraping might still be running)
                     time.sleep(5)
 
-                # Finalize - only set to 100% if we actually have data
-                if created > 0:
-                    set_task("finalizing", 100, "Scraping complete")
-                else:
-                    set_task("finalizing", 95, "Finalizing... (scraping may still be in progress)")
-                time.sleep(1)
-
-                # Mark campaign ready in DB
+                # Mark campaign ready in DB - validate data BEFORE setting progress to 100%
                 logger.info(f"📝 Step 6: Finalizing campaign {cid}")
                 try:
                     # Use a fresh query to ensure we get the latest campaign state
@@ -1342,6 +1335,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             camp.updated_at = datetime.utcnow()
                             session.commit()
                             logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to no valid data")
+                            # Keep progress at 95% to indicate it's not fully complete
+                            set_task("error", 95, "Scraping completed but no valid data found. Check logs for details.")
                         elif valid_data_count > 0:
                             # Store coarse topics from keywords as a ready signal
                             if (data.keywords or []) and not camp.topics:
@@ -1353,6 +1348,9 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             camp.updated_at = datetime.utcnow()
                             session.commit()
                             logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE with {valid_data_count} valid data rows ({valid_text_count} with text)")
+                            
+                            # Only set progress to 100% AFTER we've confirmed valid data exists
+                            set_task("finalizing", 100, f"Scraping complete - {valid_data_count} pages scraped successfully")
                             
                             # Verify the status was saved correctly
                             session.refresh(camp)
@@ -1367,6 +1365,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             if error_count > 0:
                                 logger.error(f"❌ Campaign {cid} scraping failed: {error_count} error rows, 0 valid data rows")
                                 logger.error(f"❌ This indicates scraping did not succeed. Check logs above for scraping errors.")
+                                # Keep progress at 95% to indicate failure
+                                set_task("error", 95, f"Scraping failed: {error_count} errors, 0 valid data. Check logs for details.")
                                 
                                 # Extract error messages from error rows for better diagnostics
                                 error_messages = []
