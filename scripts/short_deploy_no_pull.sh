@@ -1,39 +1,14 @@
 #!/bin/bash
-# Short deploy script - optimized one-liner version
-# Usage: cd /home/ubuntu/vernal-agents-post-v0 && bash scripts/short_deploy.sh
+# Short deploy script WITHOUT git pull - use when GitHub is down or code is already current
+# Usage: cd /home/ubuntu/vernal-agents-post-v0 && bash scripts/short_deploy_no_pull.sh
 
 set -e  # Exit on any error
 
-echo "🚀 Starting short deploy..."
+echo "🚀 Starting short deploy (skipping git pull)..."
 
-# Step 1: Git operations
-echo "📥 Pulling latest code..."
+# Step 1: Navigate to directory
+echo "📁 Navigating to project directory..."
 cd /home/ubuntu/vernal-agents-post-v0
-
-# Try git pull with retries (GitHub sometimes returns 500)
-MAX_RETRIES=3
-RETRY_COUNT=0
-GIT_SUCCESS=false
-
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if git fetch origin && git switch main && git pull --ff-only origin main; then
-        GIT_SUCCESS=true
-        break
-    else
-        RETRY_COUNT=$((RETRY_COUNT + 1))
-        if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-            echo "⚠️  Git pull failed (attempt $RETRY_COUNT/$MAX_RETRIES), retrying in 5 seconds..."
-            sleep 5
-        fi
-    fi
-done
-
-if [ "$GIT_SUCCESS" = false ]; then
-    echo "⚠️  Git pull failed after $MAX_RETRIES attempts (GitHub may be down)"
-    echo "ℹ️  Continuing with existing code..."
-    # Check if we're on main branch at least
-    git switch main || true
-fi
 
 # Step 2: Activate venv and install dependencies
 echo "📦 Installing dependencies..."

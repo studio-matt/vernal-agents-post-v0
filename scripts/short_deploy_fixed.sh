@@ -5,9 +5,7 @@
 set -e  # Exit on any error
 
 cd /home/ubuntu/vernal-agents-post-v0 && \
-git fetch origin && \
-git switch main && \
-git pull --ff-only origin main && \
+(git fetch origin && git switch main && git pull --ff-only origin main || echo "⚠️  Git pull failed (GitHub may be down), continuing with existing code...") && \
 source venv/bin/activate && \
 pip install -r requirements.txt --no-cache-dir -q && \
 (python3 scripts/insert_visualizer_settings.py || echo "⚠️  insert_visualizer_settings.py failed, continuing...") && \
