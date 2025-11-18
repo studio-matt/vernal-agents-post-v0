@@ -579,6 +579,7 @@ class AnalyzeRequest(BaseModel):
     site_base_url: Optional[str] = None
     target_keywords: Optional[List[str]] = None
     top_ideas_count: Optional[int] = 10
+    most_recent_urls: Optional[int] = None  # Number of most recent URLs to scrape (date-based)
     depth: Optional[int] = 1
     max_pages: Optional[int] = 10
     batch_size: Optional[int] = 1
@@ -755,7 +756,11 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     logger.info(f"🏗️ Site Builder: Starting sitemap parsing for {site_url}")
                     # Use max_pages from settings, or default to 200 for Site Builder
                     max_sitemap_urls = data.max_pages if hasattr(data, 'max_pages') and data.max_pages else 200
-                    sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls)
+                    # Get most_recent_urls setting if provided
+                    most_recent_urls = getattr(data, 'most_recent_urls', None)
+                    if most_recent_urls:
+                        logger.info(f"📅 Site Builder: Will filter to {most_recent_urls} most recent URLs by date")
+                    sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls, most_recent=most_recent_urls)
                     logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
                     
                     if not sitemap_urls:
