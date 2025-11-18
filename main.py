@@ -746,7 +746,32 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.error(f"❌ Site Builder campaign requires site_base_url")
                         logger.error(f"❌ Request data.site_base_url: {getattr(data, 'site_base_url', None)}")
                         logger.error(f"❌ Request data.urls: {data.urls if hasattr(data, 'urls') else 'N/A'}")
-                        set_task("error", 0, "Site URL is required for Site Builder campaigns")
+                        logger.error(f"❌ Campaign {cid} has site_base_url=NULL in database")
+                        
+                        # Create error row so user can see what went wrong
+                        error_row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"error:missing_site_base_url",
+                            fetched_at=datetime.utcnow(),
+                            raw_html=None,
+                            extracted_text=f"Site Builder: Campaign is missing site_base_url.\n\nThis campaign was created without a site URL. Please:\n1. Edit the campaign and set the Site Base URL\n2. Click 'Build Campaign' again\n\nCurrent campaign data:\n- Type: {data.type}\n- Request site_base_url: {getattr(data, 'site_base_url', None)}\n- Request URLs: {data.urls if hasattr(data, 'urls') else 'N/A'}",
+                            meta_json=json.dumps({"type": "error", "reason": "missing_site_base_url", "campaign_type": data.type})
+                        )
+                        session.add(error_row)
+                        session.commit()
+                        logger.error(f"❌ Created error row for campaign {cid} - missing site_base_url")
+                        
+                        # Set campaign status to INCOMPLETE
+                        camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                        if camp:
+                            camp.status = "INCOMPLETE"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.error(f"❌ Campaign {cid} status set to INCOMPLETE due to missing site_base_url")
+                        
+                        # Set progress to error state
+                        set_task("error", 95, "Site URL is required for Site Builder campaigns. Please edit the campaign and set the Site Base URL.")
+                        logger.error(f"❌ Campaign {cid} analysis failed - site_base_url is missing")
                         return
                     
                     logger.info(f"🏗️ Site Builder: Parsing sitemap from {site_url}")
