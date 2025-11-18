@@ -476,7 +476,9 @@ def scrape_campaign_data(
     # Deduplicate URLs
     unique_urls = list(dict.fromkeys(all_urls))[:max_pages]
     
-    logger.info(f"📋 Total URLs to scrape: {len(unique_urls)} (from {len(urls)} direct URLs + {len(search_urls) if keywords else 0} search results)")
+    # Calculate search results count safely
+    search_results_count = len(search_urls) if keywords and 'search_urls' in locals() else 0
+    logger.info(f"📋 Total URLs to scrape: {len(unique_urls)} (from {len(urls) if urls else 0} direct URLs + {search_results_count} search results)")
     
     if not unique_urls:
         logger.error(f"❌ CRITICAL: No URLs to scrape! Keywords: {keywords}, Direct URLs: {urls}, Query: '{query}'")

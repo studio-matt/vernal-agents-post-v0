@@ -11,6 +11,7 @@ from datetime import datetime
 import threading
 import time
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -693,12 +694,18 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     set_task("parsing_sitemap", 30, f"Parsing sitemap from {site_url}")
                     
                     # Parse sitemap to get all URLs
+                    logger.info(f"🏗️ Site Builder: Starting sitemap parsing for {site_url}")
                     sitemap_urls = parse_sitemap_from_site(site_url, max_urls=200)  # Limit to 200 URLs for performance
-                    logger.info(f"✅ Found {len(sitemap_urls)} URLs from sitemap")
+                    logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
                     
                     if not sitemap_urls:
                         logger.error(f"❌ Site Builder: No URLs found in sitemap for {site_url}")
-                        logger.error(f"❌ This could mean: sitemap.xml doesn't exist, sitemap is empty, or parser failed")
+                        logger.error(f"❌ This could mean:")
+                        logger.error(f"   1. sitemap.xml doesn't exist at common locations ({site_url}/sitemap.xml)")
+                        logger.error(f"   2. sitemap is empty or malformed")
+                        logger.error(f"   3. sitemap requires authentication")
+                        logger.error(f"   4. sitemap is blocked by robots.txt or CDN")
+                        logger.error(f"   5. Network/timeout issues accessing the sitemap")
                         set_task("error", 0, f"No URLs found in sitemap for {site_url}. Check if sitemap.xml exists.")
                         
                         # Create error row so user can see what went wrong
@@ -707,7 +714,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             source_url=f"error:sitemap_parsing_failed",
                             fetched_at=datetime.utcnow(),
                             raw_html=None,
-                            extracted_text=f"Site Builder: Failed to parse sitemap from {site_url}. No URLs found. Please check if sitemap.xml exists at {site_url}/sitemap.xml",
+                            extracted_text=f"Site Builder: Failed to parse sitemap from {site_url}. No URLs found.\n\nPossible reasons:\n- sitemap.xml doesn't exist at {site_url}/sitemap.xml\n- sitemap is empty or malformed\n- sitemap requires authentication\n- Network/timeout issues\n\nPlease verify the sitemap exists and is accessible.",
                             meta_json=json.dumps({"type": "error", "reason": "sitemap_parsing_failed", "site_url": site_url})
                         )
                         session.add(error_row)
@@ -715,8 +722,42 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.error(f"❌ Created error row for campaign {cid} - sitemap parsing failed")
                         return
                     
-                    # Use sitemap URLs for scraping
-                    urls = sitemap_urls
+                    # Validate URLs before scraping
+                    valid_urls = []
+                    invalid_urls = []
+                    for url in sitemap_urls:
+                        try:
+                            parsed = urlparse(url)
+                            if parsed.scheme in ('http', 'https') and parsed.netloc:
+                                valid_urls.append(url)
+                            else:
+                                invalid_urls.append(url)
+                                logger.warning(f"⚠️ Invalid URL from sitemap: {url}")
+                        except Exception as e:
+                            invalid_urls.append(url)
+                            logger.warning(f"⚠️ Error validating URL {url}: {e}")
+                    
+                    if invalid_urls:
+                        logger.warning(f"⚠️ Found {len(invalid_urls)} invalid URLs out of {len(sitemap_urls)} total")
+                    
+                    if not valid_urls:
+                        logger.error(f"❌ Site Builder: All {len(sitemap_urls)} URLs from sitemap are invalid!")
+                        error_row = CampaignRawData(
+                            campaign_id=cid,
+                            source_url=f"error:invalid_sitemap_urls",
+                            fetched_at=datetime.utcnow(),
+                            raw_html=None,
+                            extracted_text=f"Site Builder: Found {len(sitemap_urls)} URLs in sitemap, but all are invalid. Please check the sitemap format.",
+                            meta_json=json.dumps({"type": "error", "reason": "invalid_sitemap_urls", "site_url": site_url, "url_count": len(sitemap_urls)})
+                        )
+                        session.add(error_row)
+                        session.commit()
+                        return
+                    
+                    logger.info(f"✅ Validated {len(valid_urls)} valid URLs out of {len(sitemap_urls)} total")
+                    
+                    # Use validated sitemap URLs for scraping
+                    urls = valid_urls
                     keywords = []  # Don't use keywords for Site Builder
                     depth = 1  # Only scrape the URLs from sitemap
                     max_pages = len(sitemap_urls)  # Scrape all URLs from sitemap
@@ -732,13 +773,15 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     include_links = data.include_links if hasattr(data, 'include_links') else False
                 
                 logger.info(f"📝 Scraping settings: URLs={len(urls)}, Keywords={len(keywords)}, depth={depth}, max_pages={max_pages}")
-                logger.info(f"📝 URL list: {urls}")
+                logger.info(f"📝 URL list: {urls[:10] if urls else []}")  # Show first 10 URLs
                 logger.info(f"📝 Keywords list: {keywords}")
-                logger.info(f"🔍 CRITICAL: Keywords being used for scraping: {keywords}")
-                if not keywords or len(keywords) == 0:
-                    logger.error(f"❌ CRITICAL: No keywords provided! This will cause scraping to fail.")
-                elif keywords and keywords[0] != "pug" and "pug" in str(keywords):
-                    logger.warning(f"⚠️ WARNING: Keywords appear incorrect. Expected 'pug', got: {keywords}")
+                # Only warn about missing keywords if we also don't have URLs (Site Builder uses URLs only)
+                if not keywords and not urls:
+                    logger.error(f"❌ CRITICAL: No keywords or URLs provided! This will cause scraping to fail.")
+                elif not keywords and urls:
+                    logger.info(f"ℹ️ No keywords provided, but {len(urls)} URLs will be scraped (Site Builder mode)")
+                elif keywords and not urls:
+                    logger.info(f"ℹ️ No URLs provided, will search DuckDuckGo for keywords: {keywords}")
                 
                 # Import web scraping module
                 scrape_campaign_data = None
