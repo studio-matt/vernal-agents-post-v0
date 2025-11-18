@@ -729,8 +729,12 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             site_url = camp.site_base_url
                             logger.info(f"✅ Retrieved site_base_url from campaign database: {site_url}")
                         elif data.urls and len(data.urls) > 0:
-                            site_url = data.urls[0]
-                            logger.info(f"✅ Using first URL from request: {site_url}")
+                            # Normalize to base domain (remove path)
+                            from urllib.parse import urlparse
+                            temp_url = data.urls[0]
+                            parsed = urlparse(temp_url)
+                            site_url = f"{parsed.scheme}://{parsed.netloc}"
+                            logger.info(f"✅ Using first URL from request and normalizing to base domain: {temp_url} -> {site_url}")
                     
                     target_keywords = getattr(data, 'target_keywords', None) or data.keywords or []
                     top_ideas_count = getattr(data, 'top_ideas_count', 10)
@@ -749,7 +753,9 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     
                     # Parse sitemap to get all URLs
                     logger.info(f"🏗️ Site Builder: Starting sitemap parsing for {site_url}")
-                    sitemap_urls = parse_sitemap_from_site(site_url, max_urls=200)  # Limit to 200 URLs for performance
+                    # Use max_pages from settings, or default to 200 for Site Builder
+                    max_sitemap_urls = data.max_pages if hasattr(data, 'max_pages') and data.max_pages else 200
+                    sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls)
                     logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
                     
                     if not sitemap_urls:
@@ -889,6 +895,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     
                     try:
                         logger.info(f"🚀 Calling scrape_campaign_data with: keywords={keywords}, urls={urls}, query={data.query or ''}, depth={depth}, max_pages={max_pages}")
+                        # Update progress to show scraping is in progress
+                        set_task("scraping", 50, f"Scraping {len(urls)} URLs... (this may take several minutes)")
                         scraped_results = scrape_campaign_data(
                             keywords=keywords,
                             urls=urls,
@@ -900,6 +908,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         )
                         
                         logger.info(f"✅ Web scraping completed: {len(scraped_results)} pages scraped")
+                        # Update progress after scraping completes
+                        set_task("scraping_complete", 70, f"Scraped {len(scraped_results)} pages, saving to database...")
                         
                         # Log detailed results for diagnostics
                         if len(scraped_results) == 0:
@@ -1264,13 +1274,21 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 # Entities will be extracted when research endpoint is called
                 time.sleep(2)
 
-                # Step 5: modeling topics
-                set_task("modeling_topics", 90, "Preparing content for analysis")
-                # Topics will be modeled when research endpoint is called
-                time.sleep(2)
+                # Step 5: modeling topics (only if we have data)
+                if created > 0:
+                    set_task("modeling_topics", 90, "Preparing content for analysis")
+                    # Topics will be modeled when research endpoint is called
+                    time.sleep(2)
+                else:
+                    set_task("modeling_topics", 90, "Waiting for scraping to complete...")
+                    # Wait a bit longer if no data yet (scraping might still be running)
+                    time.sleep(5)
 
-                # Finalize
-                set_task("finalizing", 100, "Scraping complete")
+                # Finalize - only set to 100% if we actually have data
+                if created > 0:
+                    set_task("finalizing", 100, "Scraping complete")
+                else:
+                    set_task("finalizing", 95, "Finalizing... (scraping may still be in progress)")
                 time.sleep(1)
 
                 # Mark campaign ready in DB
