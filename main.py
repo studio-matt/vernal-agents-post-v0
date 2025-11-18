@@ -763,8 +763,14 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.info(f"📅 Site Builder: Will filter to {most_recent_urls} most recent URLs by date")
                     else:
                         logger.info(f"🏗️ Site Builder: Will collect all URLs from sitemap (no date filter)")
-                    sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls, most_recent=most_recent_urls)
-                    logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
+                    try:
+                        sitemap_urls = parse_sitemap_from_site(site_url, max_urls=max_sitemap_urls, most_recent=most_recent_urls)
+                        logger.info(f"✅ Sitemap parsing complete: Found {len(sitemap_urls)} URLs from sitemap")
+                    except Exception as sitemap_error:
+                        logger.error(f"❌ Exception during sitemap parsing: {sitemap_error}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        sitemap_urls = []
                     
                     if not sitemap_urls:
                         logger.error(f"❌ Site Builder: No URLs found in sitemap for {site_url}")
