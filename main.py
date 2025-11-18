@@ -28,6 +28,37 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI()
 
+# Global exception handler to catch ALL exceptions, including those in dependency injection
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch all exceptions and log them with full details"""
+    import traceback
+    error_trace = traceback.format_exc()
+    logger.error(f"❌ GLOBAL EXCEPTION HANDLER: {type(exc).__name__}: {str(exc)}")
+    logger.error(f"❌ Request URL: {request.url}")
+    logger.error(f"❌ Request method: {request.method}")
+    try:
+        body = await request.body()
+        logger.error(f"❌ Request body: {body.decode('utf-8')[:500]}")
+    except:
+        pass
+    logger.error(f"❌ Full traceback:\n{error_trace}")
+    
+    # If it's already an HTTPException, re-raise it
+    if isinstance(exc, HTTPException):
+        raise exc
+    
+    # Otherwise, return 500 with error details
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": f"Internal server error: {str(exc)}",
+            "error_type": type(exc).__name__,
+            "detail": str(exc)
+        }
+    )
+
 # Add CORS middleware
 # Note: When allow_credentials=True, cannot use allow_origins=["*"]
 # Must specify exact origins
