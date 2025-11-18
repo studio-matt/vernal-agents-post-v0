@@ -1676,7 +1676,15 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
     
     task_id = CAMPAIGN_TASK_INDEX.get(campaign_id)
     if not task_id:
-        raise HTTPException(status_code=404, detail="No task for campaign")
+        # Task doesn't exist - return a clear status instead of 404
+        # This happens if server restarted or analysis never started
+        return {
+            "status": "not_found",
+            "progress": 0,
+            "current_step": "not_started",
+            "progress_message": "Analysis task not found. The campaign may not have started analysis yet, or the server was restarted. Try clicking 'Build Campaign' again.",
+            "campaign_id": campaign_id
+        }
     return get_analyze_status(task_id, current_user)
 
 # Debug endpoint to check raw data for a campaign
