@@ -206,6 +206,7 @@ class CampaignCreate(BaseModel):
     name: str
     description: Optional[str] = None
     type: str
+    query: Optional[str] = None  # Added to match frontend payload
     keywords: Optional[List[str]] = None
     urls: Optional[List[str]] = None
     trendingTopics: Optional[List[str]] = None
@@ -219,6 +220,8 @@ class CampaignCreate(BaseModel):
     site_base_url: Optional[str] = None
     target_keywords: Optional[List[str]] = None
     top_ideas_count: Optional[int] = None
+    # Look Alike specific fields
+    articles_url: Optional[str] = None
 
 class CampaignUpdate(BaseModel):
     name: Optional[str] = None
@@ -413,7 +416,7 @@ def create_campaign(campaign_data: CampaignCreate, current_user = Depends(get_cu
             campaign_id=campaign_id,
             campaign_name=campaign_data.name,
             description=campaign_data.description,
-            query=campaign_data.name,
+            query=campaign_data.query or campaign_data.name,  # Use query if provided, otherwise use name
             type=campaign_data.type,
             keywords=keywords_str,
             urls=urls_str,
