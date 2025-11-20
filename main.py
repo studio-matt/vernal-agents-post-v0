@@ -2293,8 +2293,34 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
             detail="Campaign not found or access denied"
         )
     
-    task_id = CAMPAIGN_TASK_INDEX.get(campaign_id)
-    if not task_id:
+    # CRITICAL: Find the ACTIVE task for this campaign (not just the one in index)
+    # Multiple tasks might exist if Build button was clicked multiple times
+    # Return the one that's actually running (in_progress), or the most recent one
+    
+    active_task_id = None
+    active_task_progress = -1
+    
+    # First check the index (most recent task)
+    task_id_from_index = CAMPAIGN_TASK_INDEX.get(campaign_id)
+    
+    # Check all tasks to find the one that's actually running
+    for tid, task in TASKS.items():
+        if task.get("campaign_id") == campaign_id:
+            task_progress = task.get("progress", 0)
+            # Prefer tasks that are actively running (progress > 0 and < 100)
+            if 0 < task_progress < 100:
+                if task_progress > active_task_progress:
+                    active_task_id = tid
+                    active_task_progress = task_progress
+            # If no active task found yet, use the one from index
+            elif active_task_id is None and tid == task_id_from_index:
+                active_task_id = tid
+    
+    # Fallback to index if no active task found
+    if not active_task_id:
+        active_task_id = task_id_from_index
+    
+    if not active_task_id or active_task_id not in TASKS:
         # Task doesn't exist - return a clear status instead of 404
         # This happens if server restarted or analysis never started
         return {
@@ -2304,7 +2330,9 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
             "progress_message": "Analysis task not found. The campaign may not have started analysis yet, or the server was restarted. Try clicking 'Build Campaign' again.",
             "campaign_id": campaign_id
         }
-    return get_analyze_status(task_id, current_user)
+    
+    logger.debug(f"📊 get_status_by_campaign: Using task {active_task_id} for campaign {campaign_id} (index had {task_id_from_index})")
+    return get_analyze_status(active_task_id, current_user)
 
 # Debug endpoint to check raw data for a campaign
 @app.get("/campaigns/{campaign_id}/debug")
