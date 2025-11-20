@@ -1224,10 +1224,15 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     max_sitemap_urls = 10000  # High limit to get all URLs from sitemap
                     # Get most_recent_urls setting if provided
                     most_recent_urls = getattr(data, 'most_recent_urls', None)
+                    logger.info(f"🔍 DEBUG: most_recent_urls value received: {most_recent_urls} (type: {type(most_recent_urls)})")
+                    logger.info(f"🔍 DEBUG: data object has most_recent_urls attr: {hasattr(data, 'most_recent_urls')}")
+                    if hasattr(data, 'most_recent_urls'):
+                        logger.info(f"🔍 DEBUG: data.most_recent_urls = {getattr(data, 'most_recent_urls', 'NOT_FOUND')}")
                     if most_recent_urls:
                         logger.info(f"📅 Site Builder: Will filter to {most_recent_urls} most recent URLs by date")
                     else:
-                        logger.info(f"🏗️ Site Builder: Will collect all URLs from sitemap (no date filter)")
+                        logger.warning(f"⚠️ Site Builder: most_recent_urls is None/0/empty - Will collect ALL URLs from sitemap (no date filter)")
+                        logger.warning(f"⚠️ This means it will scrape all {len(sitemap_urls) if 'sitemap_urls' in locals() else 'unknown'} URLs instead of limiting to most recent")
                     
                     # Parse sitemap (we already validated accessibility at initialization, so this should work)
                     # But handle network failures gracefully with better error messages
