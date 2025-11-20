@@ -589,15 +589,26 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 **🚨 IMMEDIATE ACTION REQUIRED - Run This NOW:**
 
 ```bash
-# SSH to backend server
-ssh ubuntu@18.235.104.132
+# SSH to backend server (if you have SSH key access)
+# OR if you're already on the server, skip SSH step
 
 # Check the LAST error in logs (most recent /analyze failure)
-sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "analyze|CRITICAL|ERROR|❌" | tail -50
+sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "analyze|CRITICAL|ERROR|❌|GLOBAL EXCEPTION" | tail -100
+
+# Check for errors in dependency injection (happens BEFORE endpoint code)
+sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "GLOBAL EXCEPTION|get_current_user|get_db|ValidationError" | tail -100
 
 # OR watch logs in real-time (run this, then trigger the error from frontend)
-sudo journalctl -u vernal-agents -f | grep -E "analyze|CRITICAL|ERROR|❌|GLOBAL EXCEPTION"
+sudo journalctl -u vernal-agents -f | grep -E "analyze|CRITICAL|ERROR|❌|GLOBAL EXCEPTION|POST.*analyze"
+
+# Check if /analyze POST requests are even reaching the backend
+sudo journalctl -u vernal-agents --since "10 minutes ago" | grep "POST.*analyze"
 ```
+
+**⚠️ IMPORTANT:** If you see NO `/analyze` POST requests in logs, the error is happening in:
+- **Pydantic validation** (parsing request body) - Returns 422, not 500
+- **Dependency injection** (`get_current_user` or `get_db`) - Should show `GLOBAL EXCEPTION HANDLER`
+- **Request parsing** - Before endpoint code runs
 
 **The logs will show:**
 - `❌ CRITICAL: Error in /analyze endpoint` - The actual error message
@@ -623,6 +634,16 @@ sudo journalctl -u vernal-agents -f | grep -E "analyze|CRITICAL|ERROR|❌|GLOBAL
      - `❌ Full traceback:` - Shows complete stack trace
      - `❌ GLOBAL EXCEPTION HANDLER` - Catches errors in dependency injection
   3. **Common causes (check logs to identify which one):**
+     - **NO /analyze POST in logs (error before endpoint):**
+       - **Pydantic validation error** - Request body doesn't match `AnalyzeRequest` model
+         - **Look for:** `ValidationError` or 422 status (not 500)
+         - **Fix:** Check frontend payload matches backend model, verify all required fields
+       - **Dependency injection error** - `get_current_user` or `get_db` fails
+         - **Look for:** `GLOBAL EXCEPTION HANDLER` in logs
+         - **Fix:** Check JWT token, verify database connection, check auth_api imports
+       - **Request parsing error** - Malformed JSON or missing Content-Type header
+         - **Look for:** `JSONDecodeError` or `UnicodeDecodeError`
+         - **Fix:** Verify frontend sends `Content-Type: application/json`
      - **Missing dependencies:** `ModuleNotFoundError: No module named 'X'` 
        - **Fix:** `cd /home/ubuntu/vernal-agents-post-v0 && source venv/bin/activate && pip install -r requirements.txt`
      - **Database connection:** `OperationalError: (2003, "Can't connect to MySQL server")`
