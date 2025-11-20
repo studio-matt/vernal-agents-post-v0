@@ -585,25 +585,58 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 - **Fix:** Check `.env` file, verify database connectivity, validate JWT implementation
 
 ### **500 Errors on /analyze Endpoint (CRITICAL)**
+
+**🚨 IMMEDIATE ACTION REQUIRED - Run This NOW:**
+
+```bash
+# SSH to backend server
+ssh ubuntu@18.235.104.132
+
+# Check the LAST error in logs (most recent /analyze failure)
+sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "analyze|CRITICAL|ERROR|❌" | tail -50
+
+# OR watch logs in real-time (run this, then trigger the error from frontend)
+sudo journalctl -u vernal-agents -f | grep -E "analyze|CRITICAL|ERROR|❌|GLOBAL EXCEPTION"
+```
+
+**The logs will show:**
+- `❌ CRITICAL: Error in /analyze endpoint` - The actual error message
+- `❌ Error type:` - Exception class (e.g., `ModuleNotFoundError`, `AttributeError`, `KeyError`)
+- `❌ Full traceback:` - Complete stack trace showing WHERE it failed
+- `❌ GLOBAL EXCEPTION HANDLER` - If error happens in dependency injection
+
+**Copy the error message and traceback - that's what we need to fix!**
+
+---
+
 - **Error:** `Failed to load resource: the server responded with a status of 500`
 - **Root Cause:** Backend error during campaign analysis initialization
 - **Symptoms:** Frontend shows "Request failed with status code 500", campaign build fails immediately
 - **Debugging Steps:**
-  1. **Check systemd logs immediately:**
+  1. **Check systemd logs immediately (RUN THIS FIRST):**
      ```bash
-     sudo journalctl -u vernal-agents -f --since "5 minutes ago" | grep -E "analyze|CRITICAL|ERROR|❌"
+     sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "analyze|CRITICAL|ERROR|❌" | tail -50
      ```
   2. **Look for specific error patterns:**
      - `❌ CRITICAL: Error in /analyze endpoint` - Shows the actual exception
      - `❌ Error type:` - Shows exception class name
      - `❌ Full traceback:` - Shows complete stack trace
      - `❌ GLOBAL EXCEPTION HANDLER` - Catches errors in dependency injection
-  3. **Common causes:**
-     - **Missing dependencies:** `ModuleNotFoundError` - Run `pip install -r requirements.txt`
-     - **Database connection:** `OperationalError` - Check `.env` DB credentials
-     - **Import errors:** `ImportError` - Verify all imports in `main.py` are available
-     - **Validation errors:** `ValidationError` - Check request payload format
-     - **Threading errors:** `Failed to start analysis thread` - Check background thread creation
+  3. **Common causes (check logs to identify which one):**
+     - **Missing dependencies:** `ModuleNotFoundError: No module named 'X'` 
+       - **Fix:** `cd /home/ubuntu/vernal-agents-post-v0 && source venv/bin/activate && pip install -r requirements.txt`
+     - **Database connection:** `OperationalError: (2003, "Can't connect to MySQL server")`
+       - **Fix:** Check `.env` DB credentials, verify database is accessible
+     - **Import errors:** `ImportError: cannot import name 'X' from 'Y'`
+       - **Fix:** Verify all imports in `main.py` are available, check if module exists
+     - **Validation errors:** `ValidationError` or `KeyError`
+       - **Fix:** Check request payload matches `AnalyzeRequest` model, verify all required fields present
+     - **Threading errors:** `Failed to start analysis thread` or `AttributeError` in thread
+       - **Fix:** Check background thread creation, verify data serialization
+     - **Site Builder specific:** `site_base_url` validation fails or `sitemap_parser` import fails
+       - **Fix:** Verify `sitemap_parser.py` exists, check URL validation logic
+     - **Attribute errors:** `AttributeError: 'X' object has no attribute 'Y'`
+       - **Fix:** Check if object structure matches expected format, verify data model
   4. **Quick fixes:**
      ```bash
      # Check if service is running
@@ -625,6 +658,27 @@ curl -I https://themachine.vernalcontentum.com/auth/login
      - Check if latest code is deployed: `cd /home/ubuntu/vernal-agents-post-v0 && git log -1`
      - Verify dependencies installed: `source venv/bin/activate && pip list | grep fastapi`
      - Test health endpoint: `curl http://127.0.0.1:8000/health`
+     - **Test /analyze endpoint directly (with auth token):**
+       ```bash
+       # Get your JWT token from browser localStorage or login
+       TOKEN="your_jwt_token_here"
+       
+       # Test with minimal payload
+       curl -X POST http://127.0.0.1:8000/analyze \
+         -H "Content-Type: application/json" \
+         -H "Authorization: Bearer $TOKEN" \
+         -d '{
+           "campaign_id": "test-123",
+           "campaign_name": "Test",
+           "type": "keyword",
+           "keywords": ["test"]
+         }'
+       ```
+  6. **If logs show nothing (service not logging):**
+     - Check if service is actually running: `sudo systemctl status vernal-agents`
+     - Check if service is writing to journal: `sudo journalctl -u vernal-agents --since "1 hour ago" | head -20`
+     - Restart service to force logging: `sudo systemctl restart vernal-agents`
+     - Check if Python logging is configured: `grep -i "logging" /home/ubuntu/vernal-agents-post-v0/main.py | head -5`
 
 ### **JWT Token Creation Issues**
 - **Error:** "create_access_token() got an unexpected keyword argument 'expires_delta'"
