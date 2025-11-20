@@ -584,6 +584,48 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 - **Common Causes:** Missing environment variables, database connection issues, JWT token creation errors
 - **Fix:** Check `.env` file, verify database connectivity, validate JWT implementation
 
+### **500 Errors on /analyze Endpoint (CRITICAL)**
+- **Error:** `Failed to load resource: the server responded with a status of 500`
+- **Root Cause:** Backend error during campaign analysis initialization
+- **Symptoms:** Frontend shows "Request failed with status code 500", campaign build fails immediately
+- **Debugging Steps:**
+  1. **Check systemd logs immediately:**
+     ```bash
+     sudo journalctl -u vernal-agents -f --since "5 minutes ago" | grep -E "analyze|CRITICAL|ERROR|❌"
+     ```
+  2. **Look for specific error patterns:**
+     - `❌ CRITICAL: Error in /analyze endpoint` - Shows the actual exception
+     - `❌ Error type:` - Shows exception class name
+     - `❌ Full traceback:` - Shows complete stack trace
+     - `❌ GLOBAL EXCEPTION HANDLER` - Catches errors in dependency injection
+  3. **Common causes:**
+     - **Missing dependencies:** `ModuleNotFoundError` - Run `pip install -r requirements.txt`
+     - **Database connection:** `OperationalError` - Check `.env` DB credentials
+     - **Import errors:** `ImportError` - Verify all imports in `main.py` are available
+     - **Validation errors:** `ValidationError` - Check request payload format
+     - **Threading errors:** `Failed to start analysis thread` - Check background thread creation
+  4. **Quick fixes:**
+     ```bash
+     # Check if service is running
+     sudo systemctl status vernal-agents
+     
+     # Restart service
+     sudo systemctl restart vernal-agents
+     
+     # Check recent errors
+     sudo journalctl -u vernal-agents --since "10 minutes ago" | tail -50
+     
+     # Test endpoint directly
+     curl -X POST https://themachine.vernalcontentum.com/analyze/test \
+       -H "Content-Type: application/json" \
+       -H "Authorization: Bearer YOUR_TOKEN" \
+       -d '{"test": "data"}'
+     ```
+  5. **Verify deployment:**
+     - Check if latest code is deployed: `cd /home/ubuntu/vernal-agents-post-v0 && git log -1`
+     - Verify dependencies installed: `source venv/bin/activate && pip list | grep fastapi`
+     - Test health endpoint: `curl http://127.0.0.1:8000/health`
+
 ### **JWT Token Creation Issues**
 - **Error:** "create_access_token() got an unexpected keyword argument 'expires_delta'"
 - **Fix:** Remove `expires_delta` parameter from `create_access_token()` calls
@@ -846,6 +888,8 @@ bash scripts/verify_and_fix_imports.sh
 - No errors in systemd logs (`sudo journalctl -u vernal-agents -f`)
 - **Test full auth flow:** Registration → Email verification → Login
 - **Verify API endpoints:** `/health`, `/mcp/enhanced/health`, `/auth/*`
+- **Test /analyze endpoint:** Create test campaign and verify it starts without 500 errors
+- **Check for /analyze errors:** `sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -E "analyze|CRITICAL|ERROR"`
 
 ---
 
