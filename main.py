@@ -1572,32 +1572,32 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 if text:
                                     # Detect language before processing
                                     try:
-                                    from langdetect import detect, LangDetectException
-                                    # Use first 1000 chars for faster detection
-                                    sample_text = text[:1000] if len(text) > 1000 else text
-                                    if len(sample_text.strip()) > 10:  # Need minimum text for detection
-                                        detected_language = detect(sample_text)
-                                        meta["detected_language"] = detected_language
-                                        
-                                        # Filter out non-English content
-                                        if detected_language != 'en':
-                                            logger.warning(f"🌐 Non-English content detected ({detected_language}) for {url}, filtering out")
-                                            logger.warning(f"🌐 Sample text: {sample_text[:200]}...")
-                                            meta["language_filtered"] = True
-                                            meta["filter_reason"] = f"non_english_{detected_language}"
-                                            safe_text = ""  # Skip non-English content
+                                        from langdetect import detect, LangDetectException
+                                        # Use first 1000 chars for faster detection
+                                        sample_text = text[:1000] if len(text) > 1000 else text
+                                        if len(sample_text.strip()) > 10:  # Need minimum text for detection
+                                            detected_language = detect(sample_text)
+                                            meta["detected_language"] = detected_language
+                                            
+                                            # Filter out non-English content
+                                            if detected_language != 'en':
+                                                logger.warning(f"🌐 Non-English content detected ({detected_language}) for {url}, filtering out")
+                                                logger.warning(f"🌐 Sample text: {sample_text[:200]}...")
+                                                meta["language_filtered"] = True
+                                                meta["filter_reason"] = f"non_english_{detected_language}"
+                                                safe_text = ""  # Skip non-English content
+                                            else:
+                                                logger.debug(f"✅ English content confirmed for {url}")
                                         else:
-                                            logger.debug(f"✅ English content confirmed for {url}")
-                                    else:
-                                        logger.debug(f"⚠️ Text too short for language detection for {url}")
+                                            logger.debug(f"⚠️ Text too short for language detection for {url}")
+                                            meta["detected_language"] = "unknown"
+                                    except LangDetectException as lang_err:
+                                        logger.warning(f"⚠️ Language detection failed for {url}: {lang_err}")
                                         meta["detected_language"] = "unknown"
-                                except LangDetectException as lang_err:
-                                    logger.warning(f"⚠️ Language detection failed for {url}: {lang_err}")
-                                    meta["detected_language"] = "unknown"
-                                    meta["language_detection_error"] = str(lang_err)
-                                except ImportError:
-                                    logger.warning("⚠️ langdetect not available - skipping language filtering")
-                                    meta["detected_language"] = "not_checked"
+                                        meta["language_detection_error"] = str(lang_err)
+                                    except ImportError:
+                                        logger.warning("⚠️ langdetect not available - skipping language filtering")
+                                        meta["detected_language"] = "not_checked"
                                 if text:
                                     # Detect language before processing
                                     try:
