@@ -1493,20 +1493,34 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             logger.error(f"❌ Depth: {depth}, Max pages: {max_pages}")
                             logger.error(f"❌ This likely means scraping failed - check Playwright/DuckDuckGo availability")
                             
-                            # Create error row for Site Builder campaigns
+                            # Create error row for ALL campaign types when scraping returns 0 results
                             if data.type == "site_builder":
-                                error_row = CampaignRawData(
-                                    campaign_id=cid,
-                                    source_url=f"error:scraping_failed",
-                                    fetched_at=datetime.utcnow(),
-                                    raw_html=None,
-                                    extracted_text=f"Site Builder: Sitemap parsing succeeded ({len(urls)} URLs found), but scraping returned 0 results.\n\nPossible reasons:\n- Network/timeout issues accessing URLs\n- URLs require authentication\n- URLs are blocked by robots.txt\n- Playwright/scraping service unavailable\n\nPlease check backend logs for details.",
-                                    meta_json=json.dumps({"type": "error", "reason": "scraping_failed", "urls_count": len(urls), "urls": urls[:10]})
-                                )
-                                session.add(error_row)
+                                error_text = f"Site Builder: Sitemap parsing succeeded ({len(urls)} URLs found), but scraping returned 0 results.\n\nPossible reasons:\n- Network/timeout issues accessing URLs\n- URLs require authentication\n- URLs are blocked by robots.txt\n- Playwright/scraping service unavailable\n\nPlease check backend logs for details."
+                                error_reason = "scraping_failed"
+                                error_meta = {"type": "error", "reason": "scraping_failed", "urls_count": len(urls), "urls": urls[:10]}
+                            else:
+                                # Keyword or other campaign types
+                                error_text = f"No results from web scraping.\n\nCampaign type: {data.type}\nKeywords: {keywords}\nURLs: {len(urls) if urls else 0} URLs\nQuery: {data.query or '(empty)'}\n\nPossible reasons:\n- DuckDuckGo search returned no results\n- Playwright/scraping service unavailable\n- Network/firewall blocking\n- Invalid or empty keywords\n\nPlease check backend logs for details."
+                                error_reason = "no_scrape_results"
+                                error_meta = {"type": "error", "reason": "no_scrape_results", "keywords": keywords, "urls_count": len(urls) if urls else 0, "query": data.query or ""}
+                            
+                            error_row = CampaignRawData(
+                                campaign_id=cid,
+                                source_url=f"error:{error_reason}",
+                                fetched_at=datetime.utcnow(),
+                                raw_html=None,
+                                extracted_text=error_text,
+                                meta_json=json.dumps(error_meta)
+                            )
+                            session.add(error_row)
+                            try:
                                 session.commit()
                                 created = 1  # Mark that we created an error row
-                                logger.error(f"❌ Created error row for campaign {cid} - scraping failed after sitemap parsing")
+                                logger.error(f"❌ Created error row for campaign {cid} - scraping returned 0 results")
+                            except Exception as commit_err:
+                                logger.error(f"❌ Failed to commit error row for campaign {cid}: {commit_err}")
+                                session.rollback()
+                                # Continue anyway - we'll check for created == 0 later
                         else:
                             logger.info(f"📊 Scraping results breakdown:")
                             success_count = 0
@@ -1569,35 +1583,6 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 # Language detection and filtering
                                 detected_language = None
                                 safe_text = None
-                                if text:
-                                    # Detect language before processing
-                                    try:
-                                        from langdetect import detect, LangDetectException
-                                        # Use first 1000 chars for faster detection
-                                        sample_text = text[:1000] if len(text) > 1000 else text
-                                        if len(sample_text.strip()) > 10:  # Need minimum text for detection
-                                            detected_language = detect(sample_text)
-                                            meta["detected_language"] = detected_language
-                                            
-                                            # Filter out non-English content
-                                            if detected_language != 'en':
-                                                logger.warning(f"🌐 Non-English content detected ({detected_language}) for {url}, filtering out")
-                                                logger.warning(f"🌐 Sample text: {sample_text[:200]}...")
-                                                meta["language_filtered"] = True
-                                                meta["filter_reason"] = f"non_english_{detected_language}"
-                                                safe_text = ""  # Skip non-English content
-                                            else:
-                                                logger.debug(f"✅ English content confirmed for {url}")
-                                        else:
-                                            logger.debug(f"⚠️ Text too short for language detection for {url}")
-                                            meta["detected_language"] = "unknown"
-                                    except LangDetectException as lang_err:
-                                        logger.warning(f"⚠️ Language detection failed for {url}: {lang_err}")
-                                        meta["detected_language"] = "unknown"
-                                        meta["language_detection_error"] = str(lang_err)
-                                    except ImportError:
-                                        logger.warning("⚠️ langdetect not available - skipping language filtering")
-                                        meta["detected_language"] = "not_checked"
                                 if text:
                                     # Detect language before processing
                                     try:
