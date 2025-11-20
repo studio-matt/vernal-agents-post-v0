@@ -1875,9 +1875,10 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                     valid_text_count += 1
                                     logger.debug(f"✅ Valid data row: {row.source_url} ({len(row.extracted_text)} chars)")
                                 elif row.source_url:
-                                    # Has URL but no/minimal text (might be a valid page with no extractable text)
-                                    valid_data_count += 1
-                                    logger.debug(f"⚠️ Data row with URL but minimal text: {row.source_url}")
+                                    # Has URL but no/minimal text - DON'T count as valid (frontend can't use it)
+                                    # This prevents false-positive READY_TO_ACTIVATE status
+                                    logger.debug(f"⚠️ Skipping row with URL but no/minimal text: {row.source_url} (text length: {len(row.extracted_text or '')})")
+                                    # Don't increment valid_data_count - this row is not usable
                         
                         logger.info(f"📊 Data validation: {valid_data_count} valid rows, {valid_text_count} with text, {error_count} error/placeholder rows")
                         
