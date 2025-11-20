@@ -2204,11 +2204,15 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
     
     # CRITICAL: Return REAL progress if it's been set (from scraping, etc.)
     # Only use time-based simulation if real progress hasn't been set yet
-    if "progress" in task and task["progress"] is not None and task.get("current_step") and task.get("progress_message"):
+    real_progress = task.get("progress")
+    real_step = task.get("current_step")
+    real_message = task.get("progress_message")
+    
+    if real_progress is not None and real_progress > 0 and real_step:
         # Real progress has been set (e.g., during scraping)
-        progress = task["progress"]
-        current_step = task.get("current_step", "processing")
-        progress_message = task.get("progress_message", "Processing...")
+        progress = real_progress
+        current_step = real_step
+        progress_message = real_message or f"{current_step.replace('_',' ').title()}"
         
         # Determine status based on progress
         if progress >= 100:
@@ -2218,6 +2222,7 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
         else:
             status = "pending"
         
+        logger.debug(f"📊 Returning REAL progress for task {task_id}: {progress}% - {current_step} - {progress_message}")
         return {
             "status": status,
             "progress": progress,
@@ -2254,16 +2259,21 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
             break
     
     # Only update if real progress wasn't set
-    if "progress" not in task or task["progress"] is None:
+    if real_progress is None:
         task["progress"] = progress
         task["current_step"] = current_step
         task["progress_message"] = f"{current_step.replace('_',' ').title()}"
     
+    # Use real progress if available, otherwise use time-based
+    final_progress = real_progress if real_progress is not None else progress
+    final_step = real_step if real_step else current_step
+    final_message = real_message if real_message else f"{current_step.replace('_',' ').title()}"
+    
     return {
-        "status": "in_progress" if progress < 100 else "completed",
-        "progress": task.get("progress", progress),
-        "current_step": task.get("current_step", current_step),
-        "progress_message": task.get("progress_message", f"{current_step.replace('_',' ').title()}"),
+        "status": "in_progress" if final_progress < 100 else "completed",
+        "progress": final_progress,
+        "current_step": final_step,
+        "progress_message": final_message,
         "campaign_id": task["campaign_id"],
     }
 
