@@ -972,7 +972,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 # Validate Site Builder requirements EARLY (fail at "Initializing" stage)
                 if data.type == "site_builder":
                     from models import Campaign
-                    import json
+                    # json is already imported globally at top of file
                     
                     # Get site URL - check request data first, then database
                     # DO NOT fall back to urls array - site_base_url must be explicitly set
