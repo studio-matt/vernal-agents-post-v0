@@ -1997,22 +1997,42 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 set_task("error", 95, "No data was scraped. Check backend logs for details.")
                             
                             # Set status to INCOMPLETE for all failure cases
+                            logger.info(f"🔧 Setting campaign {cid} status to INCOMPLETE (no valid data)")
                             camp.status = "INCOMPLETE"
                             camp.updated_at = datetime.utcnow()
-                            session.commit()
-                            logger.info(f"⚠️ Campaign {cid} marked as INCOMPLETE due to no valid data")
+                            try:
+                                session.commit()
+                                logger.info(f"✅ Campaign {cid} status committed to database as INCOMPLETE")
+                            except Exception as commit_err:
+                                logger.error(f"❌ CRITICAL: Failed to commit INCOMPLETE status for campaign {cid}: {commit_err}")
+                                import traceback
+                                logger.error(f"❌ Commit error traceback:\n{traceback.format_exc()}")
+                                session.rollback()
+                                # Try one more time
+                                try:
+                                    camp.status = "INCOMPLETE"
+                                    camp.updated_at = datetime.utcnow()
+                                    session.commit()
+                                    logger.info(f"🔧 Retry: Campaign {cid} status committed to database as INCOMPLETE")
+                                except Exception as retry_err:
+                                    logger.error(f"❌ CRITICAL: Retry commit also failed for campaign {cid}: {retry_err}")
                             
                             # CRITICAL: Verify the status was saved correctly (same as READY_TO_ACTIVATE path)
-                            session.refresh(camp)
-                            if camp.status != "INCOMPLETE":
-                                logger.error(f"❌ CRITICAL: Campaign {cid} status was not saved correctly! Expected INCOMPLETE, got {camp.status}")
-                                # Force update again
-                                camp.status = "INCOMPLETE"
-                                camp.updated_at = datetime.utcnow()
-                                session.commit()
-                                logger.info(f"🔧 Force-updated campaign {cid} status to INCOMPLETE")
-                            else:
-                                logger.info(f"✅ Verified campaign {cid} status is INCOMPLETE in database")
+                            try:
+                                session.refresh(camp)
+                                if camp.status != "INCOMPLETE":
+                                    logger.error(f"❌ CRITICAL: Campaign {cid} status was not saved correctly! Expected INCOMPLETE, got {camp.status}")
+                                    # Force update again
+                                    camp.status = "INCOMPLETE"
+                                    camp.updated_at = datetime.utcnow()
+                                    session.commit()
+                                    logger.info(f"🔧 Force-updated campaign {cid} status to INCOMPLETE")
+                                else:
+                                    logger.info(f"✅ Verified campaign {cid} status is INCOMPLETE in database")
+                            except Exception as verify_err:
+                                logger.error(f"❌ CRITICAL: Failed to verify INCOMPLETE status for campaign {cid}: {verify_err}")
+                                import traceback
+                                logger.error(f"❌ Verify error traceback:\n{traceback.format_exc()}")
                     else:
                         logger.warning(f"⚠️ Campaign {cid} not found in database when trying to finalize")
                 except Exception as finalize_err:
