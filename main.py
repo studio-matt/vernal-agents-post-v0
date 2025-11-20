@@ -1479,6 +1479,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.info(f"✅ Web scraping completed: {len(scraped_results)} pages scraped")
                         # Update progress after scraping completes
                         set_task("scraping_complete", 70, f"Scraped {len(scraped_results)} pages, saving to database...")
+                        logger.info(f"📊 Progress updated: 70% - scraping_complete")
                         
                         # Log detailed results for diagnostics
                         if len(scraped_results) == 0:
@@ -1530,41 +1531,47 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 logger.error(f"❌ CRITICAL: All {len(scraped_results)} scraping attempts failed!")
                         
                         # Store scraped data in database
-                        for result in scraped_results:
-                            url = result.get("url", "unknown")
-                            text = result.get("text", "")
-                            html = result.get("html")
-                            images = result.get("images", [])
-                            links = result.get("links", [])
-                            error = result.get("error")
-                            depth_level = result.get("depth", 0)
-                            
-                            # Build metadata JSON
-                            meta = {
-                                "type": "scraped",
-                                "depth": depth_level,
-                                "scraped_at": result.get("scraped_at"),
-                                "has_images": len(images) > 0,
-                                "image_count": len(images),
-                                "link_count": len(links)
-                            }
-                            if error:
-                                meta["error"] = error
-                            if images:
-                                meta["sample_images"] = images[:5]  # Store first 5 images
-                            
-                            # Safety guard: Truncate text to MEDIUMTEXT limit (16MB) to prevent DB errors
-                            # MEDIUMTEXT max: 16,777,215 bytes (≈16 MB)
-                            # Note: Truncation at 16MB is extremely rare - most web pages are <100KB
-                            # If truncation occurs, it's likely mostly noise (ads, scripts, duplicate content)
-                            MAX_TEXT_SIZE = 16_777_000  # Leave small buffer (≈16 MB)
-                            
-                            # Language detection and filtering
-                            detected_language = None
-                            safe_text = None
-                            if text:
-                                # Detect language before processing
-                                try:
+                        try:
+                            logger.info(f"💾 Starting to save {len(scraped_results)} scraped results to database...")
+                            for i, result in enumerate(scraped_results, 1):
+                                # Update progress periodically during database save (every 10 items)
+                                if i % 10 == 0 or i == len(scraped_results):
+                                    set_task("scraping_complete", 70, f"Saving to database... ({i}/{len(scraped_results)})")
+                                    logger.debug(f"💾 Saving progress: {i}/{len(scraped_results)}")
+                                url = result.get("url", "unknown")
+                                text = result.get("text", "")
+                                html = result.get("html")
+                                images = result.get("images", [])
+                                links = result.get("links", [])
+                                error = result.get("error")
+                                depth_level = result.get("depth", 0)
+                                
+                                # Build metadata JSON
+                                meta = {
+                                    "type": "scraped",
+                                    "depth": depth_level,
+                                    "scraped_at": result.get("scraped_at"),
+                                    "has_images": len(images) > 0,
+                                    "image_count": len(images),
+                                    "link_count": len(links)
+                                }
+                                if error:
+                                    meta["error"] = error
+                                if images:
+                                    meta["sample_images"] = images[:5]  # Store first 5 images
+                                
+                                # Safety guard: Truncate text to MEDIUMTEXT limit (16MB) to prevent DB errors
+                                # MEDIUMTEXT max: 16,777,215 bytes (≈16 MB)
+                                # Note: Truncation at 16MB is extremely rare - most web pages are <100KB
+                                # If truncation occurs, it's likely mostly noise (ads, scripts, duplicate content)
+                                MAX_TEXT_SIZE = 16_777_000  # Leave small buffer (≈16 MB)
+                                
+                                # Language detection and filtering
+                                detected_language = None
+                                safe_text = None
+                                if text:
+                                    # Detect language before processing
+                                    try:
                                     from langdetect import detect, LangDetectException
                                     # Use first 1000 chars for faster detection
                                     sample_text = text[:1000] if len(text) > 1000 else text
@@ -1591,69 +1598,105 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 except ImportError:
                                     logger.warning("⚠️ langdetect not available - skipping language filtering")
                                     meta["detected_language"] = "not_checked"
-                                except Exception as lang_err:
-                                    logger.warning(f"⚠️ Unexpected error in language detection for {url}: {lang_err}")
-                                    meta["detected_language"] = "error"
+                                if text:
+                                    # Detect language before processing
+                                    try:
+                                        from langdetect import detect, LangDetectException
+                                        # Use first 1000 chars for faster detection
+                                        sample_text = text[:1000] if len(text) > 1000 else text
+                                        if len(sample_text.strip()) > 10:  # Need minimum text for detection
+                                            detected_language = detect(sample_text)
+                                            meta["detected_language"] = detected_language
+                                            
+                                            # Filter out non-English content
+                                            if detected_language != 'en':
+                                                logger.warning(f"🌐 Non-English content detected ({detected_language}) for {url}, filtering out")
+                                                logger.warning(f"🌐 Sample text: {sample_text[:200]}...")
+                                                meta["language_filtered"] = True
+                                                meta["filter_reason"] = f"non_english_{detected_language}"
+                                                safe_text = ""  # Skip non-English content
+                                            else:
+                                                logger.debug(f"✅ English content confirmed for {url}")
+                                        else:
+                                            logger.debug(f"⚠️ Text too short for language detection for {url}")
+                                            meta["detected_language"] = "unknown"
+                                    except LangDetectException as lang_err:
+                                        logger.warning(f"⚠️ Language detection failed for {url}: {lang_err}")
+                                        meta["detected_language"] = "unknown"
+                                        meta["language_detection_error"] = str(lang_err)
+                                    except ImportError:
+                                        logger.warning("⚠️ langdetect not available - skipping language filtering")
+                                        meta["detected_language"] = "not_checked"
+                                    except Exception as lang_err:
+                                        logger.warning(f"⚠️ Unexpected error in language detection for {url}: {lang_err}")
+                                        meta["detected_language"] = "error"
+                                    
+                                    # Only process text if it's English (or if language detection failed/not available)
+                                    if safe_text is None:  # Only process if not already filtered
+                                        try:
+                                            # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
+                                            # Keep only 1-3 byte UTF-8 characters (basic unicode)
+                                            safe_text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                                            # Remove any remaining problematic characters (emojis are >0xFFFF)
+                                            safe_text = ''.join(char for char in safe_text if ord(char) < 0x10000)
+                                        except Exception as encode_err:
+                                            logger.warning(f"⚠️ Error encoding extracted_text for {url}: {encode_err}, using empty string")
+                                            safe_text = ""
+                                        
+                                        # Smart truncation: Keep first portion if too large
+                                        if len(safe_text) > MAX_TEXT_SIZE:
+                                            safe_text = safe_text[:MAX_TEXT_SIZE]
+                                            logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
+                                            logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
+                                            meta["text_truncated"] = True
+                                            meta["original_length"] = len(text)
+                                            meta["truncation_reason"] = "exceeded_mediumtext_limit"
+                                else:
+                                    safe_text = ""
                                 
-                                # Only process text if it's English (or if language detection failed/not available)
-                                if safe_text is None:  # Only process if not already filtered
+                                # Sanitize HTML to remove emojis/unicode that can't be stored in utf8mb3
+                                # Keep only ASCII + basic UTF-8, remove 4-byte UTF-8 (emojis)
+                                safe_html = None
+                                if html and include_links:
                                     try:
                                         # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
                                         # Keep only 1-3 byte UTF-8 characters (basic unicode)
-                                        safe_text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
-                                        # Remove any remaining problematic characters (emojis are >0xFFFF)
-                                        safe_text = ''.join(char for char in safe_text if ord(char) < 0x10000)
+                                        safe_html = html[:MAX_TEXT_SIZE].encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+                                        # Remove any remaining problematic characters
+                                        safe_html = ''.join(char for char in safe_html if ord(char) < 0x10000)
                                     except Exception as encode_err:
-                                        logger.warning(f"⚠️ Error encoding extracted_text for {url}: {encode_err}, using empty string")
-                                        safe_text = ""
-                                    
-                                    # Smart truncation: Keep first portion if too large
-                                    if len(safe_text) > MAX_TEXT_SIZE:
-                                        safe_text = safe_text[:MAX_TEXT_SIZE]
-                                        logger.warning(f"⚠️ Truncated extracted_text for {url}: {len(text):,} chars → {len(safe_text):,} chars (exceeded MEDIUMTEXT 16MB limit)")
-                                        logger.warning(f"⚠️ This is extremely rare - text >16MB likely contains mostly noise. First {MAX_TEXT_SIZE:,} chars preserved.")
-                                        meta["text_truncated"] = True
-                                        meta["original_length"] = len(text)
-                                        meta["truncation_reason"] = "exceeded_mediumtext_limit"
-                            else:
-                                safe_text = ""
+                                        logger.warning(f"⚠️ Error encoding HTML for {url}: {encode_err}, storing as None")
+                                        safe_html = None
+                                
+                                row = CampaignRawData(
+                                    campaign_id=cid,
+                                    source_url=url,
+                                    fetched_at=now,
+                                    raw_html=safe_html,  # Sanitized HTML (no emojis)
+                                    extracted_text=safe_text if safe_text else (f"Error scraping {url}: {error}" if error else ""),
+                                    meta_json=json.dumps(meta)
+                                )
+                                session.add(row)
+                                # Flush to get DB ID immediately for logging
+                                session.flush()
+                                created += 1
+                                
+                                # Enhanced per-URL logging with DB ID
+                                text_len = len(safe_text) if safe_text else 0
+                                original_len = len(text) if text else 0
+                                truncation_note = f" (truncated from {original_len})" if original_len > MAX_TEXT_SIZE else ""
+                                
+                                if error:
+                                    logger.warning(f"⚠️ Scraped {url} (DB ID: {row.id}): ERROR - {error}")
+                                else:
+                                    logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars{truncation_note}, {len(links)} links, {len(images)} images")
                             
-                            # Sanitize HTML to remove emojis/unicode that can't be stored in utf8mb3
-                            # Keep only ASCII + basic UTF-8, remove 4-byte UTF-8 (emojis)
-                            safe_html = None
-                            if html and include_links:
-                                try:
-                                    # Remove emojis and 4-byte UTF-8 characters (they cause DataError 1366)
-                                    # Keep only 1-3 byte UTF-8 characters (basic unicode)
-                                    safe_html = html[:MAX_TEXT_SIZE].encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
-                                    # Remove any remaining problematic characters
-                                    safe_html = ''.join(char for char in safe_html if ord(char) < 0x10000)
-                                except Exception as encode_err:
-                                    logger.warning(f"⚠️ Error encoding HTML for {url}: {encode_err}, storing as None")
-                                    safe_html = None
-                            
-                            row = CampaignRawData(
-                                campaign_id=cid,
-                                source_url=url,
-                                fetched_at=now,
-                                raw_html=safe_html,  # Sanitized HTML (no emojis)
-                                extracted_text=safe_text if safe_text else (f"Error scraping {url}: {error}" if error else ""),
-                                meta_json=json.dumps(meta)
-                            )
-                            session.add(row)
-                            # Flush to get DB ID immediately for logging
-                            session.flush()
-                            created += 1
-                            
-                            # Enhanced per-URL logging with DB ID
-                            text_len = len(safe_text) if safe_text else 0
-                            original_len = len(text) if text else 0
-                            truncation_note = f" (truncated from {original_len})" if original_len > MAX_TEXT_SIZE else ""
-                            
-                            if error:
-                                logger.warning(f"⚠️ Scraped {url} (DB ID: {row.id}): ERROR - {error}")
-                            else:
-                                logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars{truncation_note}, {len(links)} links, {len(images)} images")
+                            logger.info(f"💾 Finished saving {len(scraped_results)} results to database (created={created})")
+                        except Exception as save_error:
+                            logger.error(f"❌ CRITICAL: Error saving scraped data to database for campaign {cid}: {save_error}")
+                            import traceback
+                            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                            # Continue anyway - we'll create an error row below
                         
                         # Only create error row if we haven't already created one (e.g., for Site Builder with 0 results)
                         if created == 0 and len(scraped_results) == 0:
@@ -1701,9 +1744,11 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 
                 if created > 0:
                     logger.info(f"💾 Committing {created} rows to database for campaign {cid}...")
+                    set_task("scraping_complete", 75, f"Committing {created} rows to database...")
                     try:
                         session.commit()
                         logger.info(f"✅ Successfully committed {created} rows to database for campaign {cid}")
+                        set_task("scraping_complete", 78, f"Database commit successful, verifying data...")
                     except Exception as commit_error:
                         # Check if campaign was deleted (foreign key constraint)
                         error_msg = str(commit_error).lower()
@@ -1773,7 +1818,9 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     logger.warning(f"⚠️ No rows to commit for campaign {cid}")
 
                 # Step 3: processing content (scraping is already done, now just mark progress)
+                logger.info(f"📊 Moving to processing_content step (80%) for campaign {cid}")
                 set_task("processing_content", 80, f"Processing {created} scraped pages")
+                logger.info(f"📊 Progress updated: 80% - processing_content")
                 # Content is already processed during scraping, minimal delay
                 time.sleep(2)
 
