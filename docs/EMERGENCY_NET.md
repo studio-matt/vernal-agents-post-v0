@@ -590,7 +590,7 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 
 ```bash
 # STEP 1: Start watching logs in real-time (leave this running)
-sudo journalctl -u vernal-agents -f | grep -E "analyze|GLOBAL|ERROR|❌|POST|Body|CRITICAL"
+sudo journalctl -u vernal-agents -f | grep -E "analyze|GLOBAL|ERROR|❌|POST|Body|CRITICAL|scraping|sitemap"
 
 # STEP 2: In another terminal/SSH session, trigger the error from frontend
 # (Click "Build Campaign Base" button in the UI)
@@ -612,6 +612,16 @@ sudo journalctl -u vernal-agents -f | grep -E "analyze|GLOBAL|ERROR|❌|POST|Bod
 # If you see GLOBAL EXCEPTION HANDLER:
 # - Error in dependency injection (get_current_user or get_db)
 # - Check the error message and traceback
+
+# STEP 4: Check logs for specific campaign (replace CAMPAIGN_ID)
+sudo journalctl -u vernal-agents --since "30 minutes ago" | grep -A 10 "CAMPAIGN_ID\|d042ab91-e018-4f13-b7c1-60a2170a25bd"
+
+# Look for:
+# - "✅ Sitemap parsing complete: Found X URLs"
+# - "🚀 Starting web scraping"
+# - "✅ Web scraping completed: X pages scraped"
+# - "❌ CRITICAL: Scraping returned 0 results"
+# - Any error messages
 ```
 
 **⚠️ IMPORTANT:** If you see NO `/analyze` POST requests in logs, the error is happening in:
