@@ -720,6 +720,18 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
         logger.info(f"🔍 analyze_data received: campaign_id={getattr(analyze_data, 'campaign_id', 'N/A')}, type={getattr(analyze_data, 'type', 'N/A')}")
         logger.info(f"🔍 current_user: {current_user}, user_id: {getattr(current_user, 'id', 'N/A')}")
         logger.info(f"🔍 db session: {db}")
+        
+        # Log all fields for debugging
+        try:
+            if hasattr(analyze_data, 'model_dump'):
+                all_fields = analyze_data.model_dump()
+            elif hasattr(analyze_data, 'dict'):
+                all_fields = analyze_data.dict()
+            else:
+                all_fields = {k: getattr(analyze_data, k, None) for k in dir(analyze_data) if not k.startswith('_')}
+            logger.info(f"🔍 All analyze_data fields: {json.dumps({k: str(v)[:100] for k, v in all_fields.items()}, indent=2)}")
+        except Exception as log_err:
+            logger.warning(f"⚠️ Could not log all fields: {log_err}")
         user_id = current_user.id
         campaign_id = analyze_data.campaign_id or f"campaign-{uuid.uuid4()}"
         campaign_name = analyze_data.campaign_name or "Unknown Campaign"
@@ -2016,6 +2028,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
         raise
     except Exception as e:
         import traceback
+        from pydantic import ValidationError
         error_trace = traceback.format_exc()
         logger.error(f"❌ CRITICAL: Error in /analyze endpoint: {str(e)}")
         logger.error(f"❌ Error type: {type(e).__name__}")
@@ -2025,9 +2038,27 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             logger.error(f"❌ Request data: campaign_id={analyze_data.campaign_id}, type={analyze_data.type}, site_base_url={getattr(analyze_data, 'site_base_url', None)}")
         except:
             pass
+        
+        # Handle ValidationError specifically
+        if isinstance(e, ValidationError):
+            logger.error(f"❌ Pydantic ValidationError: {e.errors()}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "status": "error",
+                    "message": "Validation error in request data",
+                    "errors": e.errors(),
+                    "error_type": "ValidationError"
+                }
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start analysis: {str(e)}"
+            detail={
+                "status": "error",
+                "message": f"Failed to start analysis: {str(e)}",
+                "error_type": type(e).__name__
+            }
         )
 
 @app.get("/analyze/status/{task_id}")
