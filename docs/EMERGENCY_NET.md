@@ -589,20 +589,29 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 **🚨 IMMEDIATE ACTION REQUIRED - Run This NOW:**
 
 ```bash
-# SSH to backend server (if you have SSH key access)
-# OR if you're already on the server, skip SSH step
+# STEP 1: Start watching logs in real-time (leave this running)
+sudo journalctl -u vernal-agents -f | grep -E "analyze|GLOBAL|ERROR|❌|POST|Body|CRITICAL"
 
-# Check the LAST error in logs (most recent /analyze failure)
-sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "analyze|CRITICAL|ERROR|❌|GLOBAL EXCEPTION" | tail -100
+# STEP 2: In another terminal/SSH session, trigger the error from frontend
+# (Click "Build Campaign Base" button in the UI)
 
-# Check for errors in dependency injection (happens BEFORE endpoint code)
-sudo journalctl -u vernal-agents --since "10 minutes ago" | grep -A 20 -E "GLOBAL EXCEPTION|get_current_user|get_db|ValidationError" | tail -100
+# STEP 3: Watch the logs - you should see:
+# - "📥 INCOMING REQUEST: POST .../analyze"
+# - "📥 Body (first 500 chars): ..." (the request payload)
+# - Either "🔍 /analyze endpoint called" (success) OR error logs
 
-# OR watch logs in real-time (run this, then trigger the error from frontend)
-sudo journalctl -u vernal-agents -f | grep -E "analyze|CRITICAL|ERROR|❌|GLOBAL EXCEPTION|POST.*analyze"
+# If you see NO logs at all when clicking the button:
+# - Request might not be reaching backend
+# - Check nginx/proxy configuration
+# - Check frontend is calling correct URL
 
-# Check if /analyze POST requests are even reaching the backend
-sudo journalctl -u vernal-agents --since "10 minutes ago" | grep "POST.*analyze"
+# If you see request but no body:
+# - Body parsing failed
+# - Check for "❌ CRITICAL: Failed to read request body"
+
+# If you see GLOBAL EXCEPTION HANDLER:
+# - Error in dependency injection (get_current_user or get_db)
+# - Check the error message and traceback
 ```
 
 **⚠️ IMPORTANT:** If you see NO `/analyze` POST requests in logs, the error is happening in:
