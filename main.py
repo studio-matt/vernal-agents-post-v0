@@ -948,6 +948,23 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     task["progress_message"] = msg
                     logger.info(f"📊 Task {tid}: {prog}% - {step} - {msg}")
 
+                # CRITICAL: Set campaign status to PROCESSING at the start of analysis
+                try:
+                    camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                    if camp:
+                        if camp.status != "PROCESSING":
+                            camp.status = "PROCESSING"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.info(f"✅ Set campaign {cid} status to PROCESSING at analysis start")
+                        else:
+                            logger.info(f"ℹ️ Campaign {cid} already has PROCESSING status")
+                    else:
+                        logger.warning(f"⚠️ Campaign {cid} not found when trying to set PROCESSING status")
+                except Exception as status_err:
+                    logger.error(f"❌ Failed to set PROCESSING status for campaign {cid}: {status_err}")
+                    # Don't fail the analysis, just log the error
+                
                 # Step 1: collecting inputs
                 logger.info(f"📝 Step 1: Collecting inputs for campaign {cid}")
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
