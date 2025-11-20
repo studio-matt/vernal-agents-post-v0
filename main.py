@@ -2201,7 +2201,32 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
         }
     
     task = TASKS[task_id]
-    # Compute time-based progress (simulate steps over ~45s)
+    
+    # CRITICAL: Return REAL progress if it's been set (from scraping, etc.)
+    # Only use time-based simulation if real progress hasn't been set yet
+    if "progress" in task and task["progress"] is not None and task.get("current_step") and task.get("progress_message"):
+        # Real progress has been set (e.g., during scraping)
+        progress = task["progress"]
+        current_step = task.get("current_step", "processing")
+        progress_message = task.get("progress_message", "Processing...")
+        
+        # Determine status based on progress
+        if progress >= 100:
+            status = "completed"
+        elif progress > 0:
+            status = "in_progress"
+        else:
+            status = "pending"
+        
+        return {
+            "status": status,
+            "progress": progress,
+            "current_step": current_step,
+            "progress_message": progress_message,
+            "campaign_id": task["campaign_id"],
+        }
+    
+    # Fallback: Compute time-based progress (only if real progress not set yet)
     try:
         from datetime import datetime as dt
         started = dt.fromisoformat(task["started_at"])  # UTC naive ISO ok
@@ -2228,16 +2253,17 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
         else:
             break
     
-    # Update in-memory snapshot
-    task["progress"] = progress
-    task["current_step"] = current_step
-    task["progress_message"] = f"{current_step.replace('_',' ').title()}"
+    # Only update if real progress wasn't set
+    if "progress" not in task or task["progress"] is None:
+        task["progress"] = progress
+        task["current_step"] = current_step
+        task["progress_message"] = f"{current_step.replace('_',' ').title()}"
     
     return {
         "status": "in_progress" if progress < 100 else "completed",
-        "progress": progress,
-        "current_step": current_step,
-        "progress_message": task["progress_message"],
+        "progress": task.get("progress", progress),
+        "current_step": task.get("current_step", current_step),
+        "progress_message": task.get("progress_message", f"{current_step.replace('_',' ').title()}"),
         "campaign_id": task["campaign_id"],
     }
 
