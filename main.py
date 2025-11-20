@@ -1546,6 +1546,10 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         
                         # Store scraped data in database
                         try:
+                            # Ensure json is available (it's imported globally, but ensure it's in scope)
+                            import json as json_module
+                            json = json_module  # Use global json module
+                            
                             logger.info(f"💾 Starting to save {len(scraped_results)} scraped results to database...")
                             for i, result in enumerate(scraped_results, 1):
                                 # Update progress periodically during database save (every 10 items)
