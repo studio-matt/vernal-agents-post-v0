@@ -5,7 +5,7 @@ Implements DuckDuckGo search and Playwright-based web scraping
 
 import logging
 import re
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Callable
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 
@@ -359,7 +359,7 @@ def scrape_urls_recursive(
     include_links: bool = False,
     visited: Optional[Set[str]] = None,
     current_depth: int = 0,
-    progress_callback: Optional[callable] = None,
+    progress_callback: Optional[Callable[[int, int, int], None]] = None,
     total_urls: int = 0,
     scraped_count: int = 0
 ) -> List[Dict[str, any]]:
