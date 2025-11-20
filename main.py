@@ -1773,7 +1773,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     logger.warning(f"⚠️ No rows to commit for campaign {cid}")
 
                 # Step 3: processing content (scraping is already done, now just mark progress)
-                set_task("processing_content", 60, f"Processing {created} scraped pages")
+                set_task("processing_content", 80, f"Processing {created} scraped pages")
                 # Content is already processed during scraping, minimal delay
                 time.sleep(2)
 
