@@ -1673,8 +1673,23 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 
                 if created > 0:
                     logger.info(f"💾 Committing {created} rows to database for campaign {cid}...")
-                    session.commit()
-                    logger.info(f"✅ Successfully committed {created} rows to database for campaign {cid}")
+                    try:
+                        session.commit()
+                        logger.info(f"✅ Successfully committed {created} rows to database for campaign {cid}")
+                    except Exception as commit_error:
+                        # Check if campaign was deleted (foreign key constraint)
+                        error_msg = str(commit_error).lower()
+                        if "foreign key" in error_msg or "constraint" in error_msg or "campaign" in error_msg:
+                            logger.error(f"❌ CRITICAL: Failed to save scraped data for campaign {cid} - campaign may have been deleted!")
+                            logger.error(f"❌ Error: {commit_error}")
+                            logger.error(f"❌ This usually happens when a campaign is deleted while scraping is in progress.")
+                            logger.error(f"❌ {created} rows were scraped but could not be saved due to campaign deletion.")
+                        else:
+                            logger.error(f"❌ Failed to commit scraped data for campaign {cid}: {commit_error}")
+                            import traceback
+                            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                        session.rollback()
+                        # Don't re-raise - continue with analysis even if save failed
                     
                     # CRITICAL: Verify data was saved and check for valid (non-error) rows
                     all_saved_rows = session.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).all()
