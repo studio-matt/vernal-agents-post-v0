@@ -930,6 +930,9 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | **Campaign status reverts from READY_TO_ACTIVATE to INCOMPLETE** | **Scraping failed, only error rows saved** | **Check backend logs for scraping errors** |
 | **Campaign shows READY_TO_ACTIVATE but no data in frontend** | **Only error/placeholder rows in database** | **Check backend logs: `sudo journalctl -u vernal-agents -f \| grep scraping`** |
 | **Scraping returns 0 results** | **Playwright/DuckDuckGo unavailable or keywords invalid** | **Check logs for `❌ CRITICAL: Scraping returned 0 results`** |
+| **500 error on /analyze endpoint** | **Backend error during analysis** | **Check systemd logs: `sudo journalctl -u vernal-agents -f \| grep -E "analyze\|CRITICAL\|ERROR"`** |
+| **500 error on /analyze (missing deps)** | **ModuleNotFoundError or ImportError** | **Run `pip install -r requirements.txt` and restart service** |
+| **500 error on /analyze (database)** | **Database connection failure** | **Check `.env` DB credentials, test: `curl http://127.0.0.1:8000/mcp/enhanced/health`** |
 
 ---
 
