@@ -620,8 +620,26 @@ sudo journalctl -u vernal-agents --since "30 minutes ago" | grep -A 10 "CAMPAIGN
 # - "✅ Sitemap parsing complete: Found X URLs"
 # - "🚀 Starting web scraping"
 # - "✅ Web scraping completed: X pages scraped"
+# - "📊 Summary: X successful, Y errors, Z total chars"
+# - "📊 Data validation: X valid rows, Y with text, Z error rows"
 # - "❌ CRITICAL: Scraping returned 0 results"
 # - Any error messages
+
+# STEP 5: Check if scraping completed (if logs cut off)
+# Scraping 90 URLs can take 5-10 minutes. Check logs after the last scraping entry:
+sudo journalctl -u vernal-agents --since "1 hour ago" | grep -E "Web scraping completed|Summary:|Data validation|valid_data_count" | tail -20
+
+# STEP 6: Check database for saved data (even if campaign was deleted)
+# Note: If campaign was deleted, data might still exist in campaign_raw_data table
+# Replace CAMPAIGN_ID with actual campaign ID
+mysql -h 50.6.198.220 -u [user] -p [database] -e "
+  SELECT 
+    COUNT(*) as total_rows,
+    SUM(CASE WHEN source_url LIKE 'error:%' THEN 1 ELSE 0 END) as error_rows,
+    SUM(CASE WHEN source_url NOT LIKE 'error:%' AND LENGTH(extracted_text) > 10 THEN 1 ELSE 0 END) as valid_rows
+  FROM campaign_raw_data
+  WHERE campaign_id = 'CAMPAIGN_ID';
+"
 ```
 
 **⚠️ IMPORTANT:** If you see NO `/analyze` POST requests in logs, the error is happening in:
