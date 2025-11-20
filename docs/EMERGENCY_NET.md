@@ -632,7 +632,10 @@ sudo journalctl -u vernal-agents --since "1 hour ago" | grep -E "Web scraping co
 # STEP 6: Check database for saved data (even if campaign was deleted)
 # Note: If campaign was deleted, data might still exist in campaign_raw_data table
 # Replace CAMPAIGN_ID with actual campaign ID
-mysql -h 50.6.198.220 -u [user] -p [database] -e "
+# Use credentials from .env file:
+cd /home/ubuntu/vernal-agents-post-v0
+source .env 2>/dev/null || true
+mysql -h "${DB_HOST}" -u "${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" -e "
   SELECT 
     COUNT(*) as total_rows,
     SUM(CASE WHEN source_url LIKE 'error:%' THEN 1 ELSE 0 END) as error_rows,
@@ -640,6 +643,10 @@ mysql -h 50.6.198.220 -u [user] -p [database] -e "
   FROM campaign_raw_data
   WHERE campaign_id = 'CAMPAIGN_ID';
 "
+
+# OR use the diagnostic script (easier):
+cd /home/ubuntu/vernal-agents-post-v0
+./scripts/diagnose_scraping_failure.sh CAMPAIGN_ID
 ```
 
 **⚠️ IMPORTANT:** If you see NO `/analyze` POST requests in logs, the error is happening in:
