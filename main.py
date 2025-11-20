@@ -37,11 +37,19 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"❌ GLOBAL EXCEPTION HANDLER: {type(exc).__name__}: {str(exc)}")
     logger.error(f"❌ Request URL: {request.url}")
     logger.error(f"❌ Request method: {request.method}")
+    logger.error(f"❌ Request path: {request.url.path}")
     try:
-        body = await request.body()
-        logger.error(f"❌ Request body: {body.decode('utf-8')[:500]}")
-    except:
-        pass
+        # Try to read body - might fail if already consumed
+        try:
+            body = await request.body()
+            if body:
+                logger.error(f"❌ Request body: {body.decode('utf-8')[:500]}")
+            else:
+                logger.error(f"❌ Request body: (empty)")
+        except Exception as body_read_err:
+            logger.error(f"❌ Could not read request body (may be consumed): {body_read_err}")
+    except Exception as body_err:
+        logger.error(f"❌ Failed to access request body: {body_err}")
     logger.error(f"❌ Full traceback:\n{error_trace}")
     
     # If it's already an HTTPException, re-raise it
@@ -69,13 +77,22 @@ async def log_requests(request: Request, call_next):
     logger.info(f"📥 Headers: {dict(request.headers)}")
     
     # Read and log body, then restore it
-    body_bytes = await request.body()
-    if body_bytes:
-        try:
-            body_str = body_bytes.decode('utf-8')
-            logger.info(f"📥 Body (first 500 chars): {body_str[:500]}")
-        except:
-            logger.info(f"📥 Body (binary, {len(body_bytes)} bytes)")
+    try:
+        body_bytes = await request.body()
+        if body_bytes:
+            try:
+                body_str = body_bytes.decode('utf-8')
+                logger.info(f"📥 Body (first 500 chars): {body_str[:500]}")
+            except Exception as decode_err:
+                logger.error(f"❌ Failed to decode body: {decode_err}")
+                logger.info(f"📥 Body (binary, {len(body_bytes)} bytes)")
+        else:
+            logger.warning(f"⚠️ Request body is empty for {request.method} {request.url.path}")
+    except Exception as body_err:
+        logger.error(f"❌ CRITICAL: Failed to read request body: {body_err}")
+        import traceback
+        logger.error(f"❌ Body read traceback:\n{traceback.format_exc()}")
+        body_bytes = b""
     
     # Restore body for endpoint
     async def receive():
