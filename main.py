@@ -838,7 +838,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 # Create error row so user can see what went wrong
                 try:
                     from models import CampaignRawData
-                    from datetime import datetime
+                    # datetime is already imported at top of file
                     error_row = CampaignRawData(
                         campaign_id=campaign_id,
                         source_url=f"error:missing_site_base_url",
