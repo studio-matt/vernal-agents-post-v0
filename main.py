@@ -716,6 +716,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
     """
     try:
         logger.info(f"🔍 /analyze endpoint called - starting request processing")
+        logger.info(f"🔍 SUCCESS: Request reached endpoint - Pydantic validation passed")
         logger.info(f"🔍 analyze_data type: {type(analyze_data)}")
         logger.info(f"🔍 analyze_data received: campaign_id={getattr(analyze_data, 'campaign_id', 'N/A')}, type={getattr(analyze_data, 'type', 'N/A')}")
         logger.info(f"🔍 current_user: {current_user}, user_id: {getattr(current_user, 'id', 'N/A')}")
