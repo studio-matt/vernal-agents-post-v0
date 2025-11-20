@@ -358,7 +358,10 @@ def scrape_urls_recursive(
     include_images: bool = False,
     include_links: bool = False,
     visited: Optional[Set[str]] = None,
-    current_depth: int = 0
+    current_depth: int = 0,
+    progress_callback: Optional[callable] = None,
+    total_urls: int = 0,
+    scraped_count: int = 0
 ) -> List[Dict[str, any]]:
     """
     Recursively scrape URLs with depth control
@@ -396,6 +399,12 @@ def scrape_urls_recursive(
         # Mark as visited
         visited.add(url)
         
+        # Update progress if callback provided
+        if progress_callback and total_urls > 0:
+            scraped_count += 1
+            progress_pct = min(50 + int((scraped_count / total_urls) * 20), 70)  # 50% to 70% range
+            progress_callback(scraped_count, total_urls, progress_pct)
+        
         logger.info(f"📄 Scraping [{current_depth}/{depth}]: {url}")
         
         # Scrape the URL
@@ -426,7 +435,10 @@ def scrape_urls_recursive(
                     include_images=include_images,
                     include_links=include_links,
                     visited=visited,
-                    current_depth=current_depth + 1
+                    current_depth=current_depth + 1,
+                    progress_callback=progress_callback,
+                    total_urls=total_urls,
+                    scraped_count=scraped_count
                 )
                 results.extend(recursive_results)
     
@@ -439,7 +451,8 @@ def scrape_campaign_data(
     depth: int = 1,
     max_pages: int = 10,
     include_images: bool = False,
-    include_links: bool = False
+    include_links: bool = False,
+    progress_callback: Optional[callable] = None
 ) -> List[Dict[str, any]]:
     """
     Main function to scrape campaign data
@@ -494,7 +507,10 @@ def scrape_campaign_data(
         depth=depth,
         max_pages=max_pages,
         include_images=include_images,
-        include_links=include_links
+        include_links=include_links,
+        progress_callback=progress_callback,
+        total_urls=len(unique_urls),
+        scraped_count=0
     )
     
     logger.info(f"✅ Scraping complete: {len(results)} pages scraped")

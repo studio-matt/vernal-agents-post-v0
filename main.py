@@ -1436,8 +1436,13 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     
                     try:
                         logger.info(f"🚀 Calling scrape_campaign_data with: keywords={keywords}, urls={urls}, query={data.query or ''}, depth={depth}, max_pages={max_pages}")
-                        # Update progress to show scraping is in progress
-                        set_task("scraping", 50, f"Scraping {len(urls)} URLs... (this may take several minutes)")
+                        # Update progress to show scraping is starting
+                        set_task("scraping", 50, f"Scraping 0/{len(urls)} URLs... (this may take several minutes)")
+                        
+                        # Progress callback to update as each URL is scraped
+                        def update_scraping_progress(scraped: int, total: int, progress_pct: int):
+                            set_task("scraping", progress_pct, f"Scraping {scraped}/{total} URLs... ({progress_pct}%)")
+                        
                         scraped_results = scrape_campaign_data(
                             keywords=keywords,
                             urls=urls,
@@ -1445,7 +1450,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             depth=depth,
                             max_pages=max_pages,
                             include_images=include_images,
-                            include_links=include_links
+                            include_links=include_links,
+                            progress_callback=update_scraping_progress
                         )
                         
                         logger.info(f"✅ Web scraping completed: {len(scraped_results)} pages scraped")
