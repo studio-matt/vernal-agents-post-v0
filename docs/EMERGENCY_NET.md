@@ -514,6 +514,16 @@ python -m spacy download en_core_web_md
 **Without the language model, NLP processing fails with "Can't find model 'en_core_web_md'" error.**
 **This is MANDATORY - spaCy is a core dependency for entity extraction and NLP features.**
 
+**CRITICAL: Verify Gensim Installation (REQUIRED for topic extraction)**
+```bash
+# Gensim is installed via requirements.txt: gensim>=4.3.2
+# MUST verify it's actually installed and importable:
+python -c "import gensim; print(f'✅ gensim {gensim.__version__}')"
+```
+**Without gensim, topic extraction and research agent recommendations fail with "Gensim not available" errors.**
+**This is MANDATORY - Gensim is required for system model topic extraction (NMF with Phrases).**
+**If verification fails:** `pip install gensim>=4.3.2` and restart service.
+
 **TopicWizard (OPTIONAL - for topic visualization)**
 ```bash
 # TopicWizard is installed via requirements.txt: topic-wizard>=0.5.0
@@ -1658,6 +1668,11 @@ curl https://themachine.vernalcontentum.com/deploy/commit
   - **Required model:** `en_core_web_md` (includes word vectors for semantic similarity) - **MANDATORY**
   - **Alternative models:** `en_core_web_sm` (smaller, no vectors), `en_core_web_lg` (larger, best accuracy)
   - **Without the model, NLP processing fails** - this is a core dependency, not optional
+- **Gensim (REQUIRED):** After installing `gensim>=4.3.2` (in requirements.txt), **MUST** verify installation: `python -c "import gensim; print(f'✅ gensim {gensim.__version__}')"`
+  - **Required for:** System model topic extraction (NMF with Gensim Phrases), research agent recommendations
+  - **Without gensim, topic extraction fails** - Research Assistant recommendations return "Gensim not available" errors
+  - **Verification:** `python3 -c "import gensim; print('✅ gensim available')"` - MUST succeed
+  - **If missing:** Run `pip install gensim>=4.3.2` and restart service
 - **NLTK:** NLTK data downloads automatically on first import, but ensure required resources:
   ```python
   import nltk
