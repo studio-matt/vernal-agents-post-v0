@@ -1293,8 +1293,9 @@ curl -s https://themachine.vernalcontentum.com/mcp/enhanced/health | jq .
 5. **Activate environment:** `source venv/bin/activate`
 6. **Install dependencies:** `pip install -r requirements.txt --no-cache-dir`
 7. **Download spaCy model (MANDATORY):** `python -m spacy download en_core_web_md`
-8. **Verify TopicWizard (OPTIONAL):** `python3 -c "import topicwizard; print('✅ TopicWizard available')"` (for topic visualization)
-9. **Restart service:** `sudo systemctl restart vernal-agents`
+8. **Verify Gensim (MANDATORY):** `python -c "import gensim; print(f'✅ gensim {gensim.__version__}')"` (required for topic extraction)
+9. **Verify TopicWizard (OPTIONAL):** `python3 -c "import topicwizard; print('✅ TopicWizard available')"` (for topic visualization)
+10. **Restart service:** `sudo systemctl restart vernal-agents`
 10. **Run health check:** `./full_health_check.sh` (see script below)
 11. **Verify endpoints:** `curl -I https://themachine.vernalcontentum.com/health`
 
