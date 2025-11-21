@@ -344,6 +344,7 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
             logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
         # Get user info for campaigns (to show username/email)
         from models import User
+        import json
         user_cache = {}
         for campaign in campaigns:
             if campaign.user_id and campaign.user_id not in user_cache:
