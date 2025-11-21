@@ -4603,7 +4603,7 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         
         # Get raw data for context
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
-        texts = [r.extracted_text for r in rows if r.extracted_text and len(r.extracted_text.strip()) > 10 and not r.source_url.startswith(("error:", "placeholder:"))]
+        texts = [r.extracted_text for r in rows if r.extracted_text and len(r.extracted_text.strip()) > 10 and (r.source_url is None or not r.source_url.startswith(("error:", "placeholder:")))]
         
         if not texts:
             return {"status": "error", "message": "No valid scraped data available"}
