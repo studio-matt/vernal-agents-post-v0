@@ -1559,6 +1559,25 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             json = json_module  # Use global json module
                             
                             logger.info(f"💾 Starting to save {len(scraped_results)} scraped results to database...")
+                            
+                            # CRITICAL: Check for existing scraped data to avoid duplicates
+                            # Query all existing URLs for this campaign to reuse instead of re-scraping
+                            existing_urls = {}
+                            try:
+                                existing_rows = session.query(CampaignRawData).filter(
+                                    CampaignRawData.campaign_id == cid,
+                                    ~CampaignRawData.source_url.startswith("error:"),
+                                    ~CampaignRawData.source_url.startswith("placeholder:")
+                                ).all()
+                                for row in existing_rows:
+                                    if row.source_url and row.extracted_text and len(row.extracted_text.strip()) > 10:
+                                        existing_urls[row.source_url] = row
+                                logger.info(f"📋 Found {len(existing_urls)} existing scraped URLs for campaign {cid} - will reuse instead of re-scraping")
+                            except Exception as query_err:
+                                logger.warning(f"⚠️ Error querying existing URLs: {query_err}, will proceed with saving all results")
+                                existing_urls = {}
+                            
+                            skipped_count = 0
                             for i, result in enumerate(scraped_results, 1):
                                 # Update progress periodically during database save (every 10 items)
                                 if i % 10 == 0 or i == len(scraped_results):
@@ -1571,6 +1590,13 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 links = result.get("links", [])
                                 error = result.get("error")
                                 depth_level = result.get("depth", 0)
+                                
+                                # CRITICAL: Skip if URL already exists in database (reuse existing data)
+                                if url in existing_urls and not error:
+                                    skipped_count += 1
+                                    existing_row = existing_urls[url]
+                                    logger.debug(f"♻️ Skipping {url} - already exists in database (DB ID: {existing_row.id}, {len(existing_row.extracted_text or '')} chars)")
+                                    continue  # Skip creating duplicate row
                                 
                                 # Build metadata JSON
                                 meta = {
@@ -1688,7 +1714,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 else:
                                     logger.info(f"✅ Scraped {url} (DB ID: {row.id}): {text_len} chars{truncation_note}, {len(links)} links, {len(images)} images")
                             
-                            logger.info(f"💾 Finished saving {len(scraped_results)} results to database (created={created})")
+                            logger.info(f"💾 Finished saving {len(scraped_results)} results to database (created={created} new, skipped={skipped_count} duplicates - reused existing data)")
                         except Exception as save_error:
                             logger.error(f"❌ CRITICAL: Error saving scraped data to database for campaign {cid}: {save_error}")
                             import traceback
