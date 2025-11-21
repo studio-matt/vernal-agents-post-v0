@@ -2283,7 +2283,9 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
     real_step = task.get("current_step")
     real_message = task.get("progress_message")
     
-    if real_progress is not None and real_progress > 0 and real_step:
+    # CRITICAL: If real_progress has been set (even if 0), use it
+    # This ensures we return progress even when it's 0 initially
+    if real_progress is not None and real_step:
         # Real progress has been set (e.g., during scraping)
         progress = real_progress
         current_step = real_step
