@@ -205,6 +205,7 @@ class Campaign(Base):
     scheduling_settings_json = Column(Text, nullable=True)  # JSON string for scheduling: {weeks, posts_per_day, posts_per_week, start_date, day_frequency, post_frequency_type, post_frequency_value}
     campaign_plan_json = Column(Text, nullable=True)  # JSON string for campaign plan: {weeks: [{week_num, parent_ideas: [{idea, children: [...]}], knowledge_graph_locations: [...]}]}
     content_queue_items_json = Column(Text, nullable=True)  # JSON string for checked items from content queue
+    custom_keywords_json = Column(Text, nullable=True)  # JSON string for custom keywords/ideas: ["keyword1", "keyword2"]
     # Site Builder campaign fields
     site_base_url = Column(String(500), nullable=True)  # Base URL for Site Builder campaigns
     target_keywords_json = Column(Text, nullable=True)  # JSON string for target keywords: ["keyword1", "keyword2"]

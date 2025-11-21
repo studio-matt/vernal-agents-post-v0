@@ -252,6 +252,7 @@ class CampaignUpdate(BaseModel):
     preprocessingSettings: Optional[Dict[str, Any]] = None
     entitySettings: Optional[Dict[str, Any]] = None
     modelingSettings: Optional[Dict[str, Any]] = None
+    custom_keywords: Optional[List[str]] = None  # Custom keywords/ideas for content queue
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
@@ -372,7 +373,8 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     "user_username": user_cache.get(campaign.user_id, {}).get("username") if campaign.user_id else None,
                     "user_email": user_cache.get(campaign.user_id, {}).get("email") if campaign.user_id else None,
                     "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
-                    "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None
+                    "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None,
+                    "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else []
                 }
                 for campaign in campaigns
             ]
@@ -549,6 +551,8 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "site_base_url": campaign.site_base_url,
                 "target_keywords": json.loads(campaign.target_keywords_json) if campaign.target_keywords_json else None,
                 "top_ideas_count": campaign.top_ideas_count,
+                # Custom keywords/ideas
+                "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else [],
                 # Look Alike specific fields
                 "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
             }
@@ -609,6 +613,9 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
         if campaign_data.modelingSettings is not None:
             campaign.modeling_settings_json = json.dumps(campaign_data.modelingSettings)
             logger.info(f"Saved modelingSettings for campaign {campaign_id}: {campaign_data.modelingSettings}")
+        if campaign_data.custom_keywords is not None:
+            campaign.custom_keywords_json = json.dumps(campaign_data.custom_keywords)
+            logger.info(f"Saved custom_keywords for campaign {campaign_id}: {campaign_data.custom_keywords}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
