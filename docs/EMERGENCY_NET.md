@@ -1051,6 +1051,8 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 | **ModuleNotFoundError: No module named 'topicwizard'** | **Missing topic-wizard package** | **pip install topic-wizard>=0.5.0** |
 | **TopicWizard import fails with numba/llvmlite error** | **Python 3.12 compatibility issue** | **Endpoint falls back to basic visualization. Known issue: numba/llvmlite with Python 3.12. Workaround: Use Python 3.11 or wait for numba update** |
 | **TopicWizard visualization shows "Insufficient Data"** | **Campaign has <3 documents** | **Scrape more content (need at least 3 documents for topic modeling)** |
+| **ERROR:text_processing:❌ Gensim not available - system model requires gensim** | **Missing gensim package** | **pip install gensim>=4.3.2 && python -c \"import gensim; print('✅ gensim available')\" && sudo systemctl restart vernal-agents** |
+| **Research agent recommendations return "Gensim not available"** | **gensim not installed or not importable** | **Verify: `python -c \"import gensim\"` - if fails, run `pip install gensim>=4.3.2` and restart service** |
 | **SyntaxError: invalid syntax** | **Code syntax error** | **Check database.py line 928 for missing newline** |
 | Email not sending       | SMTP configuration   | Check `.env` SMTP settings |
 | Service won't start     | Port conflict        | Kill processes on port 8000 |
