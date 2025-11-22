@@ -228,7 +228,7 @@ class CampaignCreate(BaseModel):
     urls: Optional[List[str]] = None
     trendingTopics: Optional[List[str]] = None
     topics: Optional[List[str]] = None
-    status: Optional[str] = "INCOMPLETE"  # Campaign status: INCOMPLETE, PROCESSING, READY_TO_ACTIVATE
+    status: Optional[str] = "INCOMPLETE"  # Campaign status: INCOMPLETE, PROCESSING, READY_TO_ACTIVATE, ACTIVE, NO_CHANGES
     extractionSettings: Optional[Dict[str, Any]] = None
     preprocessingSettings: Optional[Dict[str, Any]] = None
     entitySettings: Optional[Dict[str, Any]] = None
@@ -1553,12 +1553,20 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                                 logger.error(f"❌ CRITICAL: All {len(scraped_results)} scraping attempts failed!")
                         
                         # Store scraped data in database
+                        # Initialize tracking variables before try block so they're accessible later
+                        skipped_count = 0
+                        created = 0
+                        total_urls_scraped = len(scraped_results) if 'scraped_results' in locals() else 0
+                        
                         try:
                             # Ensure json is available (it's imported globally, but ensure it's in scope)
                             import json as json_module
                             json = json_module  # Use global json module
                             
                             logger.info(f"💾 Starting to save {len(scraped_results)} scraped results to database...")
+                            
+                            # Update total_urls_scraped now that we're in the try block
+                            total_urls_scraped = len(scraped_results)
                             
                             # CRITICAL: Check for existing scraped data to avoid duplicates
                             # Query all existing URLs for this campaign to reuse instead of re-scraping
@@ -1974,8 +1982,44 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         
                         logger.info(f"📊 Data validation: {valid_data_count} valid rows, {valid_text_count} with text, {error_count} error/placeholder rows")
                         
+                        # CRITICAL: Check if all URLs were already scraped (100% duplicates = no changes)
+                        # This happens when a campaign is re-scraped but all URLs already exist in the database
+                        all_urls_were_duplicates = (
+                            total_urls_scraped > 0 and 
+                            skipped_count > 0 and 
+                            created == 0 and 
+                            skipped_count == total_urls_scraped
+                        )
+                        
+                        if all_urls_were_duplicates and valid_data_count > 0:
+                            # All URLs were already scraped - no changes detected
+                            logger.info(f"🔄 Campaign {cid} re-scraped but all {skipped_count} URLs were already in database - no changes detected")
+                            
+                            # Store coarse topics from keywords as a ready signal (if not already set)
+                            if (data.keywords or []) and not camp.topics:
+                                camp.topics = ",".join((data.keywords or [])[:10])
+                                logger.info(f"📝 Set topics to: {camp.topics}")
+                            
+                            # Set status to NO_CHANGES to indicate re-run with no new data
+                            camp.status = "NO_CHANGES"
+                            camp.updated_at = datetime.utcnow()
+                            session.commit()
+                            logger.info(f"✅ Campaign {cid} marked as NO_CHANGES - re-scraped but all {skipped_count} URLs already existed (reused existing data)")
+                            
+                            # Set progress to 100% to indicate completion
+                            set_task("finalizing", 100, f"Re-scraped - all {skipped_count} URLs already existed, no changes detected")
+                            
+                            # Verify the status was saved correctly
+                            session.refresh(camp)
+                            if camp.status != "NO_CHANGES":
+                                logger.error(f"❌ CRITICAL: Campaign {cid} status was not saved correctly! Expected NO_CHANGES, got {camp.status}")
+                                # Force update again
+                                camp.status = "NO_CHANGES"
+                                camp.updated_at = datetime.utcnow()
+                                session.commit()
+                                logger.info(f"🔧 Force-updated campaign {cid} status to NO_CHANGES")
                         # For Site Builder campaigns, require at least some valid data
-                        if data.type == "site_builder" and valid_data_count == 0:
+                        elif data.type == "site_builder" and valid_data_count == 0:
                             logger.error(f"❌ Site Builder campaign {cid} has no valid scraped data!")
                             logger.error(f"❌ Total rows: {len(all_rows)}, Error rows: {error_count}")
                             if error_count > 0:
