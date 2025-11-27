@@ -253,6 +253,7 @@ class CampaignUpdate(BaseModel):
     entitySettings: Optional[Dict[str, Any]] = None
     modelingSettings: Optional[Dict[str, Any]] = None
     custom_keywords: Optional[List[str]] = None  # Custom keywords/ideas for content queue
+    personality_settings_json: Optional[str] = None  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
@@ -627,6 +628,9 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
         if campaign_data.custom_keywords is not None:
             campaign.custom_keywords_json = json.dumps(campaign_data.custom_keywords)
             logger.info(f"Saved custom_keywords for campaign {campaign_id}: {campaign_data.custom_keywords}")
+        if campaign_data.personality_settings_json is not None:
+            campaign.personality_settings_json = campaign_data.personality_settings_json
+            logger.info(f"Saved personality_settings_json for campaign {campaign_id}: {campaign_data.personality_settings_json}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
