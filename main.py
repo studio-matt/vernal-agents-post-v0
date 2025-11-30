@@ -5392,6 +5392,69 @@ def extract_author_profile(
             detail=f"Failed to extract author profile: {str(e)}"
         )
 
+@app.get("/author_personalities/test-assets")
+def test_asset_loading(current_user = Depends(get_current_user)):
+    """Test endpoint to verify asset files can be loaded - REQUIRES AUTHENTICATION"""
+    try:
+        from author_related import ProfileExtractor
+        from author_related.asset_loader import AssetLoader
+        import traceback
+        
+        results = {
+            "asset_root": None,
+            "assets_found": [],
+            "assets_missing": [],
+            "extractor_init": False,
+            "error": None
+        }
+        
+        # Test AssetLoader
+        try:
+            loader = AssetLoader()
+            results["asset_root"] = str(loader.root)
+            
+            # Check for required files
+            required_files = [
+                "LIWC_Mean_Table.csv",
+                "LIWC_StdDev_Mean_Table.csv",
+                "context_domains.json",
+                "HighLow_Vectorization.json",
+                "Trait_Mapping.json",
+                "adapters.json"
+            ]
+            
+            for filename in required_files:
+                try:
+                    path = loader._resolve(filename)
+                    if path.exists():
+                        results["assets_found"].append(filename)
+                    else:
+                        results["assets_missing"].append(filename)
+                except Exception as e:
+                    results["assets_missing"].append(f"{filename}: {str(e)}")
+            
+            # Test ProfileExtractor initialization
+            try:
+                extractor = ProfileExtractor()
+                results["extractor_init"] = True
+            except Exception as e:
+                results["extractor_init"] = False
+                results["error"] = f"ProfileExtractor init failed: {str(e)}\n{traceback.format_exc()}"
+                
+        except Exception as e:
+            results["error"] = f"AssetLoader failed: {str(e)}\n{traceback.format_exc()}"
+        
+        return {
+            "status": "success" if results["extractor_init"] else "error",
+            "results": results
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": f"Test failed: {str(e)}\n{traceback.format_exc()}"
+        }
+
 @app.get("/author_personalities/{personality_id}/profile")
 def get_author_profile(
     personality_id: str,
