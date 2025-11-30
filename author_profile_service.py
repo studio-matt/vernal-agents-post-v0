@@ -25,12 +25,19 @@ class AuthorProfileService:
 
     def __init__(self):
         try:
+            logger.info("Initializing ProfileExtractor...")
             self.extractor = ProfileExtractor()
+            logger.info("ProfileExtractor initialized successfully")
+        except FileNotFoundError as e:
+            logger.error(f"Asset file not found: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise ValueError(f"Required asset file missing. Check that all asset files are present in author-related folder: {str(e)}")
         except Exception as e:
             logger.error(f"Failed to initialize ProfileExtractor: {str(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            raise ValueError(f"Failed to initialize profile extractor. Check that all asset files are present in author-related folder: {str(e)}")
+            raise ValueError(f"Failed to initialize profile extractor: {str(e)}")
 
     def extract_and_save_profile(
         self,
@@ -130,6 +137,8 @@ class AuthorProfileService:
         tolerance = ToleranceConfig(liwc_z=0.6, sentence_length_max_run=2)
 
         logger.info("Calling extractor.build_profile...")
+        if not hasattr(self, 'extractor') or self.extractor is None:
+            raise ValueError("ProfileExtractor not initialized. Cannot build profile.")
         try:
             profile = self.extractor.build_profile(
                 author_id=author_personality_id,
