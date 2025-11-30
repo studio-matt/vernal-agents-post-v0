@@ -162,15 +162,17 @@ class AuthorProfileService:
 
     def _placeholder_liwc_analysis(self, text: str) -> dict[str, float]:
         """
-        Placeholder LIWC analysis - returns empty dict.
-
-        TODO: Replace with actual LIWC library integration.
-        This should use a LIWC analysis library to compute category scores.
+        Lightweight LIWC analysis using pattern matching.
+        
+        Uses regex patterns and word lists to detect common LIWC categories
+        without requiring the proprietary LIWC dictionary.
         """
-        # Placeholder implementation - returns empty dict
-        # Real implementation should use LIWC library to analyze text
-        logger.warning("Using placeholder LIWC analysis - actual LIWC library not yet integrated")
-        return {}
+        try:
+            from liwc_analyzer import analyze_text
+            return analyze_text(text)
+        except ImportError:
+            logger.warning("liwc_analyzer not found - using empty analysis")
+            return {}
 
     def get_liwc_scores(self, author_personality_id: str, db: Session) -> Optional[dict]:
         """Get quick access to LIWC scores without loading full profile."""
