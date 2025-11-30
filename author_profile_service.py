@@ -60,12 +60,16 @@ class AuthorProfileService:
             raise ValueError(f"Author personality not found: {author_personality_id}")
 
         logger.info(f"Extracting profile for author personality: {author_personality_id}")
+        logger.info(f"Processing {len(writing_samples)} writing samples")
 
         # Prepare samples with metadata
         samples = []
         for idx, text in enumerate(writing_samples):
             if not text or not text.strip():
+                logger.debug(f"Skipping empty sample {idx + 1}")
                 continue  # Skip empty samples
+
+            logger.info(f"Processing sample {idx + 1}/{len(writing_samples)} (length: {len(text)} chars)")
 
             # Get metadata for this sample (default to 'reform' mode, 'general' audience)
             metadata = sample_metadata[idx] if sample_metadata and idx < len(sample_metadata) else {}
@@ -74,12 +78,13 @@ class AuthorProfileService:
             path = metadata.get("path", f"sample_{idx + 1}")
 
             # Normalize text
+            logger.debug(f"Normalizing text for sample {idx + 1}")
             normalized_text = ProfileExtractor.normalize_text(text)
 
-            # TODO: Run LIWC analysis on the text
-            # For now, create placeholder LIWC counts
-            # This will need to be replaced with actual LIWC library integration
+            # Run LIWC analysis on the text
+            logger.info(f"Running LIWC analysis on sample {idx + 1}...")
             liwc_counts = self._placeholder_liwc_analysis(normalized_text)
+            logger.info(f"LIWC analysis complete for sample {idx + 1} ({len(liwc_counts)} categories)")
 
             sample = Sample(
                 text=normalized_text,
@@ -93,6 +98,8 @@ class AuthorProfileService:
         if not samples:
             raise ValueError("No valid writing samples provided")
 
+        logger.info(f"Prepared {len(samples)} samples, building profile...")
+
         # Extract profile using ProfileExtractor
         default_controls = ControlDefaults(
             pronoun_distance="we",
@@ -104,15 +111,18 @@ class AuthorProfileService:
 
         tolerance = ToleranceConfig(liwc_z=0.6, sentence_length_max_run=2)
 
+        logger.info("Calling extractor.build_profile...")
         profile = self.extractor.build_profile(
             author_id=author_personality_id,
             samples=samples,
             default_controls=default_controls,
             tolerance=tolerance,
         )
+        logger.info("Profile extraction complete, saving to database...")
 
         # Save to database
         self._save_profile_to_db(personality, profile, db)
+        logger.info("Profile saved to database successfully")
 
         logger.info(f"Profile extracted and saved for: {author_personality_id}")
         return profile
