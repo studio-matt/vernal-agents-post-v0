@@ -264,6 +264,17 @@ class AuthorPersonalityUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
 
+# Pydantic models for author profile endpoints
+class ExtractProfileRequest(BaseModel):
+    writing_samples: List[str]
+    sample_metadata: Optional[List[dict]] = None  # Optional list of {mode, audience, path} for each sample
+
+class GenerateContentRequest(BaseModel):
+    goal: str
+    target_audience: str = "general"
+    adapter_key: str = "blog"  # linkedin, blog, memo_email, etc.
+    scaffold: str  # The content prompt/topic
+
 class BrandPersonalityCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -5308,6 +5319,220 @@ def delete_author_personality(personality_id: str, current_user = Depends(get_cu
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete author personality: {str(e)}"
+        )
+
+# Author Profile endpoints (Phase 2)
+@app.post("/author_personalities/{personality_id}/extract-profile")
+def extract_author_profile(
+    personality_id: str,
+    request_data: ExtractProfileRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Extract author profile from writing samples - REQUIRES AUTHENTICATION AND OWNERSHIP"""
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        logger.info(f"Extracting profile for author personality: {personality_id}")
+        
+        # Extract profile using service
+        service = AuthorProfileService()
+        profile = service.extract_and_save_profile(
+            author_personality_id=personality_id,
+            writing_samples=request_data.writing_samples,
+            sample_metadata=request_data.sample_metadata,
+            db=db
+        )
+        
+        # Return summary (not full profile to avoid large response)
+        return {
+            "status": "success",
+            "message": {
+                "personality_id": personality_id,
+                "profile_extracted": True,
+                "samples_analyzed": len(request_data.writing_samples),
+                "liwc_categories": len(profile.liwc_profile.categories),
+                "has_traits": profile.mbti is not None or profile.ocean is not None or profile.hexaco is not None,
+                "lexicon_size": {
+                    "core_verbs": len(profile.lexicon.core_verbs),
+                    "core_nouns": len(profile.lexicon.core_nouns),
+                    "evaluatives": len(profile.lexicon.evaluatives),
+                    "metaphor_stems": len(profile.lexicon.metaphor_stems)
+                }
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"Validation error extracting profile: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import traceback
+        logger.error(f"Error extracting author profile: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract author profile: {str(e)}"
+        )
+
+@app.get("/author_personalities/{personality_id}/profile")
+def get_author_profile(
+    personality_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get full author profile - REQUIRES AUTHENTICATION AND OWNERSHIP"""
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        # Load profile
+        service = AuthorProfileService()
+        profile = service.load_profile(personality_id, db)
+        
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Profile not found. Extract profile from writing samples first."
+            )
+        
+        # Return full profile
+        return {
+            "status": "success",
+            "profile": profile.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error loading author profile: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load author profile: {str(e)}"
+        )
+
+@app.get("/author_personalities/{personality_id}/liwc-scores")
+def get_liwc_scores(
+    personality_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get quick access to LIWC scores - REQUIRES AUTHENTICATION AND OWNERSHIP"""
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        service = AuthorProfileService()
+        liwc_scores = service.get_liwc_scores(personality_id, db)
+        
+        if not liwc_scores:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="LIWC scores not found. Extract profile from writing samples first."
+            )
+        
+        return {
+            "status": "success",
+            "liwc_scores": liwc_scores
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error loading LIWC scores: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load LIWC scores: {str(e)}"
+        )
+
+@app.get("/author_personalities/{personality_id}/trait-scores")
+def get_trait_scores(
+    personality_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get quick access to trait scores (MBTI/OCEAN/HEXACO) - REQUIRES AUTHENTICATION AND OWNERSHIP"""
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        service = AuthorProfileService()
+        trait_scores = service.get_trait_scores(personality_id, db)
+        
+        if not trait_scores:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Trait scores not found. Extract profile from writing samples first."
+            )
+        
+        return {
+            "status": "success",
+            "trait_scores": trait_scores
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error loading trait scores: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load trait scores: {str(e)}"
         )
 
 # Brand Personality Endpoints
