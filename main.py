@@ -366,30 +366,66 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                         "email": user.email
                     }
         
-        return {
-            "status": "success",
-            "campaigns": [
-                {
+        # Build campaigns response with error handling for each field
+        campaigns_list = []
+        for campaign in campaigns:
+            try:
+                # Safely parse custom_keywords_json
+                custom_keywords = []
+                if campaign.custom_keywords_json:
+                    try:
+                        custom_keywords = json.loads(campaign.custom_keywords_json)
+                        if not isinstance(custom_keywords, list):
+                            custom_keywords = []
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Failed to parse custom_keywords_json for campaign {campaign.id}: {e}")
+                        custom_keywords = []
+                
+                # Safely format dates
+                created_at = None
+                if campaign.created_at:
+                    try:
+                        created_at = campaign.created_at.isoformat()
+                    except (AttributeError, ValueError) as e:
+                        logger.warning(f"Failed to format created_at for campaign {campaign.id}: {e}")
+                
+                updated_at = None
+                if campaign.updated_at:
+                    try:
+                        updated_at = campaign.updated_at.isoformat()
+                    except (AttributeError, ValueError) as e:
+                        logger.warning(f"Failed to format updated_at for campaign {campaign.id}: {e}")
+                
+                campaigns_list.append({
                     "id": campaign.id,
                     "campaign_id": campaign.campaign_id,
-                    "name": campaign.campaign_name,
-                    "description": campaign.description,
-                    "type": campaign.type,
-                    "query": campaign.query,
+                    "name": campaign.campaign_name or "",
+                    "description": campaign.description or "",
+                    "type": campaign.type or "",
+                    "query": campaign.query or "",
                     "keywords": campaign.keywords.split(",") if campaign.keywords else [],
                     "urls": campaign.urls.split(",") if campaign.urls else [],
                     "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
                     "topics": campaign.topics.split(",") if campaign.topics else [],
-                    "status": campaign.status or "INCOMPLETE",  # Include status field
-                    "user_id": campaign.user_id,  # Include user_id in response for debugging
+                    "status": campaign.status or "INCOMPLETE",
+                    "user_id": campaign.user_id,
                     "user_username": user_cache.get(campaign.user_id, {}).get("username") if campaign.user_id else None,
                     "user_email": user_cache.get(campaign.user_id, {}).get("email") if campaign.user_id else None,
-                    "created_at": campaign.created_at.isoformat() if campaign.created_at else None,
-                    "updated_at": campaign.updated_at.isoformat() if campaign.updated_at else None,
-                    "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else []
-                }
-                for campaign in campaigns
-            ]
+                    "createdAt": created_at,  # Use camelCase for frontend
+                    "updated_at": updated_at,
+                    "custom_keywords": custom_keywords
+                })
+            except Exception as e:
+                logger.error(f"Error processing campaign {campaign.id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Skip this campaign but continue with others
+                continue
+        
+        logger.info(f"✅ Successfully processed {len(campaigns_list)} campaigns")
+        return {
+            "status": "success",
+            "campaigns": campaigns_list
         }
     except Exception as e:
         import traceback
