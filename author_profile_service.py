@@ -108,7 +108,15 @@ class AuthorProfileService:
         if not samples:
             raise ValueError("No valid writing samples provided")
 
-        logger.info(f"Prepared {len(samples)} samples, building profile...")
+        # Validate that at least one sample has LIWC counts
+        samples_with_liwc = [s for s in samples if s.liwc_counts]
+        if not samples_with_liwc:
+            logger.warning("No samples have LIWC counts, this may cause issues")
+            # Add minimal LIWC data to first sample if needed
+            if samples:
+                samples[0].liwc_counts = samples[0].liwc_counts or {"WC": float(len(samples[0].text.split()))}
+
+        logger.info(f"Prepared {len(samples)} samples ({len(samples_with_liwc)} with LIWC data), building profile...")
 
         # Extract profile using ProfileExtractor
         default_controls = ControlDefaults(
