@@ -175,6 +175,10 @@ class AuthorPersonality(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     user_id = Column(String(255), nullable=True)  # Optional: for user-specific personalities
+    # Author profile data from author-related tools (stored as JSON strings)
+    profile_json = Column(Text, nullable=True)  # Full AuthorProfile JSON from author-related package
+    liwc_scores = Column(Text, nullable=True)  # Quick access to LIWC category scores (JSON)
+    trait_scores = Column(Text, nullable=True)  # MBTI/OCEAN/HEXACO trait scores (JSON)
     
     def __repr__(self):
         return f"<AuthorPersonality(id={self.id}, name={self.name})>"
