@@ -146,6 +146,54 @@ class VernalContentumMCPServer(MCPServer):
                 handler=self._handle_crewai_content_generation
             ))
         
+        # Author Profile Tools
+        self.register_tool(Tool(
+            name="extract_author_profile",
+            description="Extract author profile from writing samples using LIWC analysis and trait mapping",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "author_personality_id": {"type": "string", "description": "ID of the author personality"},
+                    "writing_samples": {"type": "array", "items": {"type": "string"}, "description": "List of writing sample texts"},
+                    "sample_metadata": {"type": "array", "items": {"type": "object"}, "description": "Optional metadata for each sample (mode, audience, path)"}
+                },
+                "required": ["author_personality_id", "writing_samples"]
+            },
+            handler=self._handle_extract_author_profile
+        ))
+        
+        self.register_tool(Tool(
+            name="generate_with_author_voice",
+            description="Generate content using author personality profile to match author's writing style",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "author_personality_id": {"type": "string", "description": "ID of the author personality to use"},
+                    "content_prompt": {"type": "string", "description": "The content topic/prompt to write about"},
+                    "platform": {"type": "string", "description": "Target platform (linkedin, blog, memo_email, etc.)"},
+                    "goal": {"type": "string", "description": "Content goal (mobilization, education, etc.)"},
+                    "target_audience": {"type": "string", "description": "Target audience (general, practitioner, scholar)"}
+                },
+                "required": ["author_personality_id", "content_prompt", "platform"]
+            },
+            handler=self._handle_generate_with_author_voice
+        ))
+        
+        self.register_tool(Tool(
+            name="validate_author_voice",
+            description="Validate generated content against author personality profile to ensure style consistency",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "author_personality_id": {"type": "string", "description": "ID of the author personality"},
+                    "generated_text": {"type": "string", "description": "Generated content to validate"},
+                    "style_config": {"type": "string", "description": "STYLE_CONFIG block used for generation"}
+                },
+                "required": ["author_personality_id", "generated_text"]
+            },
+            handler=self._handle_validate_author_voice
+        ))
+        
         logger.info(f"Registered {len(self.tools)} MCP tools")
     
     def _create_platform_handler(self, platform: str):
@@ -354,6 +402,230 @@ class VernalContentumMCPServer(MCPServer):
                 success=False,
                 error=str(e),
                 metadata={"workflow": "crewai_content_generation"}
+            )
+    
+    def _handle_extract_author_profile(self, input_data: Dict[str, Any]) -> ToolResult:
+        """Handle author profile extraction from writing samples"""
+        try:
+            from author_profile_service import AuthorProfileService
+            from database import SessionLocal
+            
+            author_personality_id = input_data.get("author_personality_id", "")
+            writing_samples = input_data.get("writing_samples", [])
+            sample_metadata = input_data.get("sample_metadata", None)
+            
+            if not author_personality_id or not writing_samples:
+                return ToolResult(
+                    success=False,
+                    error="author_personality_id and writing_samples are required",
+                    metadata={"tool": "extract_author_profile"}
+                )
+            
+            db = SessionLocal()
+            try:
+                service = AuthorProfileService()
+                profile = service.extract_and_save_profile(
+                    author_personality_id=author_personality_id,
+                    writing_samples=writing_samples,
+                    sample_metadata=sample_metadata,
+                    db=db
+                )
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "profile_id": author_personality_id,
+                        "samples_analyzed": len(writing_samples),
+                        "liwc_categories": len(profile.liwc_profile.categories),
+                        "has_traits": profile.mbti is not None or profile.ocean is not None,
+                        "lexicon_size": {
+                            "core_verbs": len(profile.lexicon.core_verbs),
+                            "core_nouns": len(profile.lexicon.core_nouns),
+                            "evaluatives": len(profile.lexicon.evaluatives)
+                        }
+                    },
+                    metadata={"tool": "extract_author_profile"}
+                )
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error extracting author profile: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ToolResult(
+                success=False,
+                error=str(e),
+                metadata={"tool": "extract_author_profile"}
+            )
+    
+    def _handle_generate_with_author_voice(self, input_data: Dict[str, Any]) -> ToolResult:
+        """Handle content generation with author voice"""
+        try:
+            from author_profile_service import AuthorProfileService
+            from author_related import Planner, GeneratorHarness
+            from database import SessionLocal
+            from langchain_openai import ChatOpenAI
+            import os
+            
+            author_personality_id = input_data.get("author_personality_id", "")
+            content_prompt = input_data.get("content_prompt", "")
+            platform = input_data.get("platform", "blog")
+            goal = input_data.get("goal", "content_generation")
+            target_audience = input_data.get("target_audience", "general")
+            
+            if not author_personality_id or not content_prompt:
+                return ToolResult(
+                    success=False,
+                    error="author_personality_id and content_prompt are required",
+                    metadata={"tool": "generate_with_author_voice"}
+                )
+            
+            db = SessionLocal()
+            try:
+                # Load profile
+                service = AuthorProfileService()
+                profile = service.load_profile(author_personality_id, db)
+                
+                if not profile:
+                    return ToolResult(
+                        success=False,
+                        error=f"Profile not found for author_personality_id: {author_personality_id}. Extract profile first.",
+                        metadata={"tool": "generate_with_author_voice"}
+                    )
+                
+                # Use Planner to build STYLE_CONFIG
+                planner = Planner()
+                planner_output = planner.build_style_config(
+                    profile=profile,
+                    goal=goal,
+                    target_audience=target_audience,
+                    adapter_key=platform,
+                    scaffold=content_prompt
+                )
+                
+                # Use GeneratorHarness with existing LLM
+                def invoke_llm(prompt: str) -> str:
+                    api_key = os.getenv("OPENAI_API_KEY")
+                    if not api_key:
+                        raise ValueError("OPENAI_API_KEY not set")
+                    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, api_key=api_key)
+                    return llm.invoke(prompt).content
+                
+                harness = GeneratorHarness(invoke_llm)
+                result = harness.run(planner_output)
+                
+                return ToolResult(
+                    success=True,
+                    data={
+                        "generated_text": result.text,
+                        "prompt_id": result.prompt_id,
+                        "token_count": result.token_count,
+                        "style_config": planner_output.style_config_block
+                    },
+                    metadata={
+                        "tool": "generate_with_author_voice",
+                        "author_personality_id": author_personality_id,
+                        "platform": platform
+                    }
+                )
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error generating with author voice: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ToolResult(
+                success=False,
+                error=str(e),
+                metadata={"tool": "generate_with_author_voice"}
+            )
+    
+    def _handle_validate_author_voice(self, input_data: Dict[str, Any]) -> ToolResult:
+        """Handle validation of generated content against author profile"""
+        try:
+            from author_profile_service import AuthorProfileService
+            from author_related import StyleValidator, parse_style_header
+            from liwc_analyzer import analyze_text
+            from database import SessionLocal
+            
+            author_personality_id = input_data.get("author_personality_id", "")
+            generated_text = input_data.get("generated_text", "")
+            style_config_block = input_data.get("style_config", "")
+            
+            if not author_personality_id or not generated_text:
+                return ToolResult(
+                    success=False,
+                    error="author_personality_id and generated_text are required",
+                    metadata={"tool": "validate_author_voice"}
+                )
+            
+            db = SessionLocal()
+            try:
+                # Load profile
+                service = AuthorProfileService()
+                profile = service.load_profile(author_personality_id, db)
+                
+                if not profile:
+                    return ToolResult(
+                        success=False,
+                        error=f"Profile not found for author_personality_id: {author_personality_id}",
+                        metadata={"tool": "validate_author_voice"}
+                    )
+                
+                # Parse style config if provided
+                style_config = None
+                if style_config_block:
+                    style_config = parse_style_header(style_config_block)
+                
+                # Run LIWC on generated text
+                measured_liwc = analyze_text(generated_text)
+                
+                # Validate
+                validator = StyleValidator()
+                if style_config:
+                    validation = validator.validate_output(
+                        text=generated_text,
+                        config=style_config,
+                        profile=profile,
+                        measured_liwc=measured_liwc
+                    )
+                    
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "is_clean": validation.is_clean(),
+                            "findings": [f.__dict__ for f in validation.findings],
+                            "liwc_deltas": validation.liwc_deltas,
+                            "cadence_errors": validation.cadence_errors,
+                            "pronoun_errors": validation.pronoun_errors
+                        },
+                        metadata={"tool": "validate_author_voice"}
+                    )
+                else:
+                    # Basic validation without style config
+                    liwc_deltas, findings = validator.compare_liwc(profile, measured_liwc)
+                    return ToolResult(
+                        success=True,
+                        data={
+                            "is_clean": len(findings) == 0,
+                            "findings": [f.__dict__ for f in findings],
+                            "liwc_deltas": liwc_deltas
+                        },
+                        metadata={"tool": "validate_author_voice"}
+                    )
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error validating author voice: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ToolResult(
+                success=False,
+                error=str(e),
+                metadata={"tool": "validate_author_voice"}
             )
 
 # Create MCP server instance
