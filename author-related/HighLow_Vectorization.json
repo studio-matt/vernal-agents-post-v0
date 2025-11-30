@@ -1,0 +1,274 @@
+{
+  "Analytical Thinking": {
+    "abbreviation": "Analytic",
+    "exemplars": "Metric of logical, formal thinking",
+    "definition": "Degree of logical, hierarchical, and formal reasoning in text. Reflects cognitive structure, focus on analysis, planning, and rule-based processing.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellect facet) and Conscientiousness (Deliberation facet); HEXACO Openness, Conscientiousness; Enneagram Type 5 (Investigator), Type 1 (Reformer, system-building aspect). High values reflect intellectual curiosity, need for cognition, systematizing, protocolizing, and investigative stance. Low values correlate with higher Big Five Extraversion, Agreeableness, Neuroticism; HEXACO Extraversion, Agreeableness, Emotionality; Enneagram Type 4 (Individualist), 7 (Enthusiast), 9 (Peacemaker). Low values indicate narrative/experiential focus and less structural orientation.",
+    "high": "Highly structured, logical, complex, or formal communication. Emphasizes reason, analysis, and planning over spontaneity.",
+    "low": "Narrative, intuitive, informal, or associative language; less focused on logic or formal argument structure."
+  },
+  "Confidence/Clout": {
+    "abbreviation": "Clout",
+    "exemplars": "Language of leadership, status",
+    "definition": "Level of confident, authoritative, or dominant language. Indexes social status, leadership, and assertiveness.",
+    "psychometrics": "High values correlate with Big Five Extraversion (Assertiveness facet), low Neuroticism (Confidence facet); HEXACO Extraversion, Social Self-Esteem; Enneagram Type 3 (Performer), Type 8 (Challenger), Type 1 (moral authority). High values reflect social dominance, leadership, self-presentation. Low values correlate with higher Big Five Neuroticism, lower Extraversion; HEXACO low Extraversion; Enneagram Type 6 (Doubt), 9 (Withdrawal), 4 (Self-doubt). Low values reflect tentativeness, deference, or uncertainty.",
+    "high": "Language of authority, confidence, or status. May signal leadership, persuasion, or social dominance.",
+    "low": "Tentative, deferential, or uncertain language; lower perceived confidence or status."
+  },
+  "Authenticity": {
+    "abbreviation": "Authentic",
+    "exemplars": "Perceived honesty, genuineness",
+    "definition": "Degree to which language is perceived as honest, personal, and genuine.",
+    "psychometrics": "High values correlate with HEXACO Honesty-Humility, low impression management, Big Five Openness (Vulnerability facet); Enneagram Type 4 (Individualist), Type 9 (Peacemaker, positive pole). High values reflect sincerity and psychological openness. Low values correlate with Big Five low Openness, low Honesty-Humility; Enneagram Type 3 (Impression Management), Type 6 (Caution). Low values reflect guardedness, impression management, and social masking.",
+    "high": "Honest, direct, and self-revealing language; perceived sincerity and psychological openness.",
+    "low": "Guarded, inauthentic, or socially masked language; possible impression management."
+  },
+  "Emotional Tone": {
+    "abbreviation": "Tone",
+    "exemplars": "Degree of positive (negative) tone",
+    "definition": "Composite measure of positive versus negative emotional tone in language.",
+    "psychometrics": "High values correlate with Big Five Extraversion (positive emotion), low Neuroticism; HEXACO Extraversion, Emotionality; Enneagram Type 7 (Upbeat), 2 (Helper). Low values correlate with Big Five high Neuroticism, high Emotionality; Enneagram Type 4 (Downbeat), 6 (Pessimistic), 1 (Melancholic).",
+    "high": "Positive, optimistic, and emotionally upbeat tone.",
+    "low": "Negative, pessimistic, or emotionally downbeat tone."
+  },
+  "Words Per Sentence": {
+    "abbreviation": "WPS",
+    "exemplars": "Average words per sentence",
+    "definition": "Average number of words per sentence; reflects syntactic complexity, verbosity, or density of language.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellect facet), Conscientiousness (Planning facet); HEXACO Openness, Conscientiousness; Enneagram Type 5 (Analytic), Type 1 (Structured). Low values correlate with Big Five Extraversion; Enneagram Type 7 (Spontaneous), 9 (Informal).",
+    "high": "Long, complex sentences; elaborate or formal expression, possible cognitive complexity.",
+    "low": "Short, simple sentences; terse, direct, or informal communication."
+  },
+  "Complex Vocabulary": {
+    "abbreviation": "BigWords",
+    "exemplars": "Percent words 7 letters or longer",
+    "definition": "Percentage of words that are seven letters or longer; reflects vocabulary sophistication or lexical diversity.",
+    "psychometrics": "High values correlate with Big Five Openness; HEXACO Openness; Enneagram Type 5 (Intellectualization), Type 1. Low values correlate with Big Five Agreeableness, Extraversion; Enneagram Type 7 (Social), 2, 9 (Affiliative).",
+    "high": "Frequent use of advanced or complex words; higher education or expertise.",
+    "low": "Simple, everyday language; conversational or accessible style."
+  },
+  "Dictionary Match Rate": {
+    "abbreviation": "Dic",
+    "exemplars": "Percent words captured by LIWC",
+    "definition": "Percentage of words matched to the LIWC dictionary; reflects standard language use or dictionary coverage.",
+    "psychometrics": "High values indicate normative language use and correlate with Big Five Conscientiousness; Enneagram Type 1 (Norm-following), 5. Low values correlate with Big Five Openness (creative coinage); Enneagram Type 4 (Creative), 7 (Rule-breaking).",
+    "high": "Standard language, low slang or jargon; easy interpretability.",
+    "low": "High use of slang, jargon, neologisms, or out-of-vocabulary words."
+  },
+  "Linguistic Content": {
+    "abbreviation": "Linguistic",
+    "exemplars": "Percent words captured by LIWC",
+    "definition": "Overall proportion of linguistic content (function and content words together); measures text density.",
+    "psychometrics": "High values correlate with Big Five Openness; HEXACO Openness; Enneagram Type 5 (Dense language), 1. Low values correlate with Big Five Extraversion; Enneagram Type 7, 9 (Sparse language).",
+    "high": "Rich, dense, and varied language use.",
+    "low": "Sparse, minimal, or repetitive language."
+  },
+  "Function Words": {
+    "abbreviation": "function",
+    "exemplars": "the, to, and, I",
+    "definition": "Proportion of function words (e.g., pronouns, articles, prepositions); measures grammatical structuring.",
+    "psychometrics": "High values correlate with Big Five Conscientiousness, Openness (Structural complexity); Enneagram Type 1, 5 (Structure markers). Low values correlate with Big Five Extraversion; Enneagram Type 4, 7 (Intuitive, experiential).",
+    "high": "Structured, grammatical, or relational language.",
+    "low": "Content-heavy or fragmented style; less grammatical scaffolding."
+  },
+  "Pronoun Usage": {
+    "abbreviation": "pronoun",
+    "exemplars": "I, you, my, me",
+    "definition": "Proportion of all pronouns (personal, impersonal, possessive); measure of social referencing and relational language.",
+    "psychometrics": "High values correlate with Big Five Agreeableness, Extraversion; HEXACO Agreeableness, Extraversion; Enneagram Type 2, 9 (Other-focus). Low values correlate with Big Five Openness, Conscientiousness; Enneagram Type 5, 1 (Object focus).",
+    "high": "Relational, referential, or socially embedded language.",
+    "low": "Object-focused, descriptive, or impersonal style."
+  },
+  "Personal Pronouns": {
+    "abbreviation": "ppron",
+    "exemplars": "I, you, my, me",
+    "definition": "Frequency of personal pronouns (I, you, we, he, she, they); indexes self and other focus.",
+    "psychometrics": "High values correlate with Big Five Neuroticism, Openness; HEXACO Emotionality; Enneagram Type 4, 5, 6 (Self/other focus). Low values correlate with Big Five Extraversion, Agreeableness; Enneagram Type 7, 8, 9 (External, non-self).",
+    "high": "High reference to self or others; social presence.",
+    "low": "Object or concept focus; depersonalized language."
+  },
+  "Self-Reference": {
+    "abbreviation": "i",
+    "exemplars": "I, me, my, myself",
+    "definition": "Use of first-person singular pronouns; reflects self-focus and introspection.",
+    "psychometrics": "High values correlate with Big Five Neuroticism, Openness; HEXACO Emotionality; Enneagram Type 4, 5, 6 (Self-focus, introspection). Low values correlate with Big Five Extraversion, Agreeableness; Enneagram Type 7, 9 (Other-orientation).",
+    "high": "Self-oriented, introspective, or personal narrative.",
+    "low": "Other- or object-oriented, less self-reference."
+  },
+  "Group Reference": {
+    "abbreviation": "we",
+    "exemplars": "we, our, us, lets",
+    "definition": "Use of first-person plural pronouns; reflects group or collective focus.",
+    "psychometrics": "High values correlate with Big Five Agreeableness, Extraversion; HEXACO Agreeableness, Extraversion; Enneagram Type 2, 9 (Group identity). Low values correlate with Big Five Openness, Conscientiousness; Enneagram Type 4, 5 (Individual focus).",
+    "high": "Group identity, communal focus, shared perspective.",
+    "low": "Individual focus or lack of group inclusion."
+  },
+  "Affiliation Language": {
+    "abbreviation": "affiliation",
+    "exemplars": "we, our, us, help",
+    "definition": "Words expressing desire for social bonds, belonging, or group membership.",
+    "psychometrics": "High values correlate with HEXACO Agreeableness, Extraversion. Low values indicate detachment or introversion.",
+    "high": "Strong desire for social connection, cooperation, inclusion; high relationship orientation.",
+    "low": "Low need for social bonds, more independent or isolated."
+  },
+  "Achievement Striving": {
+    "abbreviation": "achieve",
+    "exemplars": "work, better, best, working",
+    "definition": "Language about striving, success, goals, ambition, or accomplishment.",
+    "psychometrics": "High values correlate with Big Five Conscientiousness. Low values indicate low ambition or passivity.",
+    "high": "High drive for personal achievement, planning, ambition, task focus.",
+    "low": "Lack of goal orientation, low ambition, possible passivity or lack of structure."
+  },
+  "Dominance Language": {
+    "abbreviation": "power",
+    "exemplars": "own, order, allow, power",
+    "definition": "Words signaling dominance, authority, leadership, or control.",
+    "psychometrics": "High values correlate inversely with HEXACO Honesty-Humility, directly with Big Five Extraversion and status-seeking.",
+    "high": "Desire for influence, status, or control; high social assertiveness, possible dominance or narcissism.",
+    "low": "Deference, humility, avoidance of power displays."
+  },
+  "Cognitive Process Words": {
+    "abbreviation": "cogproc",
+    "exemplars": "but, not, if, or, know",
+    "definition": "References to mental processes such as thinking, reasoning, or understanding.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellect facet), Conscientiousness (Deliberation facet).",
+    "high": "Analytical, reflective, intellectual; complex reasoning.",
+    "low": "Unreflective, simple, or impulsive cognition."
+  },
+  "Insight Language": {
+    "abbreviation": "insight",
+    "exemplars": "know, how, think, feel",
+    "definition": "Words expressing self-awareness, realization, or understanding.",
+    "psychometrics": "High values correlate with Big Five Openness and Emotionality.",
+    "high": "Self-reflection, metacognition, psychological insight.",
+    "low": "Lack of self-awareness, unreflective, impulsive."
+  },
+  "Differentiation Language": {
+    "abbreviation": "differ",
+    "exemplars": "but, not, if, or",
+    "definition": "Language expressing contrast, complexity, or nuance.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellectual humility, flexibility), Agreeableness.",
+    "high": "Nuanced, complex, or open-minded thinking; capacity for perspective-taking.",
+    "low": "Simplistic, binary, or unreflective thinking."
+  },
+  "Affective Language": {
+    "abbreviation": "Affect",
+    "exemplars": "good, well, new, love",
+    "definition": "General use of emotion words; overall affective intensity and expressiveness.",
+    "psychometrics": "High values correlate with Big Five Emotionality, Neuroticism, Extraversion. Low values indicate emotional flatness or suppression.",
+    "high": "Emotionally expressive, affectively rich language.",
+    "low": "Emotionally flat, neutral, or affect-suppressed language."
+  },
+  "Positive Sentiment": {
+    "abbreviation": "tone_pos",
+    "exemplars": "good, well, new, love",
+    "definition": "Words reflecting positive emotional valence.",
+    "psychometrics": "High values correlate with Big Five Extraversion, low Neuroticism, higher well-being.",
+    "high": "Upbeat, optimistic, grateful, or hopeful language.",
+    "low": "Lack of positive affect, neutral or possibly negative affect focus."
+  },
+  "Negative Sentiment": {
+    "abbreviation": "tone_neg",
+    "exemplars": "bad, wrong, too much, hate",
+    "definition": "Words reflecting negative emotional valence.",
+    "psychometrics": "High values correlate with Big Five Neuroticism or psychological distress.",
+    "high": "Negative, distressed, pessimistic, or complaining tone.",
+    "low": "Absence of negativity; could be neutral or positive."
+  },
+  "Positive Emotion Language": {
+    "abbreviation": "emo_pos",
+    "exemplars": "good, love, happy, hope",
+    "definition": "Explicit references to positive emotion states.",
+    "psychometrics": "High values correlate with Big Five Extraversion, life satisfaction, and resilience.",
+    "high": "Cheerful, positive, resilient affect and language.",
+    "low": "Low positive emotional expression, emotional restraint, or dissatisfaction."
+  },
+  "Negative Emotion Language": {
+    "abbreviation": "emo_neg",
+    "exemplars": "bad, hate, hurt, tired",
+    "definition": "Explicit references to negative emotion states.",
+    "psychometrics": "High values correlate with Big Five Emotionality, Neuroticism, distress.",
+    "high": "Frequent discussion of distress, pain, or negative affect.",
+    "low": "Low negative emotional expression; could reflect well-being or emotional suppression."
+  },
+  "Anxiety Language": {
+    "abbreviation": "emo_anx",
+    "exemplars": "worry, fear, afraid, nervous",
+    "definition": "Words indicating anxiety, fear, or nervousness.",
+    "psychometrics": "High values correlate with Big Five Neuroticism, Emotionality.",
+    "high": "High trait anxiety, emotional lability, vigilance for threat.",
+    "low": "Calm, secure, emotionally stable, low vigilance."
+  },
+  "Anger Language": {
+    "abbreviation": "emo_anger",
+    "exemplars": "hate, mad, angry, frustr*",
+    "definition": "Words indicating anger, hostility, or frustration.",
+    "psychometrics": "High values correlate inversely with Big Five Agreeableness, directly with Emotionality.",
+    "high": "High anger reactivity, conflict orientation, possible antagonism.",
+    "low": "Calm, emotionally regulated, non-confrontational."
+  },
+  "Sadness Language": {
+    "abbreviation": "emo_sad",
+    "exemplars": ":(, sad, disappoint*, cry",
+    "definition": "Words signaling sadness, grief, depression, or emotional pain.",
+    "psychometrics": "High values correlate with Big Five Emotionality, depression risk.",
+    "high": "Higher depression risk, emotional vulnerability, sadness.",
+    "low": "Positive affect, resilience, or emotional distance."
+  },
+  "Prosocial Language": {
+    "abbreviation": "prosocial",
+    "exemplars": "care, help, thank, please",
+    "definition": "Words expressing help, support, empathy, or altruism.",
+    "psychometrics": "High values correlate with Big Five Agreeableness, HEXACO Honesty-Humility.",
+    "high": "Generosity, empathy, focus on helping others, collaborative orientation.",
+    "low": "Lack of empathy, self-focus, low social responsibility."
+  },
+  "Politeness Markers": {
+    "abbreviation": "polite",
+    "exemplars": "thank, please, thanks, good morning",
+    "definition": "Language signaling respect, courtesy, humility, or modesty.",
+    "psychometrics": "High values correlate with HEXACO Honesty-Humility and Big Five Agreeableness.",
+    "high": "High social grace, respect for others, self-restraint.",
+    "low": "Direct, possibly blunt or disrespectful language; low deference to social norms."
+  },
+  "Family References": {
+    "abbreviation": "family",
+    "exemplars": "parent*, mother*, father*, baby",
+    "definition": "Mentions of family, kinship, or close familial bonds.",
+    "psychometrics": "High values correlate with Big Five Emotionality, Agreeableness.",
+    "high": "Strong attachment to family, closeness, or emotional support orientation.",
+    "low": "Weak or absent family focus, detachment, or independence."
+  },
+  "Friend References": {
+    "abbreviation": "friend",
+    "exemplars": "friend*, boyfriend*, girlfriend*, dude",
+    "definition": "Mentions of friends, social companions, or networks.",
+    "psychometrics": "High values correlate with Big Five Extraversion, Agreeableness.",
+    "high": "Strong social network focus, sociability, high positive social engagement.",
+    "low": "Few or no references to friends, possible social isolation or introversion."
+  },
+  "Leisure Orientation": {
+    "abbreviation": "leisure",
+    "exemplars": "game*, fun, play, party*",
+    "definition": "References to recreation, play, hobbies, and enjoyment.",
+    "psychometrics": "High values correlate with Big Five Openness (Imagination facet), Extraversion.",
+    "high": "Pleasure-seeking, recreation, creative play, well-being focus.",
+    "low": "Seriousness, work-focus, or lack of enjoyment."
+  },
+  "Reward Orientation": {
+    "abbreviation": "reward",
+    "exemplars": "opportun*, win, gain*, benefit*",
+    "definition": "Language about gains, incentives, benefits, or pleasure.",
+    "psychometrics": "High values correlate with Big Five Extraversion, Conscientiousness, and behavioral approach.",
+    "high": "Strong motivation for gain, pleasure, or positive reinforcement.",
+    "low": "Reward insensitivity, lack of pursuit, or indifference."
+  },
+  "Curiosity Expression": {
+    "abbreviation": "curiosity",
+    "exemplars": "scien*, look* for, research*, wonder",
+    "definition": "References to inquiry, exploration, or learning.",
+    "psychometrics": "High values correlate with Big Five Openness, intellectual engagement.",
+    "high": "Intellectual curiosity, openness to new ideas, or learning orientation.",
+    "low": "Closed-mindedness, lack of novelty-seeking, or complacency."
+  }
+}

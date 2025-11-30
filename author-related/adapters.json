@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": "1.0.0",
+  "description": "Format overlays for STYLE_CONFIG planning. Values merge over author profile default_controls.",
+  "type": "object",
+  "properties": {
+    "linkedin": {
+      "type": "object",
+      "properties": {
+        "cadence_pattern": {"const": "2_long_1_short"},
+        "empathy_target": {"const": "1_second_person_per_paragraph"},
+        "cta_style": {"const": "coalition"},
+        "evidence_density": {"const": 0.6},
+        "metaphor_sets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["coalition", "momentum"]
+        },
+        "liwc_bias": {
+          "type": "object",
+          "properties": {
+            "affiliation": {"const": "high"},
+            "clout": {"const": "medium_high"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "blog": {
+      "type": "object",
+      "properties": {
+        "cadence_pattern": {"const": "4_long_1_short"},
+        "empathy_target": {"const": "1_second_person_per_3_paragraphs"},
+        "cta_style": {"const": "synthesis"},
+        "evidence_density": {"const": 0.8},
+        "metaphor_sets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["ecology_mycelium", "bridge_system"]
+        },
+        "liwc_bias": {
+          "type": "object",
+          "properties": {
+            "analytic": {"const": "high"},
+            "insight": {"const": "medium_high"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "memo_email": {
+      "type": "object",
+      "properties": {
+        "cadence_pattern": {"const": "3_short_1_medium"},
+        "empathy_target": {"const": "1_second_person_per_3_paragraphs"},
+        "cta_style": {"const": "decision"},
+        "evidence_density": {"const": 0.5},
+        "metaphor_sets": {
+          "type": "array",
+          "items": {"type": "string"},
+          "default": ["clarity", "operations"]
+        },
+        "liwc_bias": {
+          "type": "object",
+          "properties": {
+            "analytic": {"const": "medium_high"},
+            "clout": {"const": "medium"}
+          },
+          "additionalProperties": false
+        },
+        "pronoun_distance": {"const": "you"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

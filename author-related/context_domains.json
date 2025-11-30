@@ -1,0 +1,92 @@
+[
+  {
+    "code": "LWC01",
+    "label": "Applications",
+    "description": "Performative fear of intellectual judgment; application-style responses with evaluative stakes.",
+    "tags": ["applications", "formal", "evaluation"]
+  },
+  {
+    "code": "LWC02",
+    "label": "Blogs",
+    "description": "Rhetorical non-fiction written for public display and commentary.",
+    "tags": ["blog", "public", "rhetorical"]
+  },
+  {
+    "code": "LWC03",
+    "label": "Conversations",
+    "description": "Text-message style back-and-forth with interpersonal focus and light meta-commentary.",
+    "tags": ["chat", "dialogue", "informal"]
+  },
+  {
+    "code": "LWC04",
+    "label": "Emails",
+    "description": "Professional correspondence with clear requests, status, and directional tone.",
+    "tags": ["email", "professional", "directive"]
+  },
+  {
+    "code": "LWC05",
+    "label": "Facebook",
+    "description": "Social media posts for friends/family with personal narrative transparency.",
+    "tags": ["social", "personal", "facebook"]
+  },
+  {
+    "code": "LWC06",
+    "label": "Movies",
+    "description": "Performative narrative with cinematic framing and observational texture.",
+    "tags": ["story", "cinematic", "performative"]
+  },
+  {
+    "code": "LWC07",
+    "label": "Novels",
+    "description": "Immersive world-building fiction with strong ordering and capture of detail.",
+    "tags": ["fiction", "longform", "worldbuilding"]
+  },
+  {
+    "code": "LWC08",
+    "label": "NYT",
+    "description": "Journalistic opinion-validation with formal tone and evidentiary framing.",
+    "tags": ["journalism", "opinion", "formal"]
+  },
+  {
+    "code": "LWC09",
+    "label": "Reddit",
+    "description": "Ego-forward social media commentary with spotlight bias and positional framing.",
+    "tags": ["social", "commentary", "informal"]
+  },
+  {
+    "code": "LWC10",
+    "label": "Short Story",
+    "description": "Detail-immersive short fiction with narrative scaffolding and pacing.",
+    "tags": ["fiction", "shortform", "story"]
+  },
+  {
+    "code": "LWC11",
+    "label": "SOC",
+    "description": "Filtered stream-of-consciousness or internal narrative with temporal drift.",
+    "tags": ["introspective", "stream", "memoir"]
+  },
+  {
+    "code": "LWC12",
+    "label": "Speeches",
+    "description": "Accusation-leaning speech format balancing meta-framing and direct appeals.",
+    "tags": ["speech", "rhetoric", "live"]
+  },
+  {
+    "code": "LWC13",
+    "label": "TAT",
+    "description": "Reactional, performative, self-relational writing focused on audience appraisal.",
+    "tags": ["performative", "reflective", "reactional"]
+  },
+  {
+    "code": "LWC14",
+    "label": "Tweets",
+    "description": "Public rhetorical micro-posts optimized for brevity and stance.",
+    "tags": ["social", "micro", "public"]
+  },
+  {
+    "code": "LWC15",
+    "label": "Yelp",
+    "description": "Critical reviews emphasizing social reward/punishment and evaluation.",
+    "tags": ["review", "critical", "social"]
+  }
+]

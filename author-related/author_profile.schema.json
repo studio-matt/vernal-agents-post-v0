@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Author Profile",
+  "schema_version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "author_id",
+    "sources",
+    "liwc_profile",
+    "lexicon",
+    "default_controls",
+    "tolerance"
+  ],
+  "properties": {
+    "author_id": {"type": "string", "minLength": 1},
+    "schema_version": {"type": "string"},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "mode", "audience"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "mode": {
+            "type": "string",
+            "enum": ["memoir", "reform", "epistemic", "live"]
+          },
+          "audience": {
+            "type": "string",
+            "enum": ["general", "practitioner", "scholar", "live"]
+          },
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "mbti": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "e_i": {"type": "number", "minimum": 0, "maximum": 1},
+        "s_n": {"type": "number", "minimum": 0, "maximum": 1},
+        "t_f": {"type": "number", "minimum": 0, "maximum": 1},
+        "j_p": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "ocean": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "o": {"type": "number", "minimum": 0, "maximum": 1},
+        "c": {"type": "number", "minimum": 0, "maximum": 1},
+        "e": {"type": "number", "minimum": 0, "maximum": 1},
+        "a": {"type": "number", "minimum": 0, "maximum": 1},
+        "n": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "hexaco": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "h": {"type": "number", "minimum": 0, "maximum": 1},
+        "e": {"type": "number", "minimum": 0, "maximum": 1},
+        "x": {"type": "number", "minimum": 0, "maximum": 1},
+        "a": {"type": "number", "minimum": 0, "maximum": 1},
+        "c": {"type": "number", "minimum": 0, "maximum": 1},
+        "o": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "liwc_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "domain_mode"],
+      "properties": {
+        "categories": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mean", "stdev", "z"],
+            "properties": {
+              "mean": {"type": "number"},
+              "stdev": {"type": "number"},
+              "z": {"type": "number"}
+            }
+          }
+        },
+        "domain_mode": {"type": "string"}
+      }
+    },
+    "lexicon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core_verbs", "core_nouns", "evaluatives", "metaphor_stems", "avoid"],
+      "properties": {
+        "core_verbs": {"type": "array", "items": {"type": "string"}},
+        "core_nouns": {"type": "array", "items": {"type": "string"}},
+        "evaluatives": {"type": "array", "items": {"type": "string"}},
+        "metaphor_stems": {"type": "array", "items": {"type": "string"}},
+        "avoid": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "default_controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pronoun_distance",
+        "cadence_pattern",
+        "evidence_density",
+        "empathy_target",
+        "cta_style"
+      ],
+      "properties": {
+        "pronoun_distance": {"type": "string"},
+        "cadence_pattern": {"type": "string"},
+        "evidence_density": {"type": "number", "minimum": 0, "maximum": 1},
+        "empathy_target": {"type": "string"},
+        "cta_style": {"type": "string"}
+      }
+    },
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["liwc_z", "sentence_length_max_run"],
+      "properties": {
+        "liwc_z": {"type": "number", "minimum": 0},
+        "sentence_length_max_run": {"type": "integer", "minimum": 1}
+      }
+    },
+    "audit_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "notes"],
+        "additionalProperties": false,
+        "properties": {
+          "step": {"type": "string"},
+          "notes": {"type": "string"},
+          "timestamp": {"type": "string"}
+        }
+      }
+    }
+  }
+}

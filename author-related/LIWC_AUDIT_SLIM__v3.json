@@ -1,0 +1,407 @@
+{
+  "Direct Address": {
+    "definition": "Use of second-person pronouns (you, your); direct audience engagement or instruction.",
+    "high": "Direct engagement, instructional, or interpersonal communication.",
+    "low": "Impersonal, narrative, or object focus."
+  },
+  "Other-Person Reference": {
+    "definition": "Third-person singular pronouns (he, she, her, him); attention to other individuals.",
+    "high": "Personal storytelling, focus on specific others.",
+    "low": "Self, group, or object-oriented style."
+  },
+  "Plural-Person Reference": {
+    "definition": "Third-person plural pronouns (they, them, their); attention to groups or collective others.",
+    "high": "Discussion of groups, collective dynamics.",
+    "low": "Focus on individuals, self, or impersonal."
+  },
+  "Impersonal Pronouns": {
+    "definition": "Non-personal pronouns (it, this, that, what); measures abstraction or object focus.",
+    "high": "Abstract, analytical, or distanced language.",
+    "low": "Personal, relational, or concrete focus."
+  },
+  "Determiners": {
+    "definition": "Use of determiners (the, a, an, this, those); sets specificity or clarifies nouns.",
+    "high": "Specific, clear, and precise reference.",
+    "low": "General, vague, or less precise language."
+  },
+  "Articles": {
+    "definition": "Use of definite and indefinite articles (the, a, an).",
+    "high": "Structured, formal, or academic language.",
+    "low": "Narrative, casual, or less formal."
+  },
+  "Numeric Words": {
+    "definition": "Use of numbers or numeric words (one, two, first, once).",
+    "high": "Quantitative, precise, or data-driven language.",
+    "low": "Qualitative, narrative, or imprecise."
+  },
+  "Prepositions": {
+    "definition": "Use of prepositions (in, on, by, for, with); indicates relational complexity.",
+    "high": "Complex, relational, or detailed structuring.",
+    "low": "Simple, less connected or fragmented sentences."
+  },
+  "Auxiliary Verbs": {
+    "definition": "Use of auxiliary verbs (is, are, have, do, will); measures grammatical and tense complexity.",
+    "high": "Tense variation, grammatical sophistication.",
+    "low": "Direct, simple, or fragmented style."
+  },
+  "Adverbs": {
+    "definition": "Use of adverbs (quickly, very, well); indicates qualification or description of actions.",
+    "high": "Descriptive, nuanced, or qualified statements.",
+    "low": "Blunt, unqualified, or simple language."
+  },
+  "Conjunctions": {
+    "definition": "Use of conjunctions (and, but, or, so, yet); connects clauses and sentences.",
+    "high": "Complex, compound sentence structure.",
+    "low": "Simple, short sentences, or lack of connection."
+  },
+  "Negations": {
+    "definition": "Use of negation words (not, never, no, none); expresses denial or contradiction.",
+    "high": "Skepticism, critical stance, or frequent contradiction.",
+    "low": "Affirmative, positive, or uncritical expression."
+  },
+  "Verb Usage": {
+    "definition": "Use of verbs (all action or state words); measures action-orientation.",
+    "high": "Dynamic, active, or process-focused language.",
+    "low": "Static, noun- or adjective-heavy, or less action-focused."
+  },
+  "Adjective Usage": {
+    "definition": "Use of adjectives (descriptive words for nouns); measures vividness or detail.",
+    "high": "Descriptive, nuanced, or vivid language.",
+    "low": "Plain, direct, or unembellished."
+  },
+  "Quantifiers": {
+    "definition": "Words that indicate amount, magnitude, or comparison (e.g., 'more', 'less', 'many', 'few', 'several').",
+    "high": "Precision, quantitative detail, or measurement focus.",
+    "low": "Vague, qualitative, or non-specific communication."
+  },
+  "Motivational Drives": {
+    "definition": "Language reflecting internal motivators and needs (want, need, must, have to, get).",
+    "high": "High agency, active pursuit of needs and goals.",
+    "low": "Passive, low motivation or initiative."
+  },
+  "Absolutist": {
+    "definition": "Language expressing black-and-white, categorical, or dichotomous thinking (e.g., 'always', 'never'); indexes rigid, polarized cognitive style.",
+    "high": "Rigid, categorical, or dogmatic thinking; low flexibility; possible association with depression, anxiety, BPD.",
+    "low": "Nuanced, flexible thinking; open to complexity; lower tendency for polarized cognition."
+  },
+  "Causal Language": {
+    "definition": "References to causation or causal connections (e.g., 'because', 'reason', 'effect'). Indicates explanatory thinking, analytical narrative, and mental modeling of events.",
+    "high": "Frequent use of explanations, justifications, or causal arguments; analytic or reasoned discourse.",
+    "low": "Minimal explicit reference to cause and effect; more descriptive or experiential narrative, less analytical."
+  },
+  "Discrepancy Language": {
+    "definition": "References to gap between expectation and reality ('should', 'would', 'could', 'wish'); self/other comparison or internal standard gap.",
+    "high": "Frequent mention of dissatisfaction, regret, or self-critique; cognitive complexity.",
+    "low": "Less internal tension; fewer references to discrepancies."
+  },
+  "Tentativeness": {
+    "definition": "Tentative language indicating uncertainty, possibility, or hedging (e.g., 'maybe', 'perhaps', 'guess', 'possibly'). Used to signal epistemic humility, politeness, or cognitive flexibility.",
+    "high": "Frequent hedging or expression of uncertainty; open-mindedness, flexibility, or social caution.",
+    "low": "Assertive, confident, or categorical communication; little hedging or uncertainty."
+  },
+  "Bravado": {
+    "definition": "Boastful, overconfident, or assertive certainty (e.g., 'really', 'definitely', 'of course'); reflects grandiosity, social bravado, or need for assurance.",
+    "high": "High self-assertion; potential overconfidence, lower tolerance for ambiguity, need to project certainty.",
+    "low": "Epistemic humility; tentative, open, or cautious communication."
+  },
+  "Memory Reference": {
+    "definition": "Words reflecting remembering, forgetting, or recall (e.g., 'remember', 'forgot', 'remind'); related to cognitive self-reflection and autobiographical thinking.",
+    "high": "Reflective, autobiographical, context-rich communication.",
+    "low": "Less self-referential, present-focused, or low memory activation."
+  },
+  "Emotion Labeling": {
+    "definition": "Direct references to discrete emotional states (happy, sad, angry, afraid); indexes emotional intelligence, labeling, and emotional granularity.",
+    "high": "High clarity and specificity in emotional self-expression.",
+    "low": "Low or vague emotional self-awareness, limited emotional vocabulary."
+  },
+  "Profanity": {
+    "definition": "Use of swear words, expletives, or profanities (e.g., 'damn', 'shit', 'fuck'). Indicates informality, emotional arousal, or rebellion.",
+    "high": "Frequent use of profanities; informal, expressive, or rebellious tone.",
+    "low": "Absence of profanity; formal, restrained, or polite communication."
+  },
+  "Social Language": {
+    "definition": "References to social processes, interactions, and relationships (e.g., 'talk', 'us', 'friend', 'mate'). Indexes social orientation, connectedness, and engagement.",
+    "high": "Frequent discussion of social relationships, group activities, or interpersonal themes.",
+    "low": "Focus on non-social, solitary, or object-related content; minimal social referencing."
+  },
+  "Social Action": {
+    "definition": "Words indicating positive social acts (helping, thanking, supporting).",
+    "high": "Prosocial, gratitude, or high social cohesion.",
+    "low": "Low outward focus, less acknowledgment of others."
+  },
+  "Conflict Language": {
+    "definition": "References to antagonism, disagreement, competition, or aggression ('fight', 'attack', 'kill').",
+    "high": "Focus on strife, confrontation, or antagonistic themes.",
+    "low": "Harmony orientation, absence of conflict focus."
+  },
+  "Moralizing": {
+    "definition": "Judgmental or value-laden language indicating morality or ethics ('wrong', 'judge', 'deserve').",
+    "high": "Frequent moral evaluations, strong value or principle orientation.",
+    "low": "Descriptive, neutral, or non-judgmental communication."
+  },
+  "Meta-Communication": {
+    "definition": "Words referencing acts of communication itself ('say', 'tell', 'explain'); metalinguistic markers.",
+    "high": "Narrative, social, or meta-communicative focus.",
+    "low": "Direct, non-meta, fact-based speech."
+  },
+  "Social References": {
+    "definition": "Words and pronouns referring to people (not self); outward social orientation.",
+    "high": "High group focus, frequent reference to others.",
+    "low": "Object/inward focus; less social referencing."
+  },
+  "Female References": {
+    "definition": "Mentions or references to women, girls, or female identity (e.g., 'she', 'her', 'woman', 'girl'). Used to quantify gender focus and representation in text.",
+    "high": "Frequent discussion of women, gendered topics, or female experiences.",
+    "low": "Little to no reference to women or female identity."
+  },
+  "Male References": {
+    "definition": "Mentions or references to men, boys, or male identity (e.g., 'he', 'his', 'man', 'boy'). Used to quantify gender focus and representation in text.",
+    "high": "Frequent discussion of men, gendered topics, or male experiences.",
+    "low": "Little to no reference to men or male identity."
+  },
+  "Culture Language": {
+    "definition": "Words referring to cultural identity, group membership, shared practices, or institutions (e.g., 'nation', 'tradition', 'culture', 'society'). Often used to track collective identity and cultural salience.",
+    "high": "Frequent references to cultural constructs, identity, or group belonging.",
+    "low": "Culture-neutral, individualistic, or personal focus."
+  },
+  "Political Language": {
+    "definition": "Mentions of politics, government, or political topics (e.g., 'election', 'president', 'policy', 'senate'). Used for measuring political discourse and engagement.",
+    "high": "Political focus, engagement, or concern; high political awareness or activism.",
+    "low": "Absence of political references; apolitical or neutral content."
+  },
+  "Ethnicity Language": {
+    "definition": "Mentions of ethnicity, nationality, or ethnic identity (e.g., 'American', 'French', 'Asian', 'Latino'). Used to quantify ethnic focus or diversity topics.",
+    "high": "Frequent discussion of ethnic or national identity, multiculturalism.",
+    "low": "Ethnicity-neutral, lack of focus on national or group identity."
+  },
+  "Technology Language": {
+    "definition": "Mentions of technology, devices, or scientific terms (e.g., 'phone', 'computer', 'internet', 'software'). Used to assess technological salience and context.",
+    "high": "Frequent references to technology, digital context, or scientific terms.",
+    "low": "Non-technological, analog, or traditional content."
+  },
+  "Lifestyle Language": {
+    "definition": "Words referring to lifestyle, habits, and ways of living (e.g., 'routine', 'fitness', 'fashion', 'hobby'). Used to track daily life topics.",
+    "high": "Frequent reference to lifestyle, personal habits, or life quality.",
+    "low": "Absence of lifestyle focus, possible topic restriction or formal content."
+  },
+  "Home References": {
+    "definition": "Mentions of home, house, living environment (e.g., 'home', 'room', 'bed', 'household').",
+    "high": "Discussion of home life, domestic space, or family environment.",
+    "low": "Lack of domestic or home references."
+  },
+  "Work/Occupation Language": {
+    "definition": "Mentions of work, occupation, job, or career (e.g., 'work', 'office', 'boss', 'colleague').",
+    "high": "Focus on professional, job-related, or economic topics.",
+    "low": "No reference to work; focus on other domains."
+  },
+  "Money Language": {
+    "definition": "Mentions of money, finance, economic value (e.g., 'money', 'pay', 'buy', 'cost').",
+    "high": "Discussion of money, value, or financial decisions.",
+    "low": "Absence of financial references; non-economic focus."
+  },
+  "Religion Language": {
+    "definition": "Mentions of religion, belief systems, or religious practice (e.g., 'God', 'church', 'pray', 'faith').",
+    "high": "Frequent discussion of religion, spirituality, or belief.",
+    "low": "Secular, religion-neutral, or agnostic focus."
+  },
+  "Physical/Body Language": {
+    "definition": "Mentions of the body, physical health, or physical state (e.g., 'body', 'pain', 'illness', 'injury').",
+    "high": "Focus on health, body, wellness, or illness.",
+    "low": "No reference to physical state; abstract or non-corporeal content."
+  },
+  "Health Language": {
+    "definition": "Mentions of health, wellness, or medical state (e.g., 'doctor', 'medicine', 'healthy', 'clinic').",
+    "high": "Discussion of health, medical care, or wellness topics.",
+    "low": "No reference to health or medicine."
+  },
+  "Illness Language": {
+    "definition": "Mentions of illness, disease, or medical diagnosis (e.g., 'ill', 'cancer', 'sick', 'infection').",
+    "high": "Focus on illness, disease, or symptoms.",
+    "low": "Absence of illness or negative health reference."
+  },
+  "Wellness Language": {
+    "definition": "Mentions of wellness, fitness, or positive health states (e.g., 'fit', 'healthy', 'exercise', 'diet').",
+    "high": "Discussion of health improvement, fitness, or wellness.",
+    "low": "No reference to positive health practices."
+  },
+  "Mental Health Language": {
+    "definition": "Mentions of mental health, diagnoses, or psychological states (e.g., 'depressed', 'therapy', 'stress', 'suicide').",
+    "high": "Discussion of mental health, emotional wellbeing, or psychological distress.",
+    "low": "Absence of mental health reference; no explicit psychological focus."
+  },
+  "Substance Language": {
+    "definition": "Mentions of drugs, alcohol, or substances (e.g., 'alcohol', 'drugs', 'smoke', 'beer').",
+    "high": "Discussion of substance use, abuse, or dependency.",
+    "low": "No reference to substances; substance-neutral context."
+  },
+  "Sexuality Language": {
+    "definition": "Mentions of sexuality, sex acts, or sexual identity (e.g., 'sex', 'gay', 'pregnant', 'partner').",
+    "high": "Discussion of sexuality, sexual identity, or sexual health.",
+    "low": "No reference to sexuality; non-sexual focus."
+  },
+  "Food Language": {
+    "definition": "Mentions of food, eating, or diet (e.g., 'food', 'eat', 'drink', 'meal').",
+    "high": "Discussion of food, eating, or nutrition.",
+    "low": "No food references; non-dietary context."
+  },
+  "Death Language": {
+    "definition": "Mentions of death, dying, or loss (e.g., 'death', 'die', 'dead', 'kill').",
+    "high": "Discussion of mortality, loss, or end of life.",
+    "low": "No reference to death or mortality."
+  },
+  "Need-State Language": {
+    "definition": "References to needs, necessities, or requirements (e.g., 'need', 'have to', 'must'). Used to measure perceived deficiency, urgency, or fundamental requirements.",
+    "high": "Frequent focus on lack, necessity, or urgent goals; may signal unmet needs or strong drive.",
+    "low": "Lack of expressed need; sense of satisfaction, sufficiency, or stability."
+  },
+  "Desire Language": {
+    "definition": "References to wanting, longing, or desire (e.g., 'want', 'wish', 'hope', 'crave'). Measures motivational states and aspirations.",
+    "high": "Expressed ambition, longing, or forward-focused motivation.",
+    "low": "Absence of desire, contentment, or focus on the present."
+  },
+  "Acquisition Language": {
+    "definition": "References to obtaining, getting, or acquiring (e.g., 'get', 'obtain', 'receive', 'gain'). Used to measure pursuit and attainment behaviors.",
+    "high": "Active goal pursuit, acquisition focus, or achievement orientation.",
+    "low": "Passive, non-acquisitive, or content state."
+  },
+  "Deficiency Language": {
+    "definition": "References to lacking, missing, or absence (e.g., 'lack', 'missing', 'without', 'scarcity'). Measures focus on deprivation or incompleteness.",
+    "high": "Emphasis on scarcity, deprivation, or things not possessed.",
+    "low": "Sufficiency, fulfillment, or completeness."
+  },
+  "Fulfillment Language": {
+    "definition": "References to completion, sufficiency, or satisfaction (e.g., 'fulfilled', 'enough', 'complete', 'satisfied'). Measures psychological or practical satiation.",
+    "high": "Satisfaction, completeness, or achievement of goals.",
+    "low": "Ongoing pursuit, dissatisfaction, or sense of lack."
+  },
+  "Fatigue Language": {
+    "definition": "References to tiredness, exhaustion, or lack of energy (e.g., 'tired', 'bored', 'exhausted', 'sleepy'). Measures state of physical or psychological depletion.",
+    "high": "Fatigue, disengagement, or reduced motivation.",
+    "low": "Energized, engaged, or motivated state."
+  },
+  "Risk Orientation": {
+    "definition": "References to risk, danger, or uncertainty (e.g., 'risk', 'danger', 'threat', 'gamble'). Used to measure risk tolerance or threat focus.",
+    "high": "Openness to risk, sensation-seeking, or vigilance.",
+    "low": "Caution, security, or risk aversion."
+  },
+  "Persuasive Appeal": {
+    "definition": "Advertising or persuasive language (e.g., 'have', 'like', 'know') often found in marketing or attraction contexts. Measures intent to influence or attract.",
+    "high": "Persuasive, promotional, or seductive communication.",
+    "low": "Neutral, information-focused, non-promotional."
+  },
+  "Perceptual Language": {
+    "definition": "References to sensory experiences or perception (e.g., 'see', 'hear', 'feel'). Tracks grounding in the physical or experiential world.",
+    "high": "Vivid, sensory, or experience-focused language.",
+    "low": "Abstract, conceptual, or non-sensory expression."
+  },
+  "Attention Words": {
+    "definition": "References to focus, noticing, or awareness (e.g., 'notice', 'watch', 'focus', 'attention'). Used to measure present-moment awareness.",
+    "high": "Attention to detail, vigilance, or heightened awareness.",
+    "low": "Distractibility, lack of focus, or inattentiveness."
+  },
+  "Motion Language": {
+    "definition": "References to movement or physical action (e.g., 'go', 'walk', 'run', 'move'). Indicates dynamic, active, or change-focused states.",
+    "high": "Dynamic, action-oriented, or energetic communication.",
+    "low": "Static, inert, or passive style."
+  },
+  "Spatial Language": {
+    "definition": "References to spatial orientation, location, or arrangement (e.g., 'in', 'out', 'up', 'down', 'place').",
+    "high": "Attention to environment, space, or physical context.",
+    "low": "Non-spatial, abstract, or internally focused content."
+  },
+  "Visual Description": {
+    "definition": "Words describing visual experience (e.g., 'see', 'look', 'color', 'light'). Used to track visualization or observation.",
+    "high": "Rich, detailed, or vivid visual description.",
+    "low": "Lack of visual detail, conceptual or other-sensory focus."
+  },
+  "Auditory Description": {
+    "definition": "Words referring to hearing or sound (e.g., 'hear', 'listen', 'music', 'sound').",
+    "high": "Descriptive of auditory environment or soundscape.",
+    "low": "Non-auditory, silence, or focus on other modalities."
+  },
+  "Feeling State Words": {
+    "definition": "References to tactile or bodily sensation (e.g., 'feel', 'touch', 'pain', 'comfort').",
+    "high": "Attention to body, somatic experience, or feelings.",
+    "low": "Abstract, non-physical, or emotionally neutral expression."
+  },
+  "Time Language": {
+    "definition": "References to time, timing, or temporal context (e.g., 'when', 'now', 'then', 'day', 'minute'). Measures temporal grounding and awareness.",
+    "high": "Frequent references to time, scheduling, or temporal sequence; can indicate planning or reflection.",
+    "low": "Little or no reference to time; timeless, static, or present-focused expression."
+  },
+  "Past Focus Language": {
+    "definition": "Language focused on the past (e.g., 'was', 'had', 'were', 'been'). Indicates retrospective, reflective, or memory-based perspective.",
+    "high": "Strong orientation toward past events, memory, or reflection.",
+    "low": "Minimal past reference; present- or future-oriented, or in-the-moment."
+  },
+  "Present Focus Language": {
+    "definition": "Language anchored in the present (e.g., 'is', 'are', 'I’m', 'can'). Measures immediacy, current experience, or ongoing action.",
+    "high": "Focus on the now, present-moment awareness, or current activity.",
+    "low": "Lack of present focus; possible preoccupation with past or future."
+  },
+  "Future Focus Language": {
+    "definition": "References to the future (e.g., 'will', 'going to', 'plan', 'may', 'might'). Indicates forward-thinking, intention, or anticipation.",
+    "high": "Forward-looking, goal-oriented, or planning-focused communication.",
+    "low": "Lack of anticipation or forward planning; present- or past-oriented focus."
+  },
+  "Conversational Language": {
+    "definition": "Conversational tokens and markers (e.g., 'yeah', 'oh', 'yes', 'okay'). Used to measure informality and dialogue features.",
+    "high": "Highly conversational, informal, or interactive style.",
+    "low": "Formal, monologic, or non-interactive language."
+  },
+  "Internet Slang": {
+    "definition": "Digital/chat-specific language, abbreviations, or emoticons (e.g., 'lol', ':)', 'u', 'haha'). Measures digital nativity or informality.",
+    "high": "Frequent use of digital slang or playful abbreviations.",
+    "low": "Formal, traditional, or analog communication."
+  },
+  "Agreement Marker": {
+    "definition": "Conversational words indicating agreement, affirmation, or acceptance (e.g., 'yeah', 'okay', 'sure').",
+    "high": "High social compliance, agreeableness, or conversational ease.",
+    "low": "Lower explicit affirmation, more contrarian or disengaged stance."
+  },
+  "Disfluency": {
+    "definition": "Verbal hesitations, speech errors, or nonfluencies (e.g., 'uh', 'um', stutters). Indicates spontaneity or cognitive load.",
+    "high": "Spontaneous, uncertain, or anxious communication; higher cognitive load.",
+    "low": "Fluent, polished, or confident speech."
+  },
+  "Filler Words": {
+    "definition": "Non-essential conversational fillers (e.g., 'like', 'so', 'you know', 'basically').",
+    "high": "Informal, conversational, or socially embedded style.",
+    "low": "Formal, concise, or direct speech."
+  },
+  "All Punctuation": {
+    "definition": "Total proportion of all punctuation marks (periods, commas, question marks, etc.) used in the text. Indexes overall density of punctuation and possible stylistic variation.",
+    "high": "Text with frequent punctuation use; may indicate complex sentences, heavy clause usage, or strong expressiveness.",
+    "low": "Sparse punctuation; possibly terse, minimal, or unembellished style."
+  },
+  "Periods": {
+    "definition": "Use of periods (.) as sentence-final punctuation. Measures sentence boundary clarity and declarative statement density.",
+    "high": "Many short or clear sentences; strong segmentation.",
+    "low": "Run-on, fragmentary, or unsegmented text."
+  },
+  "Commas": {
+    "definition": "Use of commas (,) for clause or phrase separation. Measures sentence complexity and syntactic layering.",
+    "high": "Complex, layered, or highly structured sentences.",
+    "low": "Short, simple, or fragmented sentences."
+  },
+  "Question Marks": {
+    "definition": "Use of question marks (?) indicating interrogative sentences or inquiries.",
+    "high": "Frequent questions, inquisitiveness, or dialogic engagement.",
+    "low": "Few or no questions; more declarative or expository style."
+  },
+  "Exclamation Points": {
+    "definition": "Use of exclamation points (!) indicating emphasis, excitement, or strong emotion.",
+    "high": "Expressive, dramatic, or emphatic communication.",
+    "low": "Flat, neutral, or restrained tone."
+  },
+  "Apostrophes": {
+    "definition": "Use of apostrophes (') for contractions or possession. Can signal conversationality or formal/informal style.",
+    "high": "Frequent contractions or possessive forms; conversational or informal tone.",
+    "low": "Formal, full-word usage; possibly more academic or precise style."
+  },
+  "Other Punctuation": {
+    "definition": "Use of other punctuation marks (colons, semicolons, dashes, parentheses, etc.). Measures nonstandard or stylistic punctuation.",
+    "high": "Rich or varied punctuation; creative or complex sentence structure.",
+    "low": "Limited punctuation variation; straightforward or simple style."
+  }
+}

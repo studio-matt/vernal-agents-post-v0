@@ -1,0 +1,172 @@
+{
+  "Analytical": {
+    "HEXACO": ["Openness", "Conscientiousness"],
+    "BigFive": ["Openness", "Conscientiousness"],
+    "Enneagram": ["5", "1"]
+  },
+  "Clout": {
+    "HEXACO": ["Extraversion", "Low Emotionality"],
+    "BigFive": ["Extraversion", "Low Neuroticism"],
+    "Enneagram": ["3", "8", "1"]
+  },
+  "Authenticity": {
+    "HEXACO": ["Honesty-Humility", "Openness"],
+    "BigFive": ["Openness (Vulnerability facet)"],
+    "Enneagram": ["4", "9"]
+  },
+  "Tone": {
+    "HEXACO": ["Extraversion", "Emotionality"],
+    "BigFive": ["Extraversion", "Low Neuroticism"],
+    "Enneagram": ["7", "2"]
+  },
+  "Words Per Sentence": {
+    "HEXACO": ["Openness", "Conscientiousness"],
+    "BigFive": ["Openness", "Conscientiousness"],
+    "Enneagram": ["5", "1"]
+  },
+  "Complex Vocabulary": {
+    "HEXACO": ["Openness"],
+    "BigFive": ["Openness"],
+    "Enneagram": ["5", "1"]
+  },
+  "Dictionary Match Rate": {
+    "HEXACO": ["Conscientiousness"],
+    "BigFive": ["Conscientiousness"],
+    "Enneagram": ["1", "5"]
+  },
+  "Linguistic Content": {
+    "HEXACO": ["Openness"],
+    "BigFive": ["Openness"],
+    "Enneagram": ["5", "1"]
+  },
+  "Function Words": {
+    "HEXACO": ["Conscientiousness", "Openness"],
+    "BigFive": ["Conscientiousness", "Openness"],
+    "Enneagram": ["1", "5"]
+  },
+  "Pronoun Usage": {
+    "HEXACO": ["Agreeableness", "Extraversion"],
+    "BigFive": ["Agreeableness", "Extraversion"],
+    "Enneagram": ["2", "9"]
+  },
+  "Personal Pronouns": {
+    "HEXACO": ["Emotionality", "Openness"],
+    "BigFive": ["Neuroticism", "Openness"],
+    "Enneagram": ["4", "5", "6"]
+  },
+  "Self-Reference": {
+    "HEXACO": ["Emotionality"],
+    "BigFive": ["Neuroticism", "Openness"],
+    "Enneagram": ["4", "5", "6"]
+  },
+  "Group Reference": {
+    "HEXACO": ["Agreeableness", "Extraversion"],
+    "BigFive": ["Agreeableness", "Extraversion"],
+    "Enneagram": ["2", "9"]
+  },
+  "Affiliation Language": {
+    "HEXACO": ["Agreeableness", "Extraversion"],
+    "BigFive": ["Agreeableness", "Extraversion"],
+    "Enneagram": ["2", "9"]
+  },
+  "Achievement Striving": {
+    "HEXACO": ["Conscientiousness"],
+    "BigFive": ["Conscientiousness"],
+    "Enneagram": ["3", "1"]
+  },
+  "Dominance Language": {
+    "HEXACO": ["Low Honesty-Humility", "Extraversion"],
+    "BigFive": ["Extraversion", "Status-Seeking"],
+    "Enneagram": ["8", "3", "1"]
+  },
+  "Cognitive Process Words": {
+    "HEXACO": ["Openness", "Conscientiousness"],
+    "BigFive": ["Openness", "Conscientiousness"],
+    "Enneagram": ["5", "1"]
+  },
+  "Insight Language": {
+    "HEXACO": ["Openness", "Emotionality"],
+    "BigFive": ["Openness", "Emotionality"],
+    "Enneagram": ["5", "4"]
+  },
+  "Differentiation Language": {
+    "HEXACO": ["Openness", "Agreeableness"],
+    "BigFive": ["Openness", "Agreeableness"],
+    "Enneagram": ["9", "5", "4"]
+  },
+  "Affective Language": {
+    "HEXACO": ["Emotionality", "Extraversion"],
+    "BigFive": ["Neuroticism", "Extraversion"],
+    "Enneagram": ["2", "7"]
+  },
+  "Positive Sentiment": {
+    "HEXACO": ["Extraversion"],
+    "BigFive": ["Extraversion", "Low Neuroticism"],
+    "Enneagram": ["7", "2"]
+  },
+  "Negative Sentiment": {
+    "HEXACO": ["Emotionality"],
+    "BigFive": ["Neuroticism"],
+    "Enneagram": ["4", "6"]
+  },
+  "Positive Emotion Language": {
+    "HEXACO": ["Extraversion"],
+    "BigFive": ["Extraversion"],
+    "Enneagram": ["7", "2"]
+  },
+  "Negative Emotion Language": {
+    "HEXACO": ["Emotionality"],
+    "BigFive": ["Neuroticism"],
+    "Enneagram": ["4", "6"]
+  },
+  "Anxiety Language": {
+    "HEXACO": ["Emotionality"],
+    "BigFive": ["Neuroticism"],
+    "Enneagram": ["6"]
+  },
+  "Anger Language": {
+    "HEXACO": ["Low Agreeableness", "High Emotionality"],
+    "BigFive": ["Low Agreeableness", "Neuroticism"],
+    "Enneagram": ["8", "4"]
+  },
+  "Sadness Language": {
+    "HEXACO": ["Emotionality"],
+    "BigFive": ["Neuroticism"],
+    "Enneagram": ["4"]
+  },
+  "Prosocial Language": {
+    "HEXACO": ["Honesty-Humility", "Agreeableness"],
+    "BigFive": ["Agreeableness"],
+    "Enneagram": ["2", "9"]
+  },
+  "Politeness Markers": {
+    "HEXACO": ["Honesty-Humility", "Agreeableness"],
+    "BigFive": ["Agreeableness"],
+    "Enneagram": ["2", "9", "1"]
+  },
+  "Family References": {
+    "HEXACO": ["Emotionality", "Agreeableness"],
+    "BigFive": ["Emotionality", "Agreeableness"],
+    "Enneagram": ["6", "2"]
+  },
+  "Friend References": {
+    "HEXACO": ["Extraversion", "Agreeableness"],
+    "BigFive": ["Extraversion", "Agreeableness"],
+    "Enneagram": ["7", "9"]
+  },
+  "Leisure Orientation": {
+    "HEXACO": ["Openness", "Extraversion"],
+    "BigFive": ["Openness", "Extraversion"],
+    "Enneagram": ["7", "9"]
+  },
+  "Reward Orientation": {
+    "HEXACO": ["Extraversion", "Conscientiousness"],
+    "BigFive": ["Extraversion", "Conscientiousness"],
+    "Enneagram": ["7", "3"]
+  },
+  "Curiosity Expression": {
+    "HEXACO": ["Openness"],
+    "BigFive": ["Openness"],
+    "Enneagram": ["5", "7"]
+  }
+}

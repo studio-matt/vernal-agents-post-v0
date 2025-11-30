@@ -1,0 +1,2335 @@
+{
+  "Textual Self-Expression Legend By Domain": {
+    "_note": "LWCxx keys: context; all variable values below are [mean, standard deviation]",
+    "LWC01": "Performative fear of intellectual judgment; application-style responses with evaluative stakes.",
+    "LWC02": "Rhetorical non-fiction written for public display and commentary.",
+    "LWC03": "Text-message style back-and-forth with interpersonal focus and light meta-commentary.",
+    "LWC04": "Professional correspondence with clear requests, status, and directional tone.",
+    "LWC05": "Social media posts for friends/family with personal narrative transparency.",
+    "LWC06": "Performative narrative with cinematic framing and observational texture.",
+    "LWC07": "Immersive world-building fiction with strong ordering and capture of detail.",
+    "LWC08": "Journalistic opinion-validation with formal tone and evidentiary framing.",
+    "LWC09": "Ego-forward social media commentary with spotlight bias and positional framing.",
+    "LWC10": "Detail-immersive short fiction with narrative scaffolding and pacing.",
+    "LWC11": "Filtered stream-of-consciousness or internal narrative with temporal drift.",
+    "LWC12": "Accusation-leaning speech format balancing meta-framing and direct appeals.",
+    "LWC13": "Reactional, performative, self-relational writing focused on audience appraisal.",
+    "LWC14": "Public rhetorical micro-posts optimized for brevity and stance.",
+    "LWC15": "Critical reviews emphasizing social reward/punishment and evaluation.",
+    "_format": "**All values for each LWC entry are arrays in the form:**\n\n```[standard deviation, mean]```\n\n**Example:**\n\n```[0.27, 1.14] // stddev = 0.27, mean = 1.14```\n\n**To calculate a z-score for any observed value:**\n\n```z = (observed - mean) / stddev```\n\nA positive z indicates the observed value is above the norm for this context; a negative z indicates it is below.",
+    "high_z": "High Z: Indicates the observed value is above the mean for this context.",
+    "low_z": "Low Z: Indicates the observed value is below the mean for this context."
+  },
+  "Analytical Thinking": {
+    "abbreviation": "Analytic",
+    "exemplars": "Metric of logical, formal thinking",
+    "definition": "Degree of logical, hierarchical, and formal reasoning in text. Reflects cognitive structure, focus on analysis, planning, and rule-based processing.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellect facet) and Conscientiousness (Deliberation facet); HEXACO Openness, Conscientiousness; Enneagram Type 5 (Investigator), Type 1 (Reformer, system-building aspect). High values reflect intellectual curiosity, need for cognition, systematizing, protocolizing, and investigative stance. Low values correlate with higher Big Five Extraversion, Agreeableness, Neuroticism; HEXACO Extraversion, Agreeableness, Emotionality; Enneagram Type 4 (Individualist), 7 (Enthusiast), 9 (Peacemaker). Low values indicate narrative/experiential focus and less structural orientation.",
+    "high_z": "Highly structured, logical, complex, or formal communication. Emphasizes reason, analysis, and planning over spontaneity.",
+    "low_z": "Narrative, intuitive, informal, or associative language; less focused on logic or formal argument structure.",
+    "LWC01": [
+      81.78,
+      9.9
+    ],
+    "LWC02": [
+      38.7,
+      23.2
+    ],
+    "LWC03": [
+      9.46,
+      8.21
+    ],
+    "LWC04": [
+      75.97,
+      20.06
+    ],
+    "LWC05": [
+      47.06,
+      18.22
+    ],
+    "LWC06": [
+      16.89,
+      13.18
+    ],
+    "LWC07": [
+      56.15,
+      17.66
+    ],
+    "LWC08": [
+      87.62,
+      12.41
+    ],
+    "LWC09": [
+      35.21,
+      16.03
+    ],
+    "LWC10": [
+      60.28,
+      19.03
+    ],
+    "LWC11": [
+      14.05,
+      12.18
+    ],
+    "LWC12": [
+      75.93,
+      17.7
+    ],
+    "LWC13": [
+      55.98,
+      22.5
+    ],
+    "LWC14": [
+      42.86,
+      27.48
+    ],
+    "LWC15": [
+      44.67,
+      24.62
+    ]
+  },
+  "Confidence/Clout": {
+    "abbreviation": "Clout",
+    "exemplars": "Language of leadership, status",
+    "definition": "Level of confident, authoritative, or dominant language. Indexes social status, leadership, and assertiveness.",
+    "psychometrics": "High values correlate with Big Five Extraversion (Assertiveness facet), low Neuroticism (Confidence facet); HEXACO Extraversion, Social Self-Esteem; Enneagram Type 3 (Performer), Type 8 (Challenger), Type 1 (moral authority). High values reflect social dominance, leadership, self-presentation. Low values correlate with higher Big Five Neuroticism, lower Extraversion; HEXACO low Extraversion; Enneagram Type 6 (Doubt), 9 (Withdrawal), 4 (Self-doubt). Low values reflect tentativeness, deference, or uncertainty.",
+    "high_z": "Language of authority, confidence, or status. May signal leadership, persuasion, or social dominance.",
+    "low_z": "Tentative, deferential, or uncertain language; lower perceived confidence or status.",
+    "LWC01": [
+      33.95,
+      13.0
+    ],
+    "LWC02": [
+      29.99,
+      23.45
+    ],
+    "LWC03": [
+      38.41,
+      23.27
+    ],
+    "LWC04": [
+      56.54,
+      25.75
+    ],
+    "LWC05": [
+      38.74,
+      22.03
+    ],
+    "LWC06": [
+      77.73,
+      11.46
+    ],
+    "LWC07": [
+      66.23,
+      15.49
+    ],
+    "LWC08": [
+      53.9,
+      17.59
+    ],
+    "LWC09": [
+      31.4,
+      19.14
+    ],
+    "LWC10": [
+      65.69,
+      24.48
+    ],
+    "LWC11": [
+      6.48,
+      10.03
+    ],
+    "LWC12": [
+      55.1,
+      21.54
+    ],
+    "LWC13": [
+      77.38,
+      18.43
+    ],
+    "LWC14": [
+      49.1,
+      28.36
+    ],
+    "LWC15": [
+      40.68,
+      32.54
+    ]
+  },
+  "Authenticity": {
+    "abbreviation": "Authentic",
+    "exemplars": "Perceived honesty, genuineness",
+    "definition": "Degree to which language is perceived as honest, personal, and genuine.",
+    "psychometrics": "High values correlate with HEXACO Honesty-Humility, low impression management, Big Five Openness (Vulnerability facet); Enneagram Type 4 (Individualist), Type 9 (Peacemaker, positive pole). High values reflect sincerity and psychological openness. Low values correlate with Big Five low Openness, low Honesty-Humility; Enneagram Type 3 (Impression Management), Type 6 (Caution). Low values reflect guardedness, impression management, and social masking.",
+    "high_z": "Honest, direct, and self-revealing language; perceived sincerity and psychological openness.",
+    "low_z": "Guarded, inauthentic, or socially masked language; possible impression management.",
+    "LWC01": [
+      55.84,
+      15.33
+    ],
+    "LWC02": [
+      68.08,
+      23.5
+    ],
+    "LWC03": [
+      69.56,
+      19.97
+    ],
+    "LWC04": [
+      36.72,
+      23.97
+    ],
+    "LWC05": [
+      62.38,
+      22.58
+    ],
+    "LWC06": [
+      58.51,
+      14.51
+    ],
+    "LWC07": [
+      32.02,
+      18.76
+    ],
+    "LWC08": [
+      28.9,
+      19.61
+    ],
+    "LWC09": [
+      61.74,
+      20.09
+    ],
+    "LWC10": [
+      39.78,
+      27.47
+    ],
+    "LWC11": [
+      87.66,
+      14.32
+    ],
+    "LWC12": [
+      29.97,
+      17.9
+    ],
+    "LWC13": [
+      19.18,
+      22.17
+    ],
+    "LWC14": [
+      52.33,
+      25.58
+    ],
+    "LWC15": [
+      60.97,
+      30.46
+    ]
+  },
+  "Emotional Tone": {
+    "abbreviation": "Tone",
+    "exemplars": "Degree of positive (negative) tone",
+    "definition": "Composite measure of positive versus negative emotional tone in language.",
+    "psychometrics": "High values correlate with Big Five Extraversion (positive emotion), low Neuroticism; HEXACO Extraversion, Emotionality; Enneagram Type 7 (Upbeat), 2 (Helper). Low values correlate with Big Five high Neuroticism, high Emotionality; Enneagram Type 4 (Downbeat), 6 (Pessimistic), 1 (Melancholic).",
+    "high_z": "Positive, optimistic, and emotionally upbeat tone.",
+    "low_z": "Negative, pessimistic, or emotionally downbeat tone.",
+    "LWC01": [
+      72.34,
+      13.43
+    ],
+    "LWC02": [
+      44.99,
+      20.48
+    ],
+    "LWC03": [
+      58.63,
+      27.54
+    ],
+    "LWC04": [
+      45.55,
+      23.2
+    ],
+    "LWC05": [
+      67.91,
+      24.73
+    ],
+    "LWC06": [
+      44.76,
+      18.29
+    ],
+    "LWC07": [
+      31.41,
+      13.17
+    ],
+    "LWC08": [
+      37.08,
+      22.3
+    ],
+    "LWC09": [
+      33.53,
+      19.07
+    ],
+    "LWC10": [
+      27.69,
+      14.66
+    ],
+    "LWC11": [
+      41.19,
+      21.65
+    ],
+    "LWC12": [
+      47.63,
+      25.46
+    ],
+    "LWC13": [
+      39.04,
+      25.87
+    ],
+    "LWC14": [
+      68.0,
+      26.36
+    ],
+    "LWC15": [
+      57.58,
+      33.48
+    ]
+  },
+  "Words Per Sentence": {
+    "abbreviation": "WPS",
+    "exemplars": "Average words per sentence",
+    "definition": "Average number of words per sentence; reflects syntactic complexity, verbosity, or density of language.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellect facet), Conscientiousness (Planning facet); HEXACO Openness, Conscientiousness; Enneagram Type 5 (Analytic), Type 1 (Structured). Low values correlate with Big Five Extraversion; Enneagram Type 7 (Spontaneous), 9 (Informal).",
+    "high_z": "Long, complex sentences; elaborate or formal expression, possible cognitive complexity.",
+    "low_z": "Short, simple sentences; terse, direct, or informal communication.",
+    "LWC01": [
+      21.8,
+      18.21
+    ],
+    "LWC02": [
+      14.27,
+      6.03
+    ],
+    "LWC03": [
+      21.51,
+      99.5
+    ],
+    "LWC04": [
+      20.8,
+      8.53
+    ],
+    "LWC05": [
+      12.17,
+      10.73
+    ],
+    "LWC06": [
+      7.71,
+      22.31
+    ],
+    "LWC07": [
+      17.25,
+      6.26
+    ],
+    "LWC08": [
+      19.88,
+      6.21
+    ],
+    "LWC09": [
+      14.63,
+      6.77
+    ],
+    "LWC10": [
+      15.92,
+      40.94
+    ],
+    "LWC11": [
+      24.45,
+      66.53
+    ],
+    "LWC12": [
+      20.72,
+      5.45
+    ],
+    "LWC13": [
+      17.34,
+      5.46
+    ],
+    "LWC14": [
+      30.79,
+      100.62
+    ],
+    "LWC15": [
+      14.29,
+      8.5
+    ]
+  },
+  "Complex Vocabulary": {
+    "abbreviation": "BigWords",
+    "exemplars": "Percent words 7 letters or longer",
+    "definition": "Percentage of words that are seven letters or longer; reflects vocabulary sophistication or lexical diversity.",
+    "psychometrics": "High values correlate with Big Five Openness; HEXACO Openness; Enneagram Type 5 (Intellectualization), Type 1. Low values correlate with Big Five Agreeableness, Extraversion; Enneagram Type 7 (Social), 2, 9 (Affiliative).",
+    "high_z": "Frequent use of advanced or complex words; higher education or expertise.",
+    "low_z": "Simple, everyday language; conversational or accessible style.",
+    "LWC01": [
+      29.83,
+      4.63
+    ],
+    "LWC02": [
+      14.19,
+      4.21
+    ],
+    "LWC03": [
+      9.76,
+      2.46
+    ],
+    "LWC04": [
+      21.63,
+      6.42
+    ],
+    "LWC05": [
+      13.72,
+      2.87
+    ],
+    "LWC06": [
+      11.07,
+      2.63
+    ],
+    "LWC07": [
+      16.31,
+      2.84
+    ],
+    "LWC08": [
+      24.77,
+      4.54
+    ],
+    "LWC09": [
+      15.38,
+      2.81
+    ],
+    "LWC10": [
+      15.54,
+      3.27
+    ],
+    "LWC11": [
+      12.6,
+      2.73
+    ],
+    "LWC12": [
+      24.26,
+      5.53
+    ],
+    "LWC13": [
+      17.55,
+      4.15
+    ],
+    "LWC14": [
+      15.98,
+      5.63
+    ],
+    "LWC15": [
+      14.34,
+      4.45
+    ]
+  },
+  "Dictionary Match Rate": {
+    "abbreviation": "Dic",
+    "exemplars": "Percent words captured by LIWC",
+    "definition": "Percentage of words matched to the LIWC dictionary; reflects standard language use or dictionary coverage.",
+    "psychometrics": "High values indicate normative language use and correlate with Big Five Conscientiousness; Enneagram Type 1 (Norm-following), 5. Low values correlate with Big Five Openness (creative coinage); Enneagram Type 4 (Creative), 7 (Rule-breaking).",
+    "high_z": "Standard language, low slang or jargon; easy interpretability.",
+    "low_z": "High use of slang, jargon, neologisms, or out-of-vocabulary words.",
+    "LWC01": [
+      87.7,
+      2.67
+    ],
+    "LWC02": [
+      88.3,
+      6.36
+    ],
+    "LWC03": [
+      93.52,
+      2.5
+    ],
+    "LWC04": [
+      87.78,
+      4.99
+    ],
+    "LWC05": [
+      84.23,
+      7.93
+    ],
+    "LWC06": [
+      89.31,
+      3.82
+    ],
+    "LWC07": [
+      86.85,
+      2.96
+    ],
+    "LWC08": [
+      80.34,
+      5.61
+    ],
+    "LWC09": [
+      89.68,
+      3.21
+    ],
+    "LWC10": [
+      86.06,
+      3.5
+    ],
+    "LWC11": [
+      94.5,
+      2.66
+    ],
+    "LWC12": [
+      87.13,
+      4.29
+    ],
+    "LWC13": [
+      89.53,
+      4.12
+    ],
+    "LWC14": [
+      83.53,
+      7.54
+    ],
+    "LWC15": [
+      90.72,
+      3.95
+    ]
+  },
+  "Linguistic Content": {
+    "abbreviation": "Linguistic",
+    "exemplars": "Percent words captured by LIWC",
+    "definition": "Overall proportion of linguistic content (function and content words together); measures text density.",
+    "psychometrics": "High values correlate with Big Five Openness; HEXACO Openness; Enneagram Type 5 (Dense language), 1. Low values correlate with Big Five Extraversion; Enneagram Type 7, 9 (Sparse language).",
+    "high_z": "Rich, dense, and varied language use.",
+    "low_z": "Sparse, minimal, or repetitive language.",
+    "LWC01": [
+      63.09,
+      4.59
+    ],
+    "LWC02": [
+      71.51,
+      7.28
+    ],
+    "LWC03": [
+      80.41,
+      3.82
+    ],
+    "LWC04": [
+      64.54,
+      7.93
+    ],
+    "LWC05": [
+      65.53,
+      7.63
+    ],
+    "LWC06": [
+      74.08,
+      4.28
+    ],
+    "LWC07": [
+      71.99,
+      3.37
+    ],
+    "LWC08": [
+      58.79,
+      6.41
+    ],
+    "LWC09": [
+      72.19,
+      4.01
+    ],
+    "LWC10": [
+      70.23,
+      4.09
+    ],
+    "LWC11": [
+      79.65,
+      3.73
+    ],
+    "LWC12": [
+      65.16,
+      6.53
+    ],
+    "LWC13": [
+      72.0,
+      4.61
+    ],
+    "LWC14": [
+      63.69,
+      9.59
+    ],
+    "LWC15": [
+      72.66,
+      5.22
+    ]
+  },
+  "Function Words": {
+    "abbreviation": "function",
+    "exemplars": "the, to, and, I",
+    "definition": "Proportion of function words (e.g., pronouns, articles, prepositions); measures grammatical structuring.",
+    "psychometrics": "High values correlate with Big Five Conscientiousness, Openness (Structural complexity); Enneagram Type 1, 5 (Structure markers). Low values correlate with Big Five Extraversion; Enneagram Type 4, 7 (Intuitive, experiential).",
+    "high_z": "Structured, grammatical, or relational language.",
+    "low_z": "Content-heavy or fragmented style; less grammatical scaffolding.",
+    "LWC01": [
+      49.08,
+      4.43
+    ],
+    "LWC02": [
+      56.62,
+      6.52
+    ],
+    "LWC03": [
+      60.78,
+      4.05
+    ],
+    "LWC04": [
+      52.42,
+      7.05
+    ],
+    "LWC05": [
+      48.18,
+      6.94
+    ],
+    "LWC06": [
+      57.78,
+      3.68
+    ],
+    "LWC07": [
+      58.33,
+      3.01
+    ],
+    "LWC08": [
+      46.75,
+      5.33
+    ],
+    "LWC09": [
+      57.02,
+      3.55
+    ],
+    "LWC10": [
+      55.71,
+      3.65
+    ],
+    "LWC11": [
+      63.65,
+      3.89
+    ],
+    "LWC12": [
+      52.97,
+      6.02
+    ],
+    "LWC13": [
+      57.54,
+      4.21
+    ],
+    "LWC14": [
+      47.45,
+      8.39
+    ],
+    "LWC15": [
+      57.42,
+      4.72
+    ]
+  },
+  "Pronoun Usage": {
+    "abbreviation": "pronoun",
+    "exemplars": "I, you, my, me",
+    "definition": "Proportion of all pronouns (personal, impersonal, possessive); measure of social referencing and relational language.",
+    "psychometrics": "High values correlate with Big Five Agreeableness, Extraversion; HEXACO Agreeableness, Extraversion; Enneagram Type 2, 9 (Other-focus). Low values correlate with Big Five Openness, Conscientiousness; Enneagram Type 5, 1 (Object focus).",
+    "high_z": "Relational, referential, or socially embedded language.",
+    "low_z": "Object-focused, descriptive, or impersonal style.",
+    "LWC01": [
+      11.05,
+      2.45
+    ],
+    "LWC02": [
+      16.28,
+      4.03
+    ],
+    "LWC03": [
+      21.55,
+      2.71
+    ],
+    "LWC04": [
+      10.5,
+      4.31
+    ],
+    "LWC05": [
+      13.93,
+      3.49
+    ],
+    "LWC06": [
+      21.71,
+      2.79
+    ],
+    "LWC07": [
+      15.44,
+      2.55
+    ],
+    "LWC08": [
+      7.65,
+      3.2
+    ],
+    "LWC09": [
+      16.18,
+      2.64
+    ],
+    "LWC10": [
+      15.66,
+      3.27
+    ],
+    "LWC11": [
+      20.8,
+      2.93
+    ],
+    "LWC12": [
+      11.75,
+      3.66
+    ],
+    "LWC13": [
+      14.06,
+      3.76
+    ],
+    "LWC14": [
+      15.38,
+      5.17
+    ],
+    "LWC15": [
+      14.12,
+      4.36
+    ]
+  },
+  "Personal Pronouns": {
+    "abbreviation": "ppron",
+    "exemplars": "I, you, my, me",
+    "definition": "Frequency of personal pronouns (I, you, we, he, she, they); indexes self and other focus.",
+    "psychometrics": "High values correlate with Big Five Neuroticism, Openness; HEXACO Emotionality; Enneagram Type 4, 5, 6 (Self/other focus). Low values correlate with Big Five Extraversion, Agreeableness; Enneagram Type 7, 8, 9 (External, non-self).",
+    "high_z": "High reference to self or others; social presence.",
+    "low_z": "Object or concept focus; depersonalized language.",
+    "LWC01": [
+      8.25,
+      1.89
+    ],
+    "LWC02": [
+      11.04,
+      3.35
+    ],
+    "LWC03": [
+      14.21,
+      2.27
+    ],
+    "LWC04": [
+      6.51,
+      3.66
+    ],
+    "LWC05": [
+      9.82,
+      2.88
+    ],
+    "LWC06": [
+      15.46,
+      2.42
+    ],
+    "LWC07": [
+      10.98,
+      2.32
+    ],
+    "LWC08": [
+      4.15,
+      2.65
+    ],
+    "LWC09": [
+      10.43,
+      2.46
+    ],
+    "LWC10": [
+      11.55,
+      2.98
+    ],
+    "LWC11": [
+      14.2,
+      2.72
+    ],
+    "LWC12": [
+      6.42,
+      2.57
+    ],
+    "LWC13": [
+      9.77,
+      3.4
+    ],
+    "LWC14": [
+      11.1,
+      4.16
+    ],
+    "LWC15": [
+      9.77,
+      3.89
+    ]
+  },
+  "Self-Reference": {
+    "abbreviation": "i",
+    "exemplars": "I, me, my, myself",
+    "definition": "Use of first-person singular pronouns; reflects self-focus and introspection.",
+    "psychometrics": "High values correlate with Big Five Neuroticism, Openness; HEXACO Emotionality; Enneagram Type 4, 5, 6 (Self-focus, introspection). Low values correlate with Big Five Extraversion, Agreeableness; Enneagram Type 7, 9 (Other-orientation).",
+    "high_z": "Self-oriented, introspective, or personal narrative.",
+    "low_z": "Other- or object-oriented, less self-reference.",
+    "LWC01": [
+      5.93,
+      1.47
+    ],
+    "LWC02": [
+      6.27,
+      2.98
+    ],
+    "LWC03": [
+      7.48,
+      2.06
+    ],
+    "LWC04": [
+      1.85,
+      1.99
+    ],
+    "LWC05": [
+      5.44,
+      2.26
+    ],
+    "LWC06": [
+      5.74,
+      1.49
+    ],
+    "LWC07": [
+      2.67,
+      1.7
+    ],
+    "LWC08": [
+      0.67,
+      1.22
+    ],
+    "LWC09": [
+      5.24,
+      2.15
+    ],
+    "LWC10": [
+      3.22,
+      2.89
+    ],
+    "LWC11": [
+      10.75,
+      2.58
+    ],
+    "LWC12": [
+      2.25,
+      1.37
+    ],
+    "LWC13": [
+      0.74,
+      1.89
+    ],
+    "LWC14": [
+      5.49,
+      3.57
+    ],
+    "LWC15": [
+      4.77,
+      3.35
+    ]
+  },
+  "Group Reference": {
+    "abbreviation": "we",
+    "exemplars": "we, our, us, lets",
+    "definition": "Use of first-person plural pronouns; reflects group or collective focus.",
+    "psychometrics": "High values correlate with Big Five Agreeableness, Extraversion; HEXACO Agreeableness, Extraversion; Enneagram Type 2, 9 (Group identity). Low values correlate with Big Five Openness, Conscientiousness; Enneagram Type 4, 5 (Individual focus).",
+    "high_z": "Group identity, communal focus, shared perspective.",
+    "low_z": "Individual focus or lack of group inclusion.",
+    "LWC01": [
+      0.31,
+      0.32
+    ],
+    "LWC02": [
+      0.91,
+      0.83
+    ],
+    "LWC03": [
+      0.75,
+      0.65
+    ],
+    "LWC04": [
+      1.44,
+      1.43
+    ],
+    "LWC05": [
+      0.61,
+      0.53
+    ],
+    "LWC06": [
+      1.44,
+      0.66
+    ],
+    "LWC07": [
+      0.59,
+      0.6
+    ],
+    "LWC08": [
+      0.38,
+      0.57
+    ],
+    "LWC09": [
+      0.54,
+      0.53
+    ],
+    "LWC10": [
+      0.74,
+      0.96
+    ],
+    "LWC11": [
+      0.53,
+      0.69
+    ],
+    "LWC12": [
+      1.95,
+      1.44
+    ],
+    "LWC13": [
+      0.23,
+      0.73
+    ],
+    "LWC14": [
+      0.97,
+      1.02
+    ],
+    "LWC15": [
+      1.68,
+      2.36
+    ]
+  },
+  "Affiliation Language": {
+    "abbreviation": "affiliation",
+    "exemplars": "we, our, us, help",
+    "definition": "Words expressing desire for social bonds, belonging, or group membership.",
+    "psychometrics": "High values correlate with HEXACO Agreeableness, Extraversion. Low values indicate detachment or introversion.",
+    "high_z": "Strong desire for social connection, cooperation, inclusion; high relationship orientation.",
+    "low_z": "Low need for social bonds, more independent or isolated.",
+    "LWC01": [
+      2.14,
+      0.79
+    ],
+    "LWC02": [
+      1.93,
+      1.12
+    ],
+    "LWC03": [
+      1.49,
+      0.91
+    ],
+    "LWC04": [
+      2.15,
+      1.71
+    ],
+    "LWC05": [
+      1.72,
+      0.92
+    ],
+    "LWC06": [
+      2.53,
+      0.81
+    ],
+    "LWC07": [
+      1.43,
+      0.7
+    ],
+    "LWC08": [
+      1.41,
+      1.05
+    ],
+    "LWC09": [
+      1.53,
+      0.9
+    ],
+    "LWC10": [
+      1.69,
+      1.25
+    ],
+    "LWC11": [
+      1.69,
+      1.16
+    ],
+    "LWC12": [
+      3.22,
+      1.75
+    ],
+    "LWC13": [
+      1.39,
+      1.36
+    ],
+    "LWC14": [
+      2.31,
+      1.47
+    ],
+    "LWC15": [
+      2.48,
+      2.8
+    ]
+  },
+  "Achievement Striving": {
+    "abbreviation": "achieve",
+    "exemplars": "work, better, best, working",
+    "definition": "Language about striving, success, goals, ambition, or accomplishment.",
+    "psychometrics": "High values correlate with Big Five Conscientiousness. Low values indicate low ambition or passivity.",
+    "high_z": "High drive for personal achievement, planning, ambition, task focus.",
+    "low_z": "Lack of goal orientation, low ambition, possible passivity or lack of structure.",
+    "LWC01": [
+      2.85,
+      0.81
+    ],
+    "LWC02": [
+      1.0,
+      0.55
+    ],
+    "LWC03": [
+      0.67,
+      0.55
+    ],
+    "LWC04": [
+      1.21,
+      1.19
+    ],
+    "LWC05": [
+      1.13,
+      0.64
+    ],
+    "LWC06": [
+      0.75,
+      0.3
+    ],
+    "LWC07": [
+      0.66,
+      0.22
+    ],
+    "LWC08": [
+      1.34,
+      1.02
+    ],
+    "LWC09": [
+      1.08,
+      0.62
+    ],
+    "LWC10": [
+      0.64,
+      0.32
+    ],
+    "LWC11": [
+      0.95,
+      0.61
+    ],
+    "LWC12": [
+      1.53,
+      1.08
+    ],
+    "LWC13": [
+      2.24,
+      1.38
+    ],
+    "LWC14": [
+      1.29,
+      1.19
+    ],
+    "LWC15": [
+      0.96,
+      1.1
+    ]
+  },
+  "Dominance Language": {
+    "abbreviation": "power",
+    "exemplars": "own, order, allow, power",
+    "definition": "Words signaling dominance, authority, leadership, or control.",
+    "psychometrics": "High values correlate inversely with HEXACO Honesty-Humility, directly with Big Five Extraversion and status-seeking.",
+    "high_z": "Desire for influence, status, or control; high social assertiveness, possible dominance or narcissism.",
+    "low_z": "Deference, humility, avoidance of power displays.",
+    "LWC01": [
+      1.24,
+      0.49
+    ],
+    "LWC02": [
+      0.93,
+      0.82
+    ],
+    "LWC03": [
+      0.33,
+      0.39
+    ],
+    "LWC04": [
+      1.65,
+      1.51
+    ],
+    "LWC05": [
+      0.74,
+      0.54
+    ],
+    "LWC06": [
+      1.37,
+      0.87
+    ],
+    "LWC07": [
+      1.59,
+      0.76
+    ],
+    "LWC08": [
+      2.85,
+      2.3
+    ],
+    "LWC09": [
+      1.13,
+      0.77
+    ],
+    "LWC10": [
+      0.95,
+      0.62
+    ],
+    "LWC11": [
+      0.42,
+      0.42
+    ],
+    "LWC12": [
+      3.21,
+      1.86
+    ],
+    "LWC13": [
+      0.99,
+      0.91
+    ],
+    "LWC14": [
+      1.22,
+      1.15
+    ],
+    "LWC15": [
+      0.7,
+      1.08
+    ]
+  },
+  "Cognitive Process Words": {
+    "abbreviation": "cogproc",
+    "exemplars": "but, not, if, or, know",
+    "definition": "References to mental processes such as thinking, reasoning, or understanding.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellect facet), Conscientiousness (Deliberation facet).",
+    "high_z": "Analytical, reflective, intellectual; complex reasoning.",
+    "low_z": "Unreflective, simple, or impulsive cognition.",
+    "LWC01": [
+      9.19,
+      1.61
+    ],
+    "LWC02": [
+      11.3,
+      2.84
+    ],
+    "LWC03": [
+      11.72,
+      2.56
+    ],
+    "LWC04": [
+      11.4,
+      4.13
+    ],
+    "LWC05": [
+      8.86,
+      2.45
+    ],
+    "LWC06": [
+      10.33,
+      1.73
+    ],
+    "LWC07": [
+      9.97,
+      1.9
+    ],
+    "LWC08": [
+      7.95,
+      2.96
+    ],
+    "LWC09": [
+      12.55,
+      2.6
+    ],
+    "LWC10": [
+      8.7,
+      2.31
+    ],
+    "LWC11": [
+      14.89,
+      2.87
+    ],
+    "LWC12": [
+      9.0,
+      2.87
+    ],
+    "LWC13": [
+      11.17,
+      3.28
+    ],
+    "LWC14": [
+      8.58,
+      2.84
+    ],
+    "LWC15": [
+      9.35,
+      3.67
+    ]
+  },
+  "Insight Language": {
+    "abbreviation": "insight",
+    "exemplars": "know, how, think, feel",
+    "definition": "Words expressing self-awareness, realization, or understanding.",
+    "psychometrics": "High values correlate with Big Five Openness and Emotionality.",
+    "high_z": "Self-reflection, metacognition, psychological insight.",
+    "low_z": "Lack of self-awareness, unreflective, impulsive.",
+    "LWC01": [
+      2.77,
+      0.73
+    ],
+    "LWC02": [
+      2.55,
+      1.03
+    ],
+    "LWC03": [
+      2.56,
+      1.01
+    ],
+    "LWC04": [
+      2.59,
+      1.56
+    ],
+    "LWC05": [
+      1.98,
+      0.83
+    ],
+    "LWC06": [
+      2.5,
+      0.59
+    ],
+    "LWC07": [
+      2.2,
+      0.57
+    ],
+    "LWC08": [
+      1.54,
+      0.99
+    ],
+    "LWC09": [
+      2.54,
+      0.96
+    ],
+    "LWC10": [
+      2.05,
+      0.72
+    ],
+    "LWC11": [
+      3.63,
+      1.33
+    ],
+    "LWC12": [
+      1.74,
+      0.99
+    ],
+    "LWC13": [
+      2.87,
+      1.35
+    ],
+    "LWC14": [
+      1.85,
+      0.84
+    ],
+    "LWC15": [
+      1.53,
+      1.34
+    ]
+  },
+  "Differentiation Language": {
+    "abbreviation": "differ",
+    "exemplars": "but, not, if, or",
+    "definition": "Language expressing contrast, complexity, or nuance.",
+    "psychometrics": "High values correlate with Big Five Openness (Intellectual humility, flexibility), Agreeableness.",
+    "high_z": "Nuanced, complex, or open-minded thinking; capacity for perspective-taking.",
+    "low_z": "Simplistic, binary, or unreflective thinking.",
+    "LWC01": [
+      2.22,
+      0.6
+    ],
+    "LWC02": [
+      3.48,
+      0.99
+    ],
+    "LWC03": [
+      3.61,
+      1.14
+    ],
+    "LWC04": [
+      3.48,
+      2.0
+    ],
+    "LWC05": [
+      2.53,
+      0.91
+    ],
+    "LWC06": [
+      2.83,
+      0.56
+    ],
+    "LWC07": [
+      3.43,
+      0.67
+    ],
+    "LWC08": [
+      2.81,
+      1.2
+    ],
+    "LWC09": [
+      4.1,
+      1.17
+    ],
+    "LWC10": [
+      2.73,
+      0.85
+    ],
+    "LWC11": [
+      4.08,
+      1.14
+    ],
+    "LWC12": [
+      2.74,
+      1.33
+    ],
+    "LWC13": [
+      2.93,
+      1.36
+    ],
+    "LWC14": [
+      2.46,
+      1.05
+    ],
+    "LWC15": [
+      3.41,
+      2.1
+    ]
+  },
+  "Affective Language": {
+    "abbreviation": "Affect",
+    "exemplars": "good, well, new, love",
+    "definition": "General use of emotion words; overall affective intensity and expressiveness.",
+    "psychometrics": "High values correlate with Big Five Emotionality, Neuroticism, Extraversion. Low values indicate emotional flatness or suppression.",
+    "high_z": "Emotionally expressive, affectively rich language.",
+    "low_z": "Emotionally flat, neutral, or affect-suppressed language.",
+    "LWC01": [
+      4.96,
+      1.0
+    ],
+    "LWC02": [
+      5.54,
+      1.64
+    ],
+    "LWC03": [
+      5.49,
+      2.55
+    ],
+    "LWC04": [
+      2.74,
+      1.82
+    ],
+    "LWC05": [
+      8.82,
+      2.47
+    ],
+    "LWC06": [
+      5.72,
+      1.11
+    ],
+    "LWC07": [
+      4.84,
+      0.97
+    ],
+    "LWC08": [
+      3.79,
+      1.67
+    ],
+    "LWC09": [
+      5.73,
+      1.7
+    ],
+    "LWC10": [
+      4.13,
+      1.08
+    ],
+    "LWC11": [
+      5.44,
+      1.6
+    ],
+    "LWC12": [
+      4.27,
+      2.0
+    ],
+    "LWC13": [
+      4.61,
+      1.67
+    ],
+    "LWC14": [
+      8.96,
+      4.48
+    ],
+    "LWC15": [
+      5.21,
+      2.73
+    ]
+  },
+  "Positive Sentiment": {
+    "abbreviation": "tone_pos",
+    "exemplars": "good, well, new, love",
+    "definition": "Words reflecting positive emotional valence.",
+    "psychometrics": "High values correlate with Big Five Extraversion, low Neuroticism, higher well-being.",
+    "high_z": "Upbeat, optimistic, grateful, or hopeful language.",
+    "low_z": "Lack of positive affect, neutral or possibly negative affect focus.",
+    "LWC01": [
+      4.13,
+      0.92
+    ],
+    "LWC02": [
+      3.39,
+      1.16
+    ],
+    "LWC03": [
+      4.01,
+      2.45
+    ],
+    "LWC04": [
+      2.2,
+      1.61
+    ],
+    "LWC05": [
+      5.93,
+      2.24
+    ],
+    "LWC06": [
+      3.41,
+      0.97
+    ],
+    "LWC07": [
+      2.71,
+      0.71
+    ],
+    "LWC08": [
+      2.33,
+      1.25
+    ],
+    "LWC09": [
+      2.92,
+      1.19
+    ],
+    "LWC10": [
+      2.18,
+      0.79
+    ],
+    "LWC11": [
+      3.26,
+      1.19
+    ],
+    "LWC12": [
+      3.01,
+      1.67
+    ],
+    "LWC13": [
+      2.79,
+      1.47
+    ],
+    "LWC14": [
+      6.05,
+      4.52
+    ],
+    "LWC15": [
+      3.96,
+      2.78
+    ]
+  },
+  "Negative Sentiment": {
+    "abbreviation": "tone_neg",
+    "exemplars": "bad, wrong, too much, hate",
+    "definition": "Words reflecting negative emotional valence.",
+    "psychometrics": "High values correlate with Big Five Neuroticism or psychological distress.",
+    "high_z": "Negative, distressed, pessimistic, or complaining tone.",
+    "low_z": "Absence of negativity; could be neutral or positive.",
+    "LWC01": [
+      0.67,
+      0.42
+    ],
+    "LWC02": [
+      1.76,
+      0.93
+    ],
+    "LWC03": [
+      1.07,
+      0.73
+    ],
+    "LWC04": [
+      0.5,
+      0.79
+    ],
+    "LWC05": [
+      2.34,
+      1.14
+    ],
+    "LWC06": [
+      1.81,
+      0.58
+    ],
+    "LWC07": [
+      1.98,
+      0.6
+    ],
+    "LWC08": [
+      1.38,
+      1.25
+    ],
+    "LWC09": [
+      2.1,
+      0.94
+    ],
+    "LWC10": [
+      1.75,
+      0.71
+    ],
+    "LWC11": [
+      1.93,
+      1.03
+    ],
+    "LWC12": [
+      1.2,
+      1.21
+    ],
+    "LWC13": [
+      1.68,
+      1.1
+    ],
+    "LWC14": [
+      1.85,
+      1.07
+    ],
+    "LWC15": [
+      1.1,
+      1.33
+    ]
+  },
+  "Positive Emotion Language": {
+    "abbreviation": "emo_pos",
+    "exemplars": "good, love, happy, hope",
+    "definition": "Explicit references to positive emotion states.",
+    "psychometrics": "High values correlate with Big Five Extraversion, life satisfaction, and resilience.",
+    "high_z": "Cheerful, positive, resilient affect and language.",
+    "low_z": "Low positive emotional expression, emotional restraint, or dissatisfaction.",
+    "LWC01": [
+      0.68,
+      0.33
+    ],
+    "LWC02": [
+      1.17,
+      0.71
+    ],
+    "LWC03": [
+      1.59,
+      1.52
+    ],
+    "LWC04": [
+      0.48,
+      0.73
+    ],
+    "LWC05": [
+      2.94,
+      1.73
+    ],
+    "LWC06": [
+      0.91,
+      0.46
+    ],
+    "LWC07": [
+      0.81,
+      0.32
+    ],
+    "LWC08": [
+      0.35,
+      0.42
+    ],
+    "LWC09": [
+      0.88,
+      0.61
+    ],
+    "LWC10": [
+      0.67,
+      0.39
+    ],
+    "LWC11": [
+      1.26,
+      0.71
+    ],
+    "LWC12": [
+      0.51,
+      0.59
+    ],
+    "LWC13": [
+      0.82,
+      0.71
+    ],
+    "LWC14": [
+      2.03,
+      1.96
+    ],
+    "LWC15": [
+      1.37,
+      1.39
+    ]
+  },
+  "Negative Emotion Language": {
+    "abbreviation": "emo_neg",
+    "exemplars": "bad, hate, hurt, tired",
+    "definition": "Explicit references to negative emotion states.",
+    "psychometrics": "High values correlate with Big Five Emotionality, Neuroticism, distress.",
+    "high_z": "Frequent discussion of distress, pain, or negative affect.",
+    "low_z": "Low negative emotional expression; could reflect well-being or emotional suppression.",
+    "LWC01": [
+      0.29,
+      0.25
+    ],
+    "LWC02": [
+      0.81,
+      0.59
+    ],
+    "LWC03": [
+      0.49,
+      0.46
+    ],
+    "LWC04": [
+      0.17,
+      0.42
+    ],
+    "LWC05": [
+      1.29,
+      0.89
+    ],
+    "LWC06": [
+      0.58,
+      0.23
+    ],
+    "LWC07": [
+      0.88,
+      0.35
+    ],
+    "LWC08": [
+      0.38,
+      0.44
+    ],
+    "LWC09": [
+      0.79,
+      0.53
+    ],
+    "LWC10": [
+      0.73,
+      0.41
+    ],
+    "LWC11": [
+      1.12,
+      0.75
+    ],
+    "LWC12": [
+      0.27,
+      0.43
+    ],
+    "LWC13": [
+      0.78,
+      0.68
+    ],
+    "LWC14": [
+      0.76,
+      0.56
+    ],
+    "LWC15": [
+      0.47,
+      0.78
+    ]
+  },
+  "Anxiety Language": {
+    "abbreviation": "emo_anx",
+    "exemplars": "worry, fear, afraid, nervous",
+    "definition": "Words indicating anxiety, fear, or nervousness.",
+    "psychometrics": "High values correlate with Big Five Neuroticism, Emotionality.",
+    "high_z": "High trait anxiety, emotional lability, vigilance for threat.",
+    "low_z": "Calm, secure, emotionally stable, low vigilance.",
+    "LWC01": [
+      0.09,
+      0.12
+    ],
+    "LWC02": [
+      0.14,
+      0.19
+    ],
+    "LWC03": [
+      0.07,
+      0.15
+    ],
+    "LWC04": [
+      0.03,
+      0.12
+    ],
+    "LWC05": [
+      0.11,
+      0.14
+    ],
+    "LWC06": [
+      0.16,
+      0.1
+    ],
+    "LWC07": [
+      0.21,
+      0.11
+    ],
+    "LWC08": [
+      0.08,
+      0.15
+    ],
+    "LWC09": [
+      0.14,
+      0.19
+    ],
+    "LWC10": [
+      0.18,
+      0.17
+    ],
+    "LWC11": [
+      0.28,
+      0.36
+    ],
+    "LWC12": [
+      0.05,
+      0.17
+    ],
+    "LWC13": [
+      0.26,
+      0.37
+    ],
+    "LWC14": [
+      0.1,
+      0.11
+    ],
+    "LWC15": [
+      0.04,
+      0.21
+    ]
+  },
+  "Anger Language": {
+    "abbreviation": "emo_anger",
+    "exemplars": "hate, mad, angry, frustr*",
+    "definition": "Words indicating anger, hostility, or frustration.",
+    "psychometrics": "High values correlate inversely with Big Five Agreeableness, directly with Emotionality.",
+    "high_z": "High anger reactivity, conflict orientation, possible antagonism.",
+    "low_z": "Calm, emotionally regulated, non-confrontational.",
+    "LWC01": [
+      0.02,
+      0.06
+    ],
+    "LWC02": [
+      0.18,
+      0.26
+    ],
+    "LWC03": [
+      0.11,
+      0.2
+    ],
+    "LWC04": [
+      0.04,
+      0.15
+    ],
+    "LWC05": [
+      0.22,
+      0.23
+    ],
+    "LWC06": [
+      0.1,
+      0.08
+    ],
+    "LWC07": [
+      0.19,
+      0.12
+    ],
+    "LWC08": [
+      0.11,
+      0.24
+    ],
+    "LWC09": [
+      0.19,
+      0.25
+    ],
+    "LWC10": [
+      0.14,
+      0.15
+    ],
+    "LWC11": [
+      0.24,
+      0.3
+    ],
+    "LWC12": [
+      0.05,
+      0.15
+    ],
+    "LWC13": [
+      0.16,
+      0.31
+    ],
+    "LWC14": [
+      0.18,
+      0.2
+    ],
+    "LWC15": [
+      0.09,
+      0.34
+    ]
+  },
+  "Sadness Language": {
+    "abbreviation": "emo_sad",
+    "exemplars": ":(, sad, disappoint*, cry",
+    "definition": "Words signaling sadness, grief, depression, or emotional pain.",
+    "psychometrics": "High values correlate with Big Five Emotionality, depression risk.",
+    "high_z": "Higher depression risk, emotional vulnerability, sadness.",
+    "low_z": "Positive affect, resilience, or emotional distance.",
+    "LWC01": [
+      0.04,
+      0.07
+    ],
+    "LWC02": [
+      0.15,
+      0.23
+    ],
+    "LWC03": [
+      0.06,
+      0.15
+    ],
+    "LWC04": [
+      0.04,
+      0.26
+    ],
+    "LWC05": [
+      0.39,
+      0.51
+    ],
+    "LWC06": [
+      0.08,
+      0.08
+    ],
+    "LWC07": [
+      0.19,
+      0.13
+    ],
+    "LWC08": [
+      0.06,
+      0.15
+    ],
+    "LWC09": [
+      0.14,
+      0.23
+    ],
+    "LWC10": [
+      0.14,
+      0.14
+    ],
+    "LWC11": [
+      0.15,
+      0.23
+    ],
+    "LWC12": [
+      0.06,
+      0.16
+    ],
+    "LWC13": [
+      0.12,
+      0.24
+    ],
+    "LWC14": [
+      0.17,
+      0.23
+    ],
+    "LWC15": [
+      0.11,
+      0.34
+    ]
+  },
+  "Prosocial Language": {
+    "abbreviation": "prosocial",
+    "exemplars": "care, help, thank, please",
+    "definition": "Words expressing help, support, empathy, or altruism.",
+    "psychometrics": "High values correlate with Big Five Agreeableness, HEXACO Honesty-Humility.",
+    "high_z": "Generosity, empathy, focus on helping others, collaborative orientation.",
+    "low_z": "Lack of empathy, self-focus, low social responsibility.",
+    "LWC01": [
+      2.39,
+      0.72
+    ],
+    "LWC02": [
+      0.44,
+      0.35
+    ],
+    "LWC03": [
+      0.33,
+      0.37
+    ],
+    "LWC04": [
+      0.96,
+      0.96
+    ],
+    "LWC05": [
+      0.69,
+      0.58
+    ],
+    "LWC06": [
+      0.8,
+      0.32
+    ],
+    "LWC07": [
+      0.4,
+      0.17
+    ],
+    "LWC08": [
+      0.54,
+      0.54
+    ],
+    "LWC09": [
+      0.47,
+      0.45
+    ],
+    "LWC10": [
+      0.32,
+      0.23
+    ],
+    "LWC11": [
+      0.29,
+      0.3
+    ],
+    "LWC12": [
+      1.13,
+      0.95
+    ],
+    "LWC13": [
+      0.54,
+      0.57
+    ],
+    "LWC14": [
+      1.17,
+      0.97
+    ],
+    "LWC15": [
+      0.54,
+      0.85
+    ]
+  },
+  "Politeness Markers": {
+    "abbreviation": "polite",
+    "exemplars": "thank, please, thanks, good morning",
+    "definition": "Language signaling respect, courtesy, humility, or modesty.",
+    "psychometrics": "High values correlate with HEXACO Honesty-Humility and Big Five Agreeableness.",
+    "high_z": "High social grace, respect for others, self-restraint.",
+    "low_z": "Direct, possibly blunt or disrespectful language; low deference to social norms.",
+    "LWC01": [
+      0.12,
+      0.13
+    ],
+    "LWC02": [
+      0.21,
+      0.24
+    ],
+    "LWC03": [
+      0.38,
+      0.4
+    ],
+    "LWC04": [
+      0.63,
+      0.76
+    ],
+    "LWC05": [
+      0.54,
+      0.51
+    ],
+    "LWC06": [
+      0.94,
+      0.55
+    ],
+    "LWC07": [
+      0.37,
+      0.31
+    ],
+    "LWC08": [
+      0.08,
+      0.22
+    ],
+    "LWC09": [
+      0.21,
+      0.28
+    ],
+    "LWC10": [
+      0.18,
+      0.22
+    ],
+    "LWC11": [
+      0.08,
+      0.17
+    ],
+    "LWC12": [
+      0.43,
+      0.61
+    ],
+    "LWC13": [
+      0.19,
+      0.41
+    ],
+    "LWC14": [
+      1.17,
+      3.74
+    ],
+    "LWC15": [
+      0.27,
+      0.59
+    ]
+  },
+  "Family References": {
+    "abbreviation": "family",
+    "exemplars": "parent*, mother*, father*, baby",
+    "definition": "Mentions of family, kinship, or close familial bonds.",
+    "psychometrics": "High values correlate with Big Five Emotionality, Agreeableness.",
+    "high_z": "Strong attachment to family, closeness, or emotional support orientation.",
+    "low_z": "Weak or absent family focus, detachment, or independence.",
+    "LWC01": [
+      0.38,
+      0.32
+    ],
+    "LWC02": [
+      0.43,
+      0.51
+    ],
+    "LWC03": [
+      0.3,
+      0.44
+    ],
+    "LWC04": [
+      0.07,
+      0.26
+    ],
+    "LWC05": [
+      0.52,
+      0.55
+    ],
+    "LWC06": [
+      0.69,
+      0.49
+    ],
+    "LWC07": [
+      0.44,
+      0.41
+    ],
+    "LWC08": [
+      0.33,
+      0.72
+    ],
+    "LWC09": [
+      0.48,
+      0.5
+    ],
+    "LWC10": [
+      0.64,
+      0.76
+    ],
+    "LWC11": [
+      0.38,
+      0.5
+    ],
+    "LWC12": [
+      0.32,
+      0.69
+    ],
+    "LWC13": [
+      0.49,
+      0.94
+    ],
+    "LWC14": [
+      0.52,
+      0.87
+    ],
+    "LWC15": [
+      0.3,
+      0.75
+    ]
+  },
+  "Friend References": {
+    "abbreviation": "friend",
+    "exemplars": "friend*, boyfriend*, girlfriend*, dude",
+    "definition": "Mentions of friends, social companions, or networks.",
+    "psychometrics": "High values correlate with Big Five Extraversion, Agreeableness.",
+    "high_z": "Strong social network focus, sociability, high positive social engagement.",
+    "low_z": "Few or no references to friends, possible social isolation or introversion.",
+    "LWC01": [
+      0.06,
+      0.09
+    ],
+    "LWC02": [
+      0.2,
+      0.26
+    ],
+    "LWC03": [
+      0.24,
+      0.34
+    ],
+    "LWC04": [
+      0.03,
+      0.17
+    ],
+    "LWC05": [
+      0.28,
+      0.31
+    ],
+    "LWC06": [
+      0.17,
+      0.16
+    ],
+    "LWC07": [
+      0.12,
+      0.11
+    ],
+    "LWC08": [
+      0.06,
+      0.16
+    ],
+    "LWC09": [
+      0.24,
+      0.28
+    ],
+    "LWC10": [
+      0.1,
+      0.14
+    ],
+    "LWC11": [
+      0.45,
+      0.43
+    ],
+    "LWC12": [
+      0.04,
+      0.12
+    ],
+    "LWC13": [
+      0.14,
+      0.36
+    ],
+    "LWC14": [
+      0.3,
+      0.29
+    ],
+    "LWC15": [
+      0.16,
+      0.47
+    ]
+  },
+  "Leisure Orientation": {
+    "abbreviation": "leisure",
+    "exemplars": "game*, fun, play, party*",
+    "definition": "References to recreation, play, hobbies, and enjoyment.",
+    "psychometrics": "High values correlate with Big Five Openness (Imagination facet), Extraversion.",
+    "high_z": "Pleasure-seeking, recreation, creative play, well-being focus.",
+    "low_z": "Seriousness, work-focus, or lack of enjoyment.",
+    "LWC01": [
+      0.47,
+      0.45
+    ],
+    "LWC02": [
+      0.81,
+      0.67
+    ],
+    "LWC03": [
+      0.85,
+      0.87
+    ],
+    "LWC04": [
+      0.31,
+      0.76
+    ],
+    "LWC05": [
+      1.19,
+      0.8
+    ],
+    "LWC06": [
+      0.5,
+      0.45
+    ],
+    "LWC07": [
+      0.26,
+      0.19
+    ],
+    "LWC08": [
+      1.07,
+      1.41
+    ],
+    "LWC09": [
+      0.87,
+      0.71
+    ],
+    "LWC10": [
+      0.43,
+      0.37
+    ],
+    "LWC11": [
+      0.83,
+      0.78
+    ],
+    "LWC12": [
+      0.19,
+      0.53
+    ],
+    "LWC13": [
+      0.14,
+      0.35
+    ],
+    "LWC14": [
+      0.98,
+      0.78
+    ],
+    "LWC15": [
+      0.71,
+      1.23
+    ]
+  },
+  "Reward Orientation": {
+    "abbreviation": "reward",
+    "exemplars": "opportun*, win, gain*, benefit*",
+    "definition": "Language about gains, incentives, benefits, or pleasure.",
+    "psychometrics": "High values correlate with Big Five Extraversion, Conscientiousness, and behavioral approach.",
+    "high_z": "Strong motivation for gain, pleasure, or positive reinforcement.",
+    "low_z": "Reward insensitivity, lack of pursuit, or indifference.",
+    "LWC01": [
+      0.49,
+      0.27
+    ],
+    "LWC02": [
+      0.11,
+      0.16
+    ],
+    "LWC03": [
+      0.05,
+      0.13
+    ],
+    "LWC04": [
+      0.26,
+      0.51
+    ],
+    "LWC05": [
+      0.15,
+      0.24
+    ],
+    "LWC06": [
+      0.09,
+      0.1
+    ],
+    "LWC07": [
+      0.12,
+      0.08
+    ],
+    "LWC08": [
+      0.34,
+      0.57
+    ],
+    "LWC09": [
+      0.12,
+      0.19
+    ],
+    "LWC10": [
+      0.08,
+      0.1
+    ],
+    "LWC11": [
+      0.09,
+      0.17
+    ],
+    "LWC12": [
+      0.27,
+      0.39
+    ],
+    "LWC13": [
+      0.26,
+      0.41
+    ],
+    "LWC14": [
+      0.26,
+      0.54
+    ],
+    "LWC15": [
+      0.06,
+      0.31
+    ]
+  },
+  "Curiosity Expression": {
+    "abbreviation": "curiosity",
+    "exemplars": "scien*, look* for, research*, wonder",
+    "definition": "References to inquiry, exploration, or learning.",
+    "psychometrics": "High values correlate with Big Five Openness, intellectual engagement.",
+    "high_z": "Intellectual curiosity, openness to new ideas, or learning orientation.",
+    "low_z": "Closed-mindedness, lack of novelty-seeking, or complacency.",
+    "LWC01": [
+      0.51,
+      0.31
+    ],
+    "LWC02": [
+      0.34,
+      0.27
+    ],
+    "LWC03": [
+      0.33,
+      0.38
+    ],
+    "LWC04": [
+      0.22,
+      0.43
+    ],
+    "LWC05": [
+      0.26,
+      0.26
+    ],
+    "LWC06": [
+      0.21,
+      0.16
+    ],
+    "LWC07": [
+      0.28,
+      0.13
+    ],
+    "LWC08": [
+      0.29,
+      0.41
+    ],
+    "LWC09": [
+      0.33,
+      0.35
+    ],
+    "LWC10": [
+      0.28,
+      0.21
+    ],
+    "LWC11": [
+      0.58,
+      0.49
+    ],
+    "LWC12": [
+      0.24,
+      0.43
+    ],
+    "LWC13": [
+      0.98,
+      0.95
+    ],
+    "LWC14": [
+      0.26,
+      0.32
+    ],
+    "LWC15": [
+      0.25,
+      0.65
+    ]
+  }
+}

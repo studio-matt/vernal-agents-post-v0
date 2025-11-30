@@ -1,0 +1,140 @@
+      LIWC-22 Development Manual                                                                                               Page 11 
+                                                   
+                                                                 Table 2. LIWC-22 Language Dimensions and Reliability 
+                                                                                   Description/Most frequently                   Words/ Entries                Internal                  Internal 
+                                   Category                      Abbrev.                     used exemplars                        in category*             Consistency:             Consistency: 
+                                                                                                                                                           Cronbach’s α                   KR-20 
+                      Summary Variables                                                                                                                                                        
+                      Word count                                WC                Total word count                                                                                             
+                          Analytical thinking                   Analytic          Metric of logical, formal thinking                       -                         -                        - 
+                          Clout                                 Clout             Language of leadership, status                           -                         -                        - 
+                          Authentic                             Authentic         Perceived honesty, genuineness                           -                         -                        - 
+                          Emotional tone                        Tone              Degree of positive (negative) tone                       -                         -                        - 
+                          Words per sentence                    WPS               Average words per sentence                               -                         -                        - 
+                          Big words                             BigWords          Percent words 7 letters or longer                        -                         -                        - 
+                          Dictionary words                      Dic               Percent words captured by LIWC                           -                         -                        - 
+                      Linguistic Dimensions                     Linguistic                                                               4933                      0.36                     1.00 
+                      Total function words                      function          the, to, and, I                                      499/1443                    0.28                     0.99 
+                          Total pronouns                        pronoun           I, you, that, it                                      74/286                     0.43                     0.97 
+                                  Personal pronouns             ppron             I, you, my, me                                        42/221                     0.24                     0.95 
+                                      1st person singular       i                 I, me, my, myself                                      6/74                      0.49                     0.85 
+                                      1st person plural         we                we, our, us, lets                                      7/17                      0.43                     0.78 
+                                      2nd person                you               you, your, u, yourself                                 14/59                     0.37                     0.82 
+                                      3rd person singular       shehe             he, she, her, his                                      8/30                      0.58                     0.83 
+                                      3rd person plural         they              they, their, them, themsel*                            7/20                      0.36                     0.69 
+                              Impersonal pronouns               ipron             that, it, this, what                                   32/68                     0.43                     0.91 
+                          Determiners                           det               the, at, that, my                                     97/293                    -0.19                     0.95 
+                              Articles                          article           a, an, the, alot                                       3/103                     0.12                     0.61 
+                              Numbers                           number            one, two, first, once                                  44/61                     0.57                     0.87 
+                          Prepositions                          prep              to, of, in, for                                       83/302                     0.16                     0.95 
+                          Auxiliary verbs                       auxverb           is, was, be, have                                     25/282                     0.44                     0.97 
+                          Adverbs                               adverb            so, just, about, there                               159/514                     0.63                     0.97 
+                          Conjunctions                          conj              and, but, so, as                                       49/65                     0.11                     0.89 
+                          Negations                             negate            not, no, never, nothing                                8/247                     0.49                     0.92 
+                          Common verbs                          verb              is, was, be, have                                      1560                      0.60                     0.99 
+                          Common adjectives                     adj               more, very, other, new                                 1507                      0.26                     0.99 
+                          Quantities                            quantity          all, one, more, some                                    422                      0.45                     0.96 
+                      Psychological Processes                                                                                                                                                  
+                      Drives                                    Drives            we, our, work, us                                      1477                      0.58                     0.98 
+                          Affiliation                           affiliation       we, our, us, help                                       384                      0.43                     0.94 
+                          Achievement                           achieve           work, better, best, working                             277                      0.53                     0.92 
+                          Power                                 power             own, order, allow, power                                856                      0.67                     0.96 
+                      Cognition                                 Cognition         is, was, but, are                                      1403                      0.68                     0.99 
+                          All-or-none                           allnone           all, no, never, always                                  35                       0.37                     0.88 
+                          Cognitive processes                   cogproc           but, not, if, or, know                                 1365                      0.67                     0.99 
+                              Insight                           insight           know, how, think, feel                                  383                      0.43                     0.96 
+                              Causation                         cause             how, because, make, why                                 169                      0.21                     0.90 
+                              Discrepancy                       discrep           would, can, want, could                                 108                      0.29                     0.91 
+                              Tentative                         tentat            if, or, any, something                                  230                      0.52                     0.94 
+                              Certitude                         certitude         really, actually, of course, real                       131                      0.22                     0.88 
+                              Differentiation                   differ            but, not, if, or                                        325                      0.38                     0.94 
+                          Memory                                memory            remember, forget, remind, forgot                        26                       0.23                     0.64 
+                      Affect                                    Affect            good, well, new, love                                  2999                      0.64                     0.99 
+                          Positive tone                         tone_pos          good, well, new, love                                  1020                      0.61                     0.98 
+                          Negative tone                         tone_neg          bad, wrong, too much, hate                             1530                      0.62                     0.98 
+                          Emotion                               emotion           good, love, happy, hope                                1030                      0.61                     0.97 
+                              Positive emotion                  emo_pos           good, love, happy, hope                                 337                      0.52                     0.93 
+                              Negative emotion                  emo_neg           bad, hate, hurt, tired                                  618                      0.52                     0.95 
+                                  Anxiety                       emo_anx           worry, fear, afraid, nervous                            120                      0.37                     0.80 
+                                  Anger                         emo_anger         hate, mad, angry, frustr*                               181                      0.30                     0.82 
+                                  Sadness                       emo_sad           :(, sad, disappoint*, cry                               134                      0.25                     0.80 
+                          Swear words                           swear             shit, fuckin*, fuck, damn                               462                      0.79                     0.93 
+                      Social processes                          Social            you, we, he, she                                       2760                      0.43                     0.99 
+                          Social behavior                       socbehav          said, love, say, care                                  1632                      0.49                     0.98 
+                              Prosocial behavior                prosocial         care, help, thank, please                               242                      0.49                     0.89 
+                              Politeness                        polite            thank, please, thanks, good morning                     142                      0.58                     0.87 
+                              Interpersonal conflict            conflict          fight, kill, killed, attack                             305                      0.43                     0.88 
+                              Moralization                      moral             wrong, honor*, deserv*, judge                           356                      0.37                     0.90 
+                              Communication                     comm              said, say, tell, thank*                                 350                      0.42                     0.95 
+                          Social referents                      socrefs           you, we, he, she                                       1232                      0.35                     0.97 
+                              Family                            family            parent*, mother*, father*, baby                         194                      0.48                     0.89 
+                              Friends                           friend            friend*, boyfriend*, girlfriend*, dude                  102                      0.27                     0.75 
+                              Female references                 female            she, her, girl, woman                                   254                      0.56                     0.89 
+                              Male references                   male              he, his, him, man                                       230                      0.62                     0.91 
+                      
+                                                                                                                 
+                    
+                   LIWC-22 Development Manual                                                                                   Page 12 
+                                               
+                    
+                                                    Table 2. LIWC-22 Language Dimensions and Reliability (Cont’d) 
+                                                                            Description/Most frequently              Words/ Entries             Internal               Internal 
+                                Category                   Abbrev.                  used exemplars                     in category*          Consistency:           Consistency: 
+                                                                                                                                             Cronbach’s α               KR-20 
+                    Expanded Dictionary                                                                                                                                       
+                    Culture                               Culture         car, united states, govern*, phone                 772                   0.67                   0.92 
+                        Politics                          politic         united states, govern*, congress*,                 339                   0.75                   0.91 
+                                                                          senat* 
+                        Ethnicity                         ethnicity       american, french, chinese, indian                  239                   0.39                   0.79 
+                        Technology                        tech            car, phone, comput*, email*                        202                   0.41                   0.82 
+                    Lifestyle                             lifestyle       work, home, school, working                       1437                   0.67                   0.97 
+                        Leisure                           leisure         game*, fun, play, party*                           295                   0.57                   0.91 
+                        Home                              home            home, house, room, bed                             122                   0.35                   0.83 
+                        Work                              work            work, school, working, class                       547                   0.74                   0.95 
+                        Money                             money           business*, pay*, price*, market*                   281                   0.69                   0.91 
+                        Religion                          relig           god, hell, christmas*, church                      241                   0.60                   0.90 
+                    Physical                              physical        medic*, food*, patients, eye*                     1993                   0.74                   0.98 
+                        Health                            health          medic*, patients, physician*, health               715                   0.79                   0.92 
+                            Illness                       illness         hospital*, cancer*, sick, pain                     259                   0.52                   0.79 
+                            Wellness                      wellness        healthy, gym*, supported, diet                     118                   0.31                   0.57 
+                            Mental health                 mental          mental health, depressed, suicid*,                 126                   0.40                   0.63 
+                                                                          trauma* 
+                        Substances                        substances      beer*, wine, drunk, cigar*                         154                   0.31                   0.72 
+                        Sexual                            sexual          sex, gay, pregnan*, dick                           357                   0.53                   0.86 
+                        Food                              food            food*, drink*, eat, dinner*                        379                   0.76                   0.93 
+                        Death                             death           death*, dead, die, kill                            109                   0.46                   0.83 
+                    States                                                                                                                                                    
+                        Need                              need            have to, need, had to, must                        55                    0.11                   0.76 
+                        Want                              want            want, hope, wanted, wish                           56                    0.19                   0.76 
+                        Acquire                           acquire         get, got, take, getting                            74                    0.15                   0.85 
+                        Lack                              lack            don’t have, didn’t have, *less, hungry             89                    0.03                   0.65 
+                        Fulfilled                         fulfill         enough, full, complete, extra                      49                    0.04                   0.68 
+                        Fatigue                           fatigue         tired, bored, don’t care, boring                   66                    0.27                   0.63 
+                    Motives                                                                                                                                                   
+                        Reward                            reward          opportun*, win, gain*, benefit*                    62                    0.37                   0.74 
+                        Risk                              risk            secur*, protect*, pain, risk*                      128                   0.28                   0.86 
+                        Curiosity                         curiosity       scien*, look* for, research*, wonder               76                    0.26                   0.79 
+                        Allure                            allure          have, like, out, know                              105                   0.68                   0.98 
+                    Perception                            Perception      in, out, up, there                                1834                   0.59                   0.99 
+                        Attention                         attention       look, look* for, watch, check                      130                   0.16                   0.86 
+                        Motion                            motion          go, come, went, came                               485                   0.42                   0.97 
+                        Space                             space           in, out, up, there                                 617                   0.41                   0.98 
+                        Visual                            visual          see, look, eye*, saw                               226                   0.49                   0.94 
+                        Auditory                          auditory        sound*, heard, hear, music                         255                   0.49                   0.91 
+                        Feeling                           feeling         feel, hard, cool, felt                             157                   0.32                   0.90 
+                    Time orientation                                                                                                                                          
+                        Time                              time            when, now, then, day                               464                   0.50                   0.97 
+                        Past focus                        focuspast       was, had, were, been                               699                   0.71                   0.98 
+                        Present focus                     focuspresent    is, are, I’m, can                                  373                   0.60                   0.96 
+                        Future focus                      focusfuture     will, going to, have to, may                       138                   0.32                   0.92 
+                    Conversational                        Conversation  yeah, oh, yes, okay                                  500                   0.73                   0.96 
+                        Netspeak                          netspeak        :), u, lol, haha*                                  439                   0.73                   0.96 
+                        Assent                            assent          yeah, yes, okay, ok                                50                    0.41                   0.72 
+                        Nonfluencies                      nonflu          oh, um, uh, i i                                    21                    0.49                   0.74 
+                        Fillers                           filler          rr*, wow, sooo*, youknow                           24                    0.23                   0.61 
+                    
+                   *Notes: “Words/Entries in category” refers to the number of different words and/or entries that make up the variable category. For function words, two numbers 
+                   are included: number of different key words in the category and the total number of entries. For example, there are only about 8 primary negation words (e.g., 
+                   wasn’t, isn’t) which are parts of 247 different entries (e.g., “wasn’t happy”). All alphas were computed on a sample of 15,000 texts from the Test Kitchen corpus 
+                   (see Table 1). For the purpose of “translating” LIWC category internal consistencies with relation to what one might expect to see in other assessment methods, 
+                   such as self-report questionnaires, we recommend that readers focus primarily on the Kuder–Richardson Formula 20 (KR-20) values. 
