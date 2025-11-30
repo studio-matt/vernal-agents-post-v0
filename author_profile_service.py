@@ -24,7 +24,13 @@ class AuthorProfileService:
     """Service for managing author profiles with database persistence."""
 
     def __init__(self):
-        self.extractor = ProfileExtractor()
+        try:
+            self.extractor = ProfileExtractor()
+        except Exception as e:
+            logger.error(f"Failed to initialize ProfileExtractor: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise ValueError(f"Failed to initialize profile extractor. Check that all asset files are present in author-related folder: {str(e)}")
 
     def extract_and_save_profile(
         self,
