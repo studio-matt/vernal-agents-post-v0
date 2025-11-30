@@ -19,6 +19,7 @@ from .models import (
     ValidationReport,
 )
 from .planner import Planner
+from .profile_extraction import ProfileExtractor
 from .profile_store import ProfileStore, SchemaViolationError
 from .reporter import render_json, render_markdown, save_json, save_markdown
 from .validator import StyleValidator, parse_style_header
@@ -35,6 +36,7 @@ __all__ = [
     "Planner",
     "PlannerMetadata",
     "PlannerOutput",
+    "ProfileExtractor",
     "ProfileStore",
     "ReportBundle",
     "SchemaViolationError",
