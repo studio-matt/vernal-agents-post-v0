@@ -83,8 +83,18 @@ class AuthorProfileService:
 
             # Run LIWC analysis on the text
             logger.info(f"Running LIWC analysis on sample {idx + 1}...")
-            liwc_counts = self._placeholder_liwc_analysis(normalized_text)
-            logger.info(f"LIWC analysis complete for sample {idx + 1} ({len(liwc_counts)} categories)")
+            try:
+                liwc_counts = self._placeholder_liwc_analysis(normalized_text)
+                if not liwc_counts:
+                    logger.warning(f"LIWC analysis returned empty results for sample {idx + 1}, using minimal defaults")
+                    liwc_counts = {"WC": float(len(normalized_text.split()))}  # At least provide word count
+                logger.info(f"LIWC analysis complete for sample {idx + 1} ({len(liwc_counts)} categories)")
+            except Exception as e:
+                logger.error(f"Error during LIWC analysis for sample {idx + 1}: {str(e)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Use minimal defaults if analysis fails
+                liwc_counts = {"WC": float(len(normalized_text.split()))}
 
             sample = Sample(
                 text=normalized_text,
@@ -112,17 +122,29 @@ class AuthorProfileService:
         tolerance = ToleranceConfig(liwc_z=0.6, sentence_length_max_run=2)
 
         logger.info("Calling extractor.build_profile...")
-        profile = self.extractor.build_profile(
-            author_id=author_personality_id,
-            samples=samples,
-            default_controls=default_controls,
-            tolerance=tolerance,
-        )
-        logger.info("Profile extraction complete, saving to database...")
+        try:
+            profile = self.extractor.build_profile(
+                author_id=author_personality_id,
+                samples=samples,
+                default_controls=default_controls,
+                tolerance=tolerance,
+            )
+            logger.info("Profile extraction complete, saving to database...")
+        except Exception as e:
+            logger.error(f"Error during build_profile: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
 
         # Save to database
-        self._save_profile_to_db(personality, profile, db)
-        logger.info("Profile saved to database successfully")
+        try:
+            self._save_profile_to_db(personality, profile, db)
+            logger.info("Profile saved to database successfully")
+        except Exception as e:
+            logger.error(f"Error saving profile to database: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
 
         logger.info(f"Profile extracted and saved for: {author_personality_id}")
         return profile
