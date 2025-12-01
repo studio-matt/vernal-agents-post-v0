@@ -5640,6 +5640,64 @@ def get_trait_scores(
             detail=f"Failed to load trait scores: {str(e)}"
         )
 
+# Phase 4: Validation endpoint
+@app.post("/author_personalities/{personality_id}/validate-content")
+def validate_content(
+    personality_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Validate content against author profile - REQUIRES AUTHENTICATION AND OWNERSHIP"""
+    try:
+        from models import AuthorPersonality
+        from author_validation_helper import validate_content_against_profile
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        # Get content and style config from request
+        content = request_data.get("content", "")
+        style_config_block = request_data.get("style_config", "")
+        
+        if not content:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Content is required"
+            )
+        
+        # Validate content
+        validation_result = validate_content_against_profile(
+            generated_text=content,
+            style_config_block=style_config_block,
+            author_personality_id=personality_id,
+            db=db
+        )
+        
+        return {
+            "status": "success",
+            "validation": validation_result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error validating content: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate content: {str(e)}"
+        )
+
 # Brand Personality Endpoints
 @app.get("/brand_personalities")
 def get_brand_personalities(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
