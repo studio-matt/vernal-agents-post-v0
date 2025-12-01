@@ -184,11 +184,24 @@ class AuthorProfileService:
 
         try:
             profile_dict = json.loads(personality.profile_json)
+            logger.debug(f"Profile JSON loaded, keys: {list(profile_dict.keys())}")
             profile = AuthorProfile.from_dict(profile_dict)
             logger.info(f"Profile loaded for: {author_personality_id}")
             return profile
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error loading profile for {author_personality_id}: {e}")
+            logger.error(f"Profile JSON (first 500 chars): {personality.profile_json[:500] if personality.profile_json else 'None'}")
+            return None
+        except (KeyError, ValueError) as e:
             logger.error(f"Failed to load profile for {author_personality_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Profile dict keys: {list(profile_dict.keys()) if 'profile_dict' in locals() else 'N/A'}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error loading profile for {author_personality_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
     def _save_profile_to_db(self, personality: AuthorPersonality, profile: AuthorProfile, db: Session) -> None:

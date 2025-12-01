@@ -5582,10 +5582,29 @@ def get_liwc_scores(
         liwc_scores = service.get_liwc_scores(personality_id, db)
         
         if not liwc_scores:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="LIWC scores not found. Extract profile from writing samples first."
-            )
+            # Check if profile exists but LIWC scores are missing
+            if personality.profile_json:
+                logger.warning(f"Profile exists but LIWC scores missing for {personality_id}, attempting to extract from profile")
+                try:
+                    profile = service.load_profile(personality_id, db)
+                    if profile and profile.liwc_profile:
+                        # Extract LIWC scores from profile
+                        liwc_scores = {
+                            category: {"mean": score.mean, "stdev": score.stdev, "z": score.z}
+                            for category, score in profile.liwc_profile.categories.items()
+                        }
+                        # Save for future quick access
+                        personality.liwc_scores = json.dumps(liwc_scores, ensure_ascii=False)
+                        db.commit()
+                        logger.info(f"Extracted and saved LIWC scores from profile for {personality_id}")
+                except Exception as e:
+                    logger.error(f"Failed to extract LIWC scores from profile: {e}")
+            
+            if not liwc_scores:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="LIWC scores not found. Extract profile from writing samples first."
+                )
         
         return {
             "status": "success",
