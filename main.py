@@ -6192,6 +6192,7 @@ async def generate_campaign_content(
         landing_page_url = request_data.get("landing_page_url", "")
         author_personality_id = request_data.get("author_personality_id")  # NEW: Support author personality ID
         use_author_voice = request_data.get("use_author_voice", True)  # NEW: Toggle for author voice
+        use_validation = request_data.get("use_validation", False)  # Phase 4: Toggle for validation
         
         # Build writing context
         writing_context = f"""Content Queue Foundation:
@@ -6220,14 +6221,15 @@ Generate content for {platform} based on the content queue items above."""
                         if not settings.get("useGlobalDefaults", True):
                             custom_modifications = settings.get("customModifications", "")
                 
-                # Generate content with author voice
-                generated_text, style_config, metadata = generate_with_author_voice(
+                # Generate content with author voice (Phase 4: includes validation if requested)
+                generated_text, style_config, metadata, validation_result = generate_with_author_voice(
                     content_prompt=writing_context,
                     author_personality_id=author_personality_id,
                     platform=platform.lower(),
                     goal="content_generation",
                     target_audience="general",
                     custom_modifications=custom_modifications,
+                    use_validation=use_validation,
                     db=db
                 )
                 
@@ -6247,28 +6249,36 @@ Generate content for {platform} based on the content queue items above."""
                         
                         # Merge author voice metadata with CrewAI result
                         if crew_result.get("success"):
+                            response_data = {
+                                **crew_result.get("data", {}),
+                                "author_voice_used": True,
+                                "style_config": style_config,
+                                "author_voice_metadata": metadata
+                            }
+                            # Phase 4: Add validation results if available
+                            if validation_result:
+                                response_data["validation"] = validation_result
                             return {
                                 "status": "success",
-                                "data": {
-                                    **crew_result.get("data", {}),
-                                    "author_voice_used": True,
-                                    "style_config": style_config,
-                                    "author_voice_metadata": metadata
-                                },
+                                "data": response_data,
                                 "error": crew_result.get("error")
                             }
                     
                     # Return author voice generated content directly
+                    response_data = {
+                        "content": generated_text,
+                        "title": "",  # Can be extracted or generated separately
+                        "author_voice_used": True,
+                        "style_config": style_config,
+                        "author_voice_metadata": metadata,
+                        "platform": platform
+                    }
+                    # Phase 4: Add validation results if available
+                    if validation_result:
+                        response_data["validation"] = validation_result
                     return {
                         "status": "success",
-                        "data": {
-                            "content": generated_text,
-                            "title": "",  # Can be extracted or generated separately
-                            "author_voice_used": True,
-                            "style_config": style_config,
-                            "author_voice_metadata": metadata,
-                            "platform": platform
-                        },
+                        "data": response_data,
                         "error": None
                     }
                 else:

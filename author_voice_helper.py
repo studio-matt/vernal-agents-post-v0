@@ -58,8 +58,9 @@ def generate_with_author_voice(
     goal: str = "content_generation",
     target_audience: str = "general",
     custom_modifications: Optional[str] = None,
+    use_validation: bool = False,
     db: Optional[Any] = None
-) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Generate content using author personality profile.
     
@@ -87,8 +88,9 @@ def generate_with_author_voice(
         db: Database session (optional, will create if not provided)
         
     Returns:
-        Tuple of (generated_text, style_config_block, metadata_dict)
-        Returns (None, None, None) on error
+        Tuple of (generated_text, style_config_block, metadata_dict, validation_result)
+        Returns (None, None, None, None) on error
+        validation_result is None if use_validation=False or validation fails
     """
     try:
         # Get or create database session
@@ -164,7 +166,23 @@ Additional Platform-Specific Instructions:
             
             logger.info(f"Generated content with author voice: {len(result.text)} chars, {result.token_count} tokens")
             
-            return result.text, planner_output.style_config_block, metadata
+            # Phase 4: Optional validation (if requested)
+            validation_result = None
+            if use_validation:
+                from author_validation_helper import validate_content_against_profile
+                try:
+                    validation_result = validate_content_against_profile(
+                        generated_text=result.text,
+                        style_config_block=planner_output.style_config_block,
+                        author_personality_id=author_personality_id,
+                        db=db
+                    )
+                    logger.info(f"Validation complete: score={validation_result.get('overall_score', 0)}")
+                except Exception as e:
+                    logger.warning(f"Validation failed: {e}")
+                    # Continue without validation
+            
+            return result.text, planner_output.style_config_block, metadata, validation_result
             
         finally:
             if close_db:
@@ -174,7 +192,7 @@ Additional Platform-Specific Instructions:
         logger.error(f"Error generating with author voice: {str(e)}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        return None, None, None
+        return None, None, None, None
 
 def should_use_author_voice(author_personality_id: Optional[str]) -> bool:
     """
