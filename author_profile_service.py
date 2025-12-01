@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
+# Import should work now that main.py sets up the import shim
 from author_related import (
     AuthorProfile,
     ControlDefaults,

@@ -20,6 +20,48 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
 import re
+import sys
+from pathlib import Path
+
+# Fix import path for author-related folder (hyphen in folder name)
+# Python can't import modules with hyphens, so we create a sys.path workaround
+_backend_dir = Path(__file__).parent
+_author_related_path = _backend_dir / "author-related"
+_author_related_underscore = _backend_dir / "author_related"
+
+# If author-related exists but author_related doesn't, create import shim
+if _author_related_path.exists() and not _author_related_underscore.exists():
+    import importlib.util
+    import importlib.machinery
+    
+    # Load author-related as author_related module
+    _init_path = _author_related_path / "__init__.py"
+    if _init_path.exists():
+        spec = importlib.util.spec_from_file_location(
+            "author_related",
+            _init_path,
+            submodule_search_locations=[str(_author_related_path)]
+        )
+        if spec and spec.loader:
+            author_related = importlib.util.module_from_spec(spec)
+            sys.modules['author_related'] = author_related
+            spec.loader.exec_module(author_related)
+            
+            # Load submodules that might be imported
+            for submodule in ['asset_loader', 'profile_extraction', 'models', 'planner', 'generator_harness', 'validator', 'profile_store', 'reporter', 'deterministic']:
+                submodule_path = _author_related_path / f"{submodule}.py"
+                if submodule_path.exists():
+                    try:
+                        sub_spec = importlib.util.spec_from_file_location(
+                            f"author_related.{submodule}",
+                            submodule_path
+                        )
+                        if sub_spec and sub_spec.loader:
+                            sub_mod = importlib.util.module_from_spec(sub_spec)
+                            sys.modules[f'author_related.{submodule}'] = sub_mod
+                            sub_spec.loader.exec_module(sub_mod)
+                    except Exception as e:
+                        logger.warning(f"Could not preload author_related.{submodule}: {e}")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
