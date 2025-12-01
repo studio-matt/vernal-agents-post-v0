@@ -57,6 +57,7 @@ def generate_with_author_voice(
     platform: str,
     goal: str = "content_generation",
     target_audience: str = "general",
+    custom_modifications: Optional[str] = None,
     db: Optional[Any] = None
 ) -> Tuple[Optional[str], Optional[str], Optional[Dict[str, Any]]]:
     """
@@ -66,8 +67,15 @@ def generate_with_author_voice(
     1. Load author profile from database
     2. Map platform to adapter key
     3. Use Planner to build STYLE_CONFIG
-    4. Use GeneratorHarness with LLM
-    5. Return generated text, style config, and metadata
+    4. Merge custom modifications (from content planner)
+    5. Use GeneratorHarness with LLM
+    6. Return generated text, style config, and metadata
+    
+    Integration Hierarchy:
+    - Author Profile (base style)
+    - Adapter Overlay (platform style adjustments)
+    - Custom Modifications (user-defined per platform)
+    - Final prompt → LLM
     
     Args:
         content_prompt: The topic/prompt to write about
@@ -75,6 +83,7 @@ def generate_with_author_voice(
         platform: Target platform (linkedin, twitter, blog, etc.)
         goal: Content goal (content_generation, mobilization, etc.)
         target_audience: Target audience (general, practitioner, scholar, live)
+        custom_modifications: Optional custom instructions from content planner
         db: Database session (optional, will create if not provided)
         
     Returns:
@@ -113,7 +122,20 @@ def generate_with_author_voice(
             
             logger.info(f"Built style config for platform '{platform}' (adapter: '{adapter_key}')")
             
-            # Step 4: Use GeneratorHarness with existing LLM
+            # Step 4: Merge custom modifications with scaffold if provided
+            final_scaffold = content_prompt
+            if custom_modifications and custom_modifications.strip():
+                final_scaffold = f"""{content_prompt}
+
+Additional Platform-Specific Instructions:
+{custom_modifications.strip()}
+"""
+                logger.info(f"Included custom modifications for platform '{platform}'")
+            
+            # Update planner output with merged scaffold
+            planner_output.scaffold = final_scaffold
+            
+            # Step 5: Use GeneratorHarness with existing LLM
             def invoke_llm(prompt: str) -> str:
                 """Invoke LLM using existing ChatOpenAI setup"""
                 api_key = os.getenv("OPENAI_API_KEY")
@@ -130,7 +152,7 @@ def generate_with_author_voice(
             harness = GeneratorHarness(invoke_llm)
             result = harness.run(planner_output)
             
-            # Step 5: Return results
+            # Step 6: Return results
             metadata = {
                 "prompt_id": result.prompt_id,
                 "token_count": result.token_count,

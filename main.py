@@ -6210,6 +6210,16 @@ Generate content for {platform} based on the content queue items above."""
             if should_use_author_voice(author_personality_id):
                 logger.info(f"Using author voice for personality: {author_personality_id}")
                 
+                # Get custom modifications for this platform if available
+                custom_modifications = None
+                if "platformSettings" in request_data:
+                    platform_settings = request_data.get("platformSettings", {})
+                    platform_lower = platform.lower()
+                    if platform_lower in platform_settings:
+                        settings = platform_settings[platform_lower]
+                        if not settings.get("useGlobalDefaults", True):
+                            custom_modifications = settings.get("customModifications", "")
+                
                 # Generate content with author voice
                 generated_text, style_config, metadata = generate_with_author_voice(
                     content_prompt=writing_context,
@@ -6217,6 +6227,7 @@ Generate content for {platform} based on the content queue items above."""
                     platform=platform.lower(),
                     goal="content_generation",
                     target_audience="general",
+                    custom_modifications=custom_modifications,
                     db=db
                 )
                 
