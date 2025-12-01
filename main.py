@@ -305,6 +305,10 @@ class AuthorPersonalityCreate(BaseModel):
 class AuthorPersonalityUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    model_config_json: Optional[str] = None  # JSON string for model configuration
+    baseline_adjustments_json: Optional[str] = None  # JSON string for baseline adjustments
+    selected_features_json: Optional[str] = None  # JSON string for selected features
+    configuration_preset: Optional[str] = None  # Configuration preset name
 
 # Pydantic models for author profile endpoints
 class ExtractProfileRequest(BaseModel):
@@ -5300,6 +5304,14 @@ def update_author_personality(personality_id: str, personality_data: AuthorPerso
             personality.name = personality_data.name
         if personality_data.description is not None:
             personality.description = personality_data.description
+        if personality_data.model_config_json is not None:
+            personality.model_config_json = personality_data.model_config_json
+        if personality_data.baseline_adjustments_json is not None:
+            personality.baseline_adjustments_json = personality_data.baseline_adjustments_json
+        if personality_data.selected_features_json is not None:
+            personality.selected_features_json = personality_data.selected_features_json
+        if personality_data.configuration_preset is not None:
+            personality.configuration_preset = personality_data.configuration_preset
         
         personality.updated_at = datetime.now()
         db.commit()

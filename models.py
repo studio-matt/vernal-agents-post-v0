@@ -176,6 +176,17 @@ class AuthorPersonality(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     user_id = Column(String(255), nullable=True)  # Optional: for user-specific personalities
     
+    # Profile data (from Phase 1)
+    profile_json = Column(Text, nullable=True)  # Full AuthorProfile JSON
+    liwc_scores = Column(Text, nullable=True)  # Quick access to LIWC category scores (JSON)
+    trait_scores = Column(Text, nullable=True)  # MBTI/OCEAN/HEXACO trait scores (JSON)
+    
+    # Configuration settings (NEW - Phase 4.5)
+    model_config_json = Column(Text, nullable=True)  # Model configuration (sample size, feature weight, etc.)
+    baseline_adjustments_json = Column(Text, nullable=True)  # Baseline adjustment slider values (JSON)
+    selected_features_json = Column(Text, nullable=True)  # Selected feature flags (lexical, syntactic, etc.) (JSON)
+    configuration_preset = Column(String(100), nullable=True)  # Selected configuration preset name
+    
     def __repr__(self):
         return f"<AuthorPersonality(id={self.id}, name={self.name})>"
 
