@@ -5529,11 +5529,21 @@ def get_author_profile(
                 detail="Profile not found. Extract profile from writing samples first."
             )
         
-        # Return full profile
-        return {
-            "status": "success",
-            "profile": profile.to_dict()
-        }
+        # Return full profile with error handling
+        try:
+            profile_dict = profile.to_dict()
+            return {
+                "status": "success",
+                "profile": profile_dict
+            }
+        except Exception as e:
+            logger.error(f"Error serializing profile to dict: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to serialize profile: {str(e)}"
+            )
         
     except HTTPException:
         raise
