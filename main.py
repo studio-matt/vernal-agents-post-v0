@@ -5218,17 +5218,23 @@ def get_author_personalities(current_user = Depends(get_current_user), db: Sessi
         ).all()
         return {
             "status": "success",
-            "personalities": [
-                {
-                    "id": personality.id,
-                    "name": personality.name,
-                    "description": personality.description,
-                    "created_at": personality.created_at.isoformat() if personality.created_at else None,
-                    "updated_at": personality.updated_at.isoformat() if personality.updated_at else None,
-                    "user_id": personality.user_id
-                }
-                for personality in personalities
-            ]
+            "message": {
+                "personalities": [
+                    {
+                        "id": personality.id,
+                        "name": personality.name,
+                        "description": personality.description,
+                        "created_at": personality.created_at.isoformat() if personality.created_at else None,
+                        "updated_at": personality.updated_at.isoformat() if personality.updated_at else None,
+                        "user_id": personality.user_id,
+                        "model_config_json": personality.model_config_json,
+                        "baseline_adjustments_json": personality.baseline_adjustments_json,
+                        "selected_features_json": personality.selected_features_json,
+                        "configuration_preset": personality.configuration_preset,
+                    }
+                    for personality in personalities
+                ]
+            }
         }
     except Exception as e:
         import traceback
