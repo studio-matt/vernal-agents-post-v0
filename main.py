@@ -6190,6 +6190,8 @@ async def generate_campaign_content(
         parent_idea = request_data.get("parent_idea", "")
         kg_location = request_data.get("knowledge_graph_location", "")
         landing_page_url = request_data.get("landing_page_url", "")
+        author_personality_id = request_data.get("author_personality_id")  # NEW: Support author personality ID
+        use_author_voice = request_data.get("use_author_voice", True)  # NEW: Toggle for author voice
         
         # Build writing context
         writing_context = f"""Content Queue Foundation:
@@ -6201,7 +6203,68 @@ async def generate_campaign_content(
 
 Generate content for {platform} based on the content queue items above."""
         
-        # Generate content using CrewAI workflow
+        # Phase 3: Integrate author voice if author_personality_id is provided
+        if author_personality_id and use_author_voice:
+            from author_voice_helper import generate_with_author_voice, should_use_author_voice
+            
+            if should_use_author_voice(author_personality_id):
+                logger.info(f"Using author voice for personality: {author_personality_id}")
+                
+                # Generate content with author voice
+                generated_text, style_config, metadata = generate_with_author_voice(
+                    content_prompt=writing_context,
+                    author_personality_id=author_personality_id,
+                    platform=platform.lower(),
+                    goal="content_generation",
+                    target_audience="general",
+                    db=db
+                )
+                
+                if generated_text:
+                    # Optionally pass through CrewAI for QC if requested
+                    use_crewai_qc = request_data.get("use_crewai_qc", False)
+                    
+                    if use_crewai_qc:
+                        # Pass generated content to CrewAI for QC only
+                        crew_result = create_content_generation_crew(
+                            text=f"Review and refine this content:\n\n{generated_text}\n\nStyle Config:\n{style_config}",
+                            week=week,
+                            platform=platform.lower(),
+                            days_list=[day],
+                            author_personality=request_data.get("author_personality", "custom")
+                        )
+                        
+                        # Merge author voice metadata with CrewAI result
+                        if crew_result.get("success"):
+                            return {
+                                "status": "success",
+                                "data": {
+                                    **crew_result.get("data", {}),
+                                    "author_voice_used": True,
+                                    "style_config": style_config,
+                                    "author_voice_metadata": metadata
+                                },
+                                "error": crew_result.get("error")
+                            }
+                    
+                    # Return author voice generated content directly
+                    return {
+                        "status": "success",
+                        "data": {
+                            "content": generated_text,
+                            "title": "",  # Can be extracted or generated separately
+                            "author_voice_used": True,
+                            "style_config": style_config,
+                            "author_voice_metadata": metadata,
+                            "platform": platform
+                        },
+                        "error": None
+                    }
+                else:
+                    logger.warning(f"Author voice generation failed, falling back to CrewAI")
+                    # Fall through to CrewAI workflow
+        
+        # Generate content using CrewAI workflow (fallback or default)
         crew_result = create_content_generation_crew(
             text=writing_context,
             week=week,
