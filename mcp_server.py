@@ -194,6 +194,25 @@ class VernalContentumMCPServer(MCPServer):
             handler=self._handle_validate_author_voice
         ))
         
+        # Vibe Check Tool - Metacognitive questioning for code review and architectural analysis
+        self.register_tool(Tool(
+            name="vibe_check",
+            description="Perform metacognitive questioning to identify assumptions, break tunnel vision, and prevent cascading errors. Use for code review, architectural analysis, and debugging complex issues.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "description": "What you're trying to accomplish"},
+                    "plan": {"type": "string", "description": "Your detailed plan or approach"},
+                    "progress": {"type": "string", "description": "What's been done so far"},
+                    "uncertainties": {"type": "string", "description": "What you're unsure about"},
+                    "task_context": {"type": "string", "description": "Relevant code/files/architecture context"},
+                    "focus_area": {"type": "string", "description": "Specific area to focus the vibe check on (optional)"}
+                },
+                "required": ["goal"]
+            },
+            handler=self._handle_vibe_check
+        ))
+        
         logger.info(f"Registered {len(self.tools)} MCP tools")
     
     def _create_platform_handler(self, platform: str):
@@ -627,6 +646,150 @@ class VernalContentumMCPServer(MCPServer):
                 error=str(e),
                 metadata={"tool": "validate_author_voice"}
             )
+    
+    def _handle_vibe_check(self, input_data: Dict[str, Any]) -> ToolResult:
+        """
+        Perform metacognitive questioning to identify assumptions, break tunnel vision, 
+        and prevent cascading errors.
+        
+        This tool helps with:
+        - Code review and architectural analysis
+        - Identifying assumptions and blind spots
+        - Breaking tunnel vision
+        - Preventing cascading errors
+        - Metacognitive questioning
+        """
+        try:
+            goal = input_data.get("goal", "")
+            plan = input_data.get("plan", "")
+            progress = input_data.get("progress", "")
+            uncertainties = input_data.get("uncertainties", "")
+            task_context = input_data.get("task_context", "")
+            focus_area = input_data.get("focus_area", "")
+            
+            if not goal:
+                return ToolResult(
+                    success=False,
+                    error="Goal is required for vibe check",
+                    metadata={"tool": "vibe_check"}
+                )
+            
+            # Build analysis prompt
+            analysis_prompt = f"""Perform a metacognitive analysis (Vibe Check) on the following:
+
+GOAL: {goal}
+
+PLAN: {plan if plan else "Not specified"}
+
+PROGRESS: {progress if progress else "Not specified"}
+
+UNCERTAINTIES: {uncertainties if uncertainties else "Not specified"}
+
+TASK CONTEXT: {task_context if task_context else "Not specified"}
+
+FOCUS AREA: {focus_area if focus_area else "General analysis"}
+
+Please provide:
+1. ASSUMPTIONS IDENTIFIED: List any assumptions that might be incorrect or unverified
+2. TUNNEL VISION RISKS: Areas where focus might be too narrow, missing the bigger picture
+3. CASCADING ERROR RISKS: Potential issues that could cause chain reactions
+4. METACOGNITIVE QUESTIONS: Critical "why" questions about the approach
+5. ALTERNATIVE PERSPECTIVES: Other ways to think about or approach this
+6. BLIND SPOTS: Things that might be overlooked
+7. RECOMMENDATIONS: Specific suggestions to improve the approach
+
+Be constructive, specific, and actionable. Focus on preventing problems before they occur."""
+
+            # Use LLM for analysis (if available)
+            try:
+                from langchain_openai import ChatOpenAI
+                import os
+                
+                api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    llm = ChatOpenAI(
+                        model="gpt-4o-mini",
+                        temperature=0.7,
+                        api_key=api_key
+                    )
+                    response = llm.invoke(analysis_prompt)
+                    analysis = response.content
+                else:
+                    # Fallback to structured analysis without LLM
+                    analysis = self._perform_basic_vibe_check(goal, plan, progress, uncertainties, task_context)
+            except Exception as e:
+                logger.warning(f"LLM not available for vibe check, using basic analysis: {e}")
+                analysis = self._perform_basic_vibe_check(goal, plan, progress, uncertainties, task_context)
+            
+            return ToolResult(
+                success=True,
+                data={
+                    "goal": goal,
+                    "analysis": analysis,
+                    "focus_area": focus_area,
+                    "timestamp": datetime.now().isoformat()
+                },
+                metadata={"tool": "vibe_check"}
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in vibe check: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ToolResult(
+                success=False,
+                error=str(e),
+                metadata={"tool": "vibe_check"}
+            )
+    
+    def _perform_basic_vibe_check(self, goal: str, plan: str, progress: str, uncertainties: str, task_context: str) -> str:
+        """Perform basic vibe check analysis without LLM"""
+        analysis = f"""VIBE CHECK ANALYSIS
+====================
+
+GOAL: {goal}
+
+ASSUMPTIONS TO VERIFY:
+- Verify that the goal is clearly defined and achievable
+- Check if all dependencies are identified
+- Ensure success criteria are measurable
+
+TUNNEL VISION RISKS:
+- Consider if focusing too narrowly on one aspect
+- Think about edge cases and error scenarios
+- Consider the broader system impact
+
+CASCADING ERROR RISKS:
+- Identify potential failure points
+- Consider what happens if assumptions are wrong
+- Think about rollback/recovery strategies
+
+METACOGNITIVE QUESTIONS:
+- Why is this approach the best one?
+- What alternatives were considered?
+- What could go wrong that hasn't been considered?
+- How will we know if this is working?
+
+RECOMMENDATIONS:
+- Break down complex goals into smaller, testable steps
+- Add validation and error handling early
+- Consider testing strategy before implementation
+- Document assumptions and decisions
+"""
+        
+        if plan:
+            analysis += f"\nPLAN REVIEW:\n- Verify plan addresses all aspects of the goal\n- Check for missing steps or dependencies\n"
+        
+        if progress:
+            analysis += f"\nPROGRESS REVIEW:\n- Assess if progress aligns with plan\n- Identify any deviations or blockers\n"
+        
+        if uncertainties:
+            analysis += f"\nUNCERTAINTIES ADDRESSED:\n- Prioritize resolving uncertainties early\n- Consider worst-case scenarios\n"
+        
+        if task_context:
+            analysis += f"\nCONTEXT CONSIDERATIONS:\n- Review context for potential conflicts\n- Check for integration points\n"
+        
+        return analysis
 
 # Create MCP server instance
 mcp_server = VernalContentumMCPServer()
