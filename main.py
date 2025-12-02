@@ -5356,18 +5356,38 @@ def delete_author_personality(personality_id: str, current_user = Depends(get_cu
     """Delete an author personality - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
         from models import AuthorPersonality
+        
+        # Check if personality exists at all (for better error messages)
+        personality_any = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id
+        ).first()
+        
+        if not personality_any:
+            logger.warning(f"Delete attempt: Personality {personality_id} not found in database")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Author personality '{personality_id}' not found"
+            )
+        
+        # Check ownership
         personality = db.query(AuthorPersonality).filter(
             AuthorPersonality.id == personality_id,
             AuthorPersonality.user_id == current_user.id
         ).first()
+        
         if not personality:
+            logger.warning(
+                f"Delete attempt: Personality {personality_id} exists but user_id mismatch. "
+                f"Profile user_id: {personality_any.user_id}, Current user_id: {current_user.id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Author personality not found or access denied"
             )
+        
         db.delete(personality)
         db.commit()
-        logger.info(f"Author personality deleted successfully: {personality_id}")
+        logger.info(f"Author personality deleted successfully: {personality_id} by user {current_user.id}")
         return {
             "status": "success",
             "message": "Author personality deleted successfully"
