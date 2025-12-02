@@ -5227,10 +5227,13 @@ def get_author_personalities(current_user = Depends(get_current_user), db: Sessi
                         "created_at": personality.created_at.isoformat() if personality.created_at else None,
                         "updated_at": personality.updated_at.isoformat() if personality.updated_at else None,
                         "user_id": personality.user_id,
-                        "model_config_json": personality.model_config_json,
-                        "baseline_adjustments_json": personality.baseline_adjustments_json,
-                        "selected_features_json": personality.selected_features_json,
-                        "configuration_preset": personality.configuration_preset,
+                "model_config_json": personality.model_config_json,
+                "baseline_adjustments_json": personality.baseline_adjustments_json,
+                "selected_features_json": personality.selected_features_json,
+                "configuration_preset": personality.configuration_preset,
+                "writing_samples_json": personality.writing_samples_json,
+                "samples_count": len(json.loads(personality.writing_samples_json)) if personality.writing_samples_json else 0,
+                "has_profile": bool(personality.profile_json),
                     }
                     for personality in personalities
                 ]

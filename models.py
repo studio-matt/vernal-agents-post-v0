@@ -187,6 +187,9 @@ class AuthorPersonality(Base):
     selected_features_json = Column(Text, nullable=True)  # Selected feature flags (lexical, syntactic, etc.) (JSON)
     configuration_preset = Column(String(100), nullable=True)  # Selected configuration preset name
     
+    # Writing samples storage (NEW - for displaying samples when editing)
+    writing_samples_json = Column(Text, nullable=True)  # Original writing samples used for extraction (JSON array)
+    
     def __repr__(self):
         return f"<AuthorPersonality(id={self.id}, name={self.name})>"
 

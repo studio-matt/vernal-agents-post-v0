@@ -154,9 +154,9 @@ class AuthorProfileService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
-        # Save to database
+        # Save to database (including writing samples)
         try:
-            self._save_profile_to_db(personality, profile, db)
+            self._save_profile_to_db(personality, profile, db, writing_samples)
             logger.info("Profile saved to database successfully")
         except Exception as e:
             logger.error(f"Error saving profile to database: {str(e)}")
@@ -204,7 +204,7 @@ class AuthorProfileService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return None
 
-    def _save_profile_to_db(self, personality: AuthorPersonality, profile: AuthorProfile, db: Session) -> None:
+    def _save_profile_to_db(self, personality: AuthorPersonality, profile: AuthorProfile, db: Session, writing_samples: Optional[List[str]] = None) -> None:
         """Save profile data to database columns."""
         # Save full profile as JSON
         personality.profile_json = json.dumps(profile.to_dict(), ensure_ascii=False)
@@ -225,6 +225,11 @@ class AuthorProfileService:
         if profile.hexaco:
             trait_scores["hexaco"] = profile.hexaco
         personality.trait_scores = json.dumps(trait_scores, ensure_ascii=False) if trait_scores else None
+
+        # Save writing samples for display when editing
+        if writing_samples:
+            personality.writing_samples_json = json.dumps(writing_samples, ensure_ascii=False)
+            logger.info(f"Saved {len(writing_samples)} writing samples for: {personality.id}")
 
         db.commit()
         logger.info(f"Profile data saved to database for: {personality.id}")
