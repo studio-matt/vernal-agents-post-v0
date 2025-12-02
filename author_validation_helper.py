@@ -6,8 +6,10 @@ Phase 4: Validation Integration
 from typing import Optional, Dict, Any
 from author_related import StyleValidator, AuthorProfile, StyleConfig
 from author_profile_service import AuthorProfileService
+from profile_modifier import ProfileModifier
 from liwc_analyzer import analyze_text
 from database import SessionLocal
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,33 @@ def validate_content_against_profile(
                     "findings": [],
                     "overall_score": 0
                 }
+            
+            # CRITICAL: Apply baseline adjustments to match the profile used during generation
+            # The validator must use the SAME adjusted profile that was used for generation
+            from models import AuthorPersonality
+            personality = db.query(AuthorPersonality).filter(
+                AuthorPersonality.id == author_personality_id
+            ).first()
+            
+            if personality and personality.baseline_adjustments_json:
+                try:
+                    adjustments = json.loads(personality.baseline_adjustments_json)
+                    if adjustments:
+                        # Validate and apply adjustments
+                        is_valid, error_msg = ProfileModifier.validate_adjustments(adjustments, profile)
+                        if is_valid:
+                            profile = ProfileModifier.apply_adjustments(
+                                profile=profile,
+                                adjustments=adjustments,
+                                adjustment_type="percentile"
+                            )
+                            logger.info(f"Applied {len(adjustments)} baseline adjustments to profile for validation")
+                        else:
+                            logger.warning(f"Invalid baseline adjustments in validator: {error_msg}, using original profile")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse baseline_adjustments_json in validator: {e}, using original profile")
+                except Exception as e:
+                    logger.warning(f"Error applying baseline adjustments in validator: {e}, using original profile")
             
             # Parse style config from block
             from author_related.validator import parse_style_header

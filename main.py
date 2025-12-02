@@ -5455,6 +5455,111 @@ def extract_author_profile(
             detail=f"Failed to extract author profile: {str(e)}"
         )
 
+@app.post("/author_personalities/{personality_id}/re-extract-profile")
+def re_extract_author_profile(
+    personality_id: str,
+    request_data: ExtractProfileRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Re-extract author profile with updated writing samples.
+    
+    This endpoint allows users to update an existing profile by providing new writing samples.
+    It merges the new samples with existing samples from the database and re-extracts the profile.
+    
+    - REQUIRES AUTHENTICATION AND OWNERSHIP
+    - Merges new samples with existing samples from writing_samples_json
+    - Re-extracts profile with all samples (existing + new)
+    """
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        import json
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        logger.info(f"Re-extracting profile for author personality: {personality_id}")
+        
+        # Load existing samples from database
+        existing_samples = []
+        if personality.writing_samples_json:
+            try:
+                existing_samples = json.loads(personality.writing_samples_json)
+                logger.info(f"Loaded {len(existing_samples)} existing samples from database")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse existing writing_samples_json: {e}, using only new samples")
+        
+        # Merge new samples with existing samples
+        # Note: This is a simple append - users can provide duplicates if they want
+        # For a more sophisticated approach, could deduplicate or merge metadata
+        all_samples = existing_samples + request_data.writing_samples
+        logger.info(f"Merged samples: {len(existing_samples)} existing + {len(request_data.writing_samples)} new = {len(all_samples)} total")
+        
+        # Merge sample metadata if provided
+        all_metadata = None
+        if request_data.sample_metadata:
+            # Existing samples don't have metadata stored separately, so we'll use defaults for them
+            # New samples use provided metadata
+            existing_metadata = [{}] * len(existing_samples)  # Default metadata for existing samples
+            all_metadata = existing_metadata + request_data.sample_metadata
+        
+        # Re-extract profile using service with all samples
+        service = AuthorProfileService()
+        profile = service.extract_and_save_profile(
+            author_personality_id=personality_id,
+            writing_samples=all_samples,
+            sample_metadata=all_metadata,
+            db=db
+        )
+        
+        # Return summary
+        return {
+            "status": "success",
+            "message": {
+                "personality_id": personality_id,
+                "profile_re_extracted": True,
+                "samples_analyzed": len(all_samples),
+                "existing_samples_count": len(existing_samples),
+                "new_samples_count": len(request_data.writing_samples),
+                "liwc_categories": len(profile.liwc_profile.categories),
+                "has_traits": profile.mbti is not None or profile.ocean is not None or profile.hexaco is not None,
+                "lexicon_size": {
+                    "core_verbs": len(profile.lexicon.core_verbs),
+                    "core_nouns": len(profile.lexicon.core_nouns),
+                    "evaluatives": len(profile.lexicon.evaluatives),
+                    "metaphor_stems": len(profile.lexicon.metaphor_stems)
+                }
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"Validation error re-extracting profile: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        import traceback
+        logger.error(f"Error re-extracting author profile: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to re-extract author profile: {str(e)}"
+        )
+
 @app.get("/author_personalities/test-assets")
 def test_asset_loading(current_user = Depends(get_current_user)):
     """Test endpoint to verify asset files can be loaded - REQUIRES AUTHENTICATION"""
@@ -5691,6 +5796,330 @@ def get_trait_scores(
         )
 
 # Phase 4: Validation endpoint
+@app.post("/author_personalities/{personality_id}/preview-adjustments")
+def preview_adjustments(
+    personality_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Preview how baseline adjustments will affect LIWC targets.
+    
+    This endpoint shows the before/after comparison of LIWC category z-scores
+    when baseline adjustments are applied, without actually generating content.
+    
+    - REQUIRES AUTHENTICATION AND OWNERSHIP
+    """
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        from profile_modifier import ProfileModifier
+        import json
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        # Load profile
+        service = AuthorProfileService()
+        profile = service.load_profile(personality_id, db)
+        
+        if not profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Profile not found. Extract profile from writing samples first."
+            )
+        
+        # Get adjustments from request (or use stored adjustments)
+        adjustments = request_data.get("adjustments")
+        if not adjustments:
+            # Fall back to stored adjustments
+            if personality.baseline_adjustments_json:
+                try:
+                    adjustments = json.loads(personality.baseline_adjustments_json)
+                except json.JSONDecodeError:
+                    adjustments = {}
+            else:
+                adjustments = {}
+        
+        # Get original LIWC scores
+        original_scores = {
+            category: {
+                "mean": score.mean,
+                "stdev": score.stdev,
+                "z": score.z
+            }
+            for category, score in profile.liwc_profile.categories.items()
+        }
+        
+        # Apply adjustments to get modified scores
+        if adjustments:
+            modified_profile = ProfileModifier.apply_adjustments(
+                profile=profile,
+                adjustments=adjustments,
+                adjustment_type="percentile"
+            )
+            modified_scores = {
+                category: {
+                    "mean": score.mean,
+                    "stdev": score.stdev,
+                    "z": score.z
+                }
+                for category, score in modified_profile.liwc_profile.categories.items()
+            }
+        else:
+            modified_scores = original_scores
+        
+        # Calculate deltas
+        deltas = {}
+        for category in original_scores.keys():
+            original_z = original_scores[category]["z"]
+            modified_z = modified_scores[category]["z"]
+            deltas[category] = {
+                "original_z": original_z,
+                "modified_z": modified_z,
+                "delta_z": modified_z - original_z,
+                "percent_change": ((modified_z - original_z) / abs(original_z) * 100) if original_z != 0 else 0
+            }
+        
+        return {
+            "status": "success",
+            "personality_id": personality_id,
+            "adjustments_applied": len(adjustments) if adjustments else 0,
+            "original_scores": original_scores,
+            "modified_scores": modified_scores,
+            "deltas": deltas,
+            "summary": {
+                "categories_changed": len([d for d in deltas.values() if abs(d["delta_z"]) > 0.01]),
+                "max_delta": max([abs(d["delta_z"]) for d in deltas.values()]) if deltas else 0,
+                "avg_delta": sum([abs(d["delta_z"]) for d in deltas.values()]) / len(deltas) if deltas else 0
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error previewing adjustments: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview adjustments: {str(e)}"
+        )
+
+@app.post("/author_personalities/{personality_id}/test-full-chain")
+def test_full_chain(
+    personality_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Full-chain test endpoint: Logs entire author voice pipeline for empirical verification.
+    
+    This endpoint generates content and returns detailed logs showing:
+    1. Original z-scores from profile
+    2. Slider settings (baseline adjustments)
+    3. Modified z-scores after applying adjustments
+    4. STYLE_CONFIG generated from modified profile
+    5. Generated content
+    6. Measured LIWC scores from generated content
+    7. Validator deltas (measured vs adjusted profile)
+    
+    This allows empirical verification that:
+    - Moving slider in direction X pushes validator z-deltas in corresponding direction
+    - Preview "before/after" matches actual LIWC delta behavior on generated content
+    
+    - REQUIRES AUTHENTICATION AND OWNERSHIP
+    """
+    try:
+        from models import AuthorPersonality
+        from author_profile_service import AuthorProfileService
+        from profile_modifier import ProfileModifier
+        from author_voice_helper import generate_with_author_voice
+        from liwc_analyzer import analyze_text
+        import json
+        
+        # Verify ownership
+        personality = db.query(AuthorPersonality).filter(
+            AuthorPersonality.id == personality_id,
+            AuthorPersonality.user_id == current_user.id
+        ).first()
+        if not personality:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Author personality not found or access denied"
+            )
+        
+        # Load profile
+        service = AuthorProfileService()
+        original_profile = service.load_profile(personality_id, db)
+        
+        if not original_profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Profile not found. Extract profile from writing samples first."
+            )
+        
+        # Get content prompt
+        content_prompt = request_data.get("content_prompt", "Write a short post about innovation in technology.")
+        platform = request_data.get("platform", "linkedin")
+        
+        # Step 1: Log original z-scores
+        original_z_scores = {
+            category: {
+                "mean": score.mean,
+                "stdev": score.stdev,
+                "z": score.z
+            }
+            for category, score in original_profile.liwc_profile.categories.items()
+        }
+        
+        # Step 2: Get slider settings (baseline adjustments)
+        slider_settings = {}
+        if personality.baseline_adjustments_json:
+            try:
+                slider_settings = json.loads(personality.baseline_adjustments_json)
+            except json.JSONDecodeError:
+                pass
+        
+        # Step 3: Apply adjustments and get modified z-scores
+        modified_profile = original_profile
+        modified_z_scores = original_z_scores
+        if slider_settings:
+            modified_profile = ProfileModifier.apply_adjustments(
+                profile=original_profile,
+                adjustments=slider_settings,
+                adjustment_type="percentile"
+            )
+            modified_z_scores = {
+                category: {
+                    "mean": score.mean,
+                    "stdev": score.stdev,
+                    "z": score.z
+                }
+                for category, score in modified_profile.liwc_profile.categories.items()
+            }
+        
+        # Step 4: Generate content using author voice (this uses adjusted profile internally)
+        generated_text, style_config_block, metadata, validation_result = generate_with_author_voice(
+            content_prompt=content_prompt,
+            author_personality_id=personality_id,
+            platform=platform,
+            goal=request_data.get("goal", "content_generation"),
+            target_audience=request_data.get("target_audience", "general"),
+            custom_modifications=request_data.get("custom_modifications"),
+            use_validation=True,  # Enable validation to get deltas
+            db=db
+        )
+        
+        if not generated_text:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate content"
+            )
+        
+        # Step 5: Measure LIWC scores from generated content
+        measured_liwc = analyze_text(generated_text)
+        
+        # Step 6: Calculate z-scores for measured LIWC (using validator's method)
+        from author_related.validator import StyleValidator
+        validator = StyleValidator()
+        measured_z_scores = {}
+        for category, value in measured_liwc.items():
+            if category in original_profile.liwc_profile.categories:
+                measured_z_scores[category] = validator._z_score(category, value)
+        
+        # Step 7: Calculate deltas (measured vs adjusted profile)
+        validator_deltas = {}
+        for category in modified_profile.liwc_profile.categories.keys():
+            if category in measured_z_scores:
+                expected_z = modified_profile.liwc_profile.categories[category].z
+                actual_z = measured_z_scores[category]
+                delta_z = actual_z - expected_z
+                validator_deltas[category] = {
+                    "expected_z": expected_z,
+                    "actual_z": actual_z,
+                    "delta_z": delta_z,
+                    "abs_delta": abs(delta_z)
+                }
+        
+        # Step 8: Calculate adjustment deltas (how much sliders changed things)
+        adjustment_deltas = {}
+        for category in original_z_scores.keys():
+            original_z = original_z_scores[category]["z"]
+            modified_z = modified_z_scores[category]["z"]
+            adjustment_deltas[category] = {
+                "original_z": original_z,
+                "modified_z": modified_z,
+                "delta_z": modified_z - original_z
+            }
+        
+        # Step 9: Calculate correlation between adjustment direction and validator delta direction
+        # For each adjusted category, check if validator delta moved in same direction
+        correlation_analysis = {}
+        for category, adj_delta in adjustment_deltas.items():
+            if abs(adj_delta["delta_z"]) > 0.01 and category in validator_deltas:  # Only check adjusted categories
+                adj_direction = 1 if adj_delta["delta_z"] > 0 else -1
+                val_delta = validator_deltas[category]["delta_z"]
+                val_direction = 1 if val_delta > 0 else -1
+                
+                # Same direction = positive correlation
+                correlation_analysis[category] = {
+                    "adjustment_delta_z": adj_delta["delta_z"],
+                    "validator_delta_z": val_delta,
+                    "same_direction": (adj_direction * val_direction) > 0,
+                    "correlation": "positive" if (adj_direction * val_direction) > 0 else "negative"
+                }
+        
+        return {
+            "status": "success",
+            "personality_id": personality_id,
+            "content_prompt": content_prompt,
+            "platform": platform,
+            "chain_analysis": {
+                "step_1_original_z_scores": original_z_scores,
+                "step_2_slider_settings": slider_settings,
+                "step_3_modified_z_scores": modified_z_scores,
+                "step_4_style_config_block": style_config_block[:500] if style_config_block else None,  # Truncate for readability
+                "step_5_generated_content": generated_text[:500],  # Truncate for readability
+                "step_6_measured_liwc": measured_liwc,
+                "step_7_measured_z_scores": measured_z_scores,
+                "step_8_validator_deltas": validator_deltas,
+                "step_9_adjustment_deltas": adjustment_deltas,
+                "step_10_correlation_analysis": correlation_analysis
+            },
+            "summary": {
+                "categories_adjusted": len([d for d in adjustment_deltas.values() if abs(d["delta_z"]) > 0.01]),
+                "categories_with_validation": len(validator_deltas),
+                "avg_validator_delta": sum([abs(d["abs_delta"]) for d in validator_deltas.values()]) / len(validator_deltas) if validator_deltas else 0,
+                "correlation_matches": len([c for c in correlation_analysis.values() if c["same_direction"]]),
+                "correlation_total": len(correlation_analysis),
+                "correlation_rate": len([c for c in correlation_analysis.values() if c["same_direction"]]) / len(correlation_analysis) if correlation_analysis else 0
+            },
+            "validation_result": validation_result,
+            "metadata": metadata
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error in full-chain test: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to run full-chain test: {str(e)}"
+        )
+
 @app.post("/author_personalities/{personality_id}/validate-content")
 def validate_content(
     personality_id: str,

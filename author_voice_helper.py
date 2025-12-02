@@ -6,9 +6,11 @@ Follows Content-Machine-Integration-Guide.md approach.
 from typing import Optional, Dict, Any, Tuple
 from author_related import Planner, GeneratorHarness, AuthorProfile
 from author_profile_service import AuthorProfileService
+from profile_modifier import ProfileModifier
 from database import SessionLocal
 from langchain_openai import ChatOpenAI
 import os
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,33 @@ def generate_with_author_voice(
                 logger.error(f"Profile not found for author_personality_id: {author_personality_id}")
                 return None, None, None
             
+            # Step 1.5: Load and apply baseline adjustments if present
+            from models import AuthorPersonality
+            personality = db.query(AuthorPersonality).filter(
+                AuthorPersonality.id == author_personality_id
+            ).first()
+            
+            if personality and personality.baseline_adjustments_json:
+                try:
+                    adjustments = json.loads(personality.baseline_adjustments_json)
+                    if adjustments:
+                        # Validate adjustments
+                        is_valid, error_msg = ProfileModifier.validate_adjustments(adjustments, profile)
+                        if is_valid:
+                            # Apply adjustments to create modified profile
+                            profile = ProfileModifier.apply_adjustments(
+                                profile=profile,
+                                adjustments=adjustments,
+                                adjustment_type="percentile"
+                            )
+                            logger.info(f"Applied {len(adjustments)} baseline adjustments to profile")
+                        else:
+                            logger.warning(f"Invalid baseline adjustments: {error_msg}, using original profile")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse baseline_adjustments_json: {e}, using original profile")
+                except Exception as e:
+                    logger.warning(f"Error applying baseline adjustments: {e}, using original profile")
+            
             # Step 2: Map platform to adapter key
             adapter_key = get_adapter_key(platform)
             
@@ -137,7 +166,26 @@ Additional Platform-Specific Instructions:
             # Update planner output with merged scaffold
             planner_output.scaffold = final_scaffold
             
+            # Step 4.5: Load model config and adjust generation parameters
+            model_config = None
+            feature_weight = 0.7  # Default feature weight
+            if personality and personality.model_config_json:
+                try:
+                    model_config = json.loads(personality.model_config_json)
+                    feature_weight = model_config.get("featureWeight", 0.7)
+                    logger.info(f"Loaded model config: featureWeight={feature_weight}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse model_config_json: {e}, using defaults")
+                except Exception as e:
+                    logger.warning(f"Error loading model config: {e}, using defaults")
+            
             # Step 5: Use GeneratorHarness with existing LLM
+            # Adjust temperature based on featureWeight: higher weight = stricter style = lower temperature
+            # featureWeight 0.1 -> temperature 0.9 (more creative)
+            # featureWeight 1.0 -> temperature 0.3 (more strict/focused)
+            base_temperature = 0.7
+            adjusted_temperature = base_temperature * (1.0 - feature_weight * 0.6)  # Range: 0.28 to 0.7
+            
             def invoke_llm(prompt: str) -> str:
                 """Invoke LLM using existing ChatOpenAI setup"""
                 api_key = os.getenv("OPENAI_API_KEY")
@@ -146,10 +194,12 @@ Additional Platform-Specific Instructions:
                 
                 llm = ChatOpenAI(
                     model="gpt-4o-mini",
-                    temperature=0.7,
+                    temperature=adjusted_temperature,
                     api_key=api_key
                 )
                 return llm.invoke(prompt).content
+            
+            logger.info(f"Using temperature={adjusted_temperature:.2f} (featureWeight={feature_weight:.2f})")
             
             harness = GeneratorHarness(invoke_llm)
             result = harness.run(planner_output)
