@@ -243,6 +243,14 @@ scheduler = None
 TASKS: Dict[str, Dict[str, Any]] = {}
 CAMPAIGN_TASK_INDEX: Dict[str, str] = {}
 
+# In-memory content generation task tracking
+CONTENT_GEN_TASKS: Dict[str, Dict[str, Any]] = {}
+CONTENT_GEN_TASK_INDEX: Dict[str, str] = {}  # campaign_id -> task_id mapping
+
+# In-memory content generation task tracking
+CONTENT_GEN_TASKS: Dict[str, Dict[str, Any]] = {}
+CONTENT_GEN_TASK_INDEX: Dict[str, str] = {}  # campaign_id -> task_id mapping
+
 def get_db_manager():
     """Lazy database manager initialization"""
     global db_manager
@@ -6714,8 +6722,326 @@ async def generate_campaign_content(
     """
     Generate content for a campaign using content queue items as foundation.
     Updated to accept content_queue_items and use them as context.
+    Now runs in background with status tracking.
     """
     try:
+        # Create task for status tracking
+        task_id = str(uuid.uuid4())
+        platform = request_data.get("platform", "linkedin")
+        
+        CONTENT_GEN_TASKS[task_id] = {
+            "campaign_id": campaign_id,
+            "platform": platform,
+            "started_at": datetime.utcnow().isoformat(),
+            "progress": 0,
+            "status": "pending",
+            "current_agent": None,
+            "current_task": "Initializing content generation",
+            "agent_statuses": [],
+            "error": None,
+            "result": None,
+        }
+        
+        # Index by campaign_id for easy lookup
+        if campaign_id not in CONTENT_GEN_TASK_INDEX:
+            CONTENT_GEN_TASK_INDEX[campaign_id] = []
+        CONTENT_GEN_TASK_INDEX[campaign_id].append(task_id)
+        
+        logger.info(f"📝 Created content generation task: {task_id} for campaign {campaign_id}")
+        
+        # Run generation in background thread
+        def run_generation_background(tid: str, cid: str, req_data: Dict[str, Any], user_id: int):
+            try:
+                from database import SessionLocal
+                session = SessionLocal()
+                try:
+                    from models import Campaign
+                    from crewai_workflows import create_content_generation_crew
+                    import json
+                    
+                    # Helper to update task status
+                    def update_task_status(agent: str = None, task: str = None, progress: int = None, 
+                                          status: str = None, error: str = None, agent_status: str = "running"):
+                        if tid not in CONTENT_GEN_TASKS:
+                            return
+                        task_data = CONTENT_GEN_TASKS[tid]
+                        if agent:
+                            task_data["current_agent"] = agent
+                        if task:
+                            task_data["current_task"] = task
+                        if progress is not None:
+                            task_data["progress"] = progress
+                        if status:
+                            task_data["status"] = status
+                        if error:
+                            task_data["error"] = error
+                            task_data["status"] = "error"
+                        # Add to agent statuses
+                        if agent:
+                            task_data["agent_statuses"].append({
+                                "agent": agent,
+                                "task": task or "Processing",
+                                "status": agent_status,
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "error": error
+                            })
+                        logger.info(f"📊 Task {tid}: {progress}% - {agent} - {task}")
+                    
+                    update_task_status(progress=5, task="Initializing", status="in_progress")
+                    
+                    # Verify campaign ownership
+                    campaign = session.query(Campaign).filter(
+                        Campaign.campaign_id == cid,
+                        Campaign.user_id == user_id
+                    ).first()
+                    
+                    if not campaign:
+                        update_task_status(error="Campaign not found", status="error")
+                        return
+                    
+                    # Get content queue items
+                    content_queue_items = req_data.get("content_queue_items", [])
+                    if not content_queue_items and campaign.content_queue_items_json:
+                        content_queue_items = json.loads(campaign.content_queue_items_json)
+                    
+                    # Build context
+                    queue_context = "\n".join([
+                        f"- {item.get('title', item.get('text', str(item)))}"
+                        for item in content_queue_items
+                    ])
+                    
+                    # Get parameters
+                    platform = req_data.get("platform", "linkedin")
+                    week = req_data.get("week", 1)
+                    day = req_data.get("day", "Monday")
+                    parent_idea = req_data.get("parent_idea", "")
+                    author_personality_id = req_data.get("author_personality_id")
+                    use_author_voice = req_data.get("use_author_voice", True)
+                    use_validation = req_data.get("use_validation", False)
+                    
+                    # Build writing context
+                    writing_context = f"""Content Queue Foundation:
+{queue_context}
+
+{f'Parent Idea: {parent_idea}' if parent_idea else ''}
+
+Generate content for {platform} based on the content queue items above."""
+                    
+                    update_task_status(progress=10, task="Preparing content context")
+                    
+                    # Phase 3: Integrate author voice if author_personality_id is provided
+                    if author_personality_id and use_author_voice:
+                        from author_voice_helper import generate_with_author_voice, should_use_author_voice
+                        
+                        if should_use_author_voice(author_personality_id):
+                            update_task_status(
+                                agent="Author Voice Generator",
+                                task="Generating content with author personality",
+                                progress=20,
+                                status="in_progress"
+                            )
+                            
+                            # Get custom modifications
+                            custom_modifications = None
+                            if "platformSettings" in req_data:
+                                platform_settings = req_data.get("platformSettings", {})
+                                platform_lower = platform.lower()
+                                if platform_lower in platform_settings:
+                                    settings = platform_settings[platform_lower]
+                                    if not settings.get("useGlobalDefaults", True):
+                                        custom_modifications = settings.get("customModifications", "")
+                            
+                            # Generate with author voice
+                            try:
+                                generated_text, style_config, metadata, validation_result = generate_with_author_voice(
+                                    content_prompt=writing_context,
+                                    author_personality_id=author_personality_id,
+                                    platform=platform.lower(),
+                                    goal="content_generation",
+                                    target_audience="general",
+                                    custom_modifications=custom_modifications,
+                                    use_validation=use_validation,
+                                    db=session
+                                )
+                                
+                                update_task_status(
+                                    agent="Author Voice Generator",
+                                    task="Content generated successfully",
+                                    progress=80,
+                                    agent_status="completed"
+                                )
+                                
+                                if generated_text:
+                                    use_crewai_qc = req_data.get("use_crewai_qc", False)
+                                    
+                                    if use_crewai_qc:
+                                        update_task_status(
+                                            agent="CrewAI QC Agent",
+                                            task="Reviewing content quality",
+                                            progress=85,
+                                            status="in_progress"
+                                        )
+                                        
+                                        crew_result = create_content_generation_crew(
+                                            text=f"Review and refine this content:\n\n{generated_text}\n\nStyle Config:\n{style_config}",
+                                            week=week,
+                                            platform=platform.lower(),
+                                            days_list=[day],
+                                            author_personality=req_data.get("author_personality", "custom")
+                                        )
+                                        
+                                        update_task_status(
+                                            agent="CrewAI QC Agent",
+                                            task="Quality review completed",
+                                            progress=95,
+                                            agent_status="completed"
+                                        )
+                                        
+                                        if crew_result.get("success"):
+                                            response_data = {
+                                                **crew_result.get("data", {}),
+                                                "author_voice_used": True,
+                                                "style_config": style_config,
+                                                "author_voice_metadata": metadata
+                                            }
+                                            if validation_result:
+                                                response_data["validation"] = validation_result
+                                            CONTENT_GEN_TASKS[tid]["result"] = {
+                                                "status": "success",
+                                                "data": response_data,
+                                                "error": None
+                                            }
+                                            update_task_status(progress=100, status="completed", task="Content generation completed")
+                                            return
+                                    
+                                    # Return author voice content directly
+                                    response_data = {
+                                        "content": generated_text,
+                                        "title": "",
+                                        "author_voice_used": True,
+                                        "style_config": style_config,
+                                        "author_voice_metadata": metadata,
+                                        "platform": platform
+                                    }
+                                    if validation_result:
+                                        response_data["validation"] = validation_result
+                                    CONTENT_GEN_TASKS[tid]["result"] = {
+                                        "status": "success",
+                                        "data": response_data,
+                                        "error": None
+                                    }
+                                    update_task_status(progress=100, status="completed", task="Content generation completed")
+                                    return
+                            except Exception as av_error:
+                                logger.error(f"Author voice generation error: {av_error}")
+                                update_task_status(
+                                    agent="Author Voice Generator",
+                                    task=f"Error: {str(av_error)}",
+                                    error=str(av_error),
+                                    agent_status="error"
+                                )
+                                logger.warning(f"Author voice generation failed, falling back to CrewAI")
+                    
+                    # Fallback to CrewAI workflow
+                    update_task_status(
+                        agent="CrewAI Research Agent",
+                        task="Analyzing content and extracting themes",
+                        progress=30,
+                        status="in_progress"
+                    )
+                    
+                    crew_result = create_content_generation_crew(
+                        text=writing_context,
+                        week=week,
+                        platform=platform.lower(),
+                        days_list=[day],
+                        author_personality=req_data.get("author_personality")
+                    )
+                    
+                    update_task_status(
+                        agent="CrewAI Research Agent",
+                        task="Research completed",
+                        progress=50,
+                        agent_status="completed"
+                    )
+                    
+                    if crew_result.get("success"):
+                        # Track platform agent
+                        platform_agent_name = f"{platform.capitalize()} Writing Agent"
+                        update_task_status(
+                            agent=platform_agent_name,
+                            task="Creating platform-specific content",
+                            progress=70,
+                            status="in_progress"
+                        )
+                        
+                        # Track QC agents if present
+                        if "metadata" in crew_result and "agents_used" in crew_result["metadata"]:
+                            qc_agents = [a for a in crew_result["metadata"]["agents_used"] if "qc" in a.lower()]
+                            for qc_agent in qc_agents:
+                                update_task_status(
+                                    agent=qc_agent.replace("_", " ").title(),
+                                    task="Reviewing content quality",
+                                    progress=85,
+                                    agent_status="completed"
+                                )
+                        
+                        update_task_status(
+                            agent=platform_agent_name,
+                            task="Content created successfully",
+                            progress=95,
+                            agent_status="completed"
+                        )
+                        
+                        CONTENT_GEN_TASKS[tid]["result"] = {
+                            "status": "success",
+                            "data": crew_result.get("data"),
+                            "error": None
+                        }
+                        update_task_status(progress=100, status="completed", task="Content generation completed")
+                    else:
+                        error_msg = crew_result.get("error", "Unknown error")
+                        update_task_status(
+                            agent="CrewAI Workflow",
+                            task=f"Error: {error_msg}",
+                            error=error_msg,
+                            agent_status="error",
+                            status="error"
+                        )
+                        
+                except Exception as bg_error:
+                    logger.error(f"Background generation error: {bg_error}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+                    if tid in CONTENT_GEN_TASKS:
+                        CONTENT_GEN_TASKS[tid]["error"] = str(bg_error)
+                        CONTENT_GEN_TASKS[tid]["status"] = "error"
+                        CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {str(bg_error)}"
+                finally:
+                    session.close()
+            except Exception as outer_error:
+                logger.error(f"Outer background error: {outer_error}")
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["error"] = str(outer_error)
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+        
+        # Start background thread
+        import threading
+        thread = threading.Thread(
+            target=run_generation_background,
+            args=(task_id, campaign_id, request_data, current_user.id),
+            daemon=True
+        )
+        thread.start()
+        
+        # Return task_id immediately
+        return {
+            "status": "pending",
+            "task_id": task_id,
+            "message": "Content generation started. Use task_id to poll status."
+        }
+        
+    except Exception as e:
         from models import Campaign
         from crewai_workflows import create_content_generation_crew
         import json
@@ -6861,6 +7187,60 @@ Generate content for {platform} based on the content queue items above."""
         logger.error(f"Error generating campaign content: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/campaigns/{campaign_id}/generate-content/status/{task_id}")
+async def get_content_generation_status(
+    campaign_id: str,
+    task_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get status of content generation task.
+    """
+    try:
+        from models import Campaign
+        
+        # Verify campaign ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        if task_id not in CONTENT_GEN_TASKS:
+            return {
+                "status": "pending",
+                "progress": 0,
+                "current_agent": None,
+                "current_task": "Waiting for task",
+                "agent_statuses": [],
+                "error": None
+            }
+        
+        task = CONTENT_GEN_TASKS[task_id]
+        
+        # If task is completed and has result, include it
+        response = {
+            "status": task.get("status", "pending"),
+            "progress": task.get("progress", 0),
+            "current_agent": task.get("current_agent"),
+            "current_task": task.get("current_task", "Processing"),
+            "agent_statuses": task.get("agent_statuses", []),
+            "error": task.get("error")
+        }
+        
+        # If completed, include result
+        if task.get("status") == "completed" and task.get("result"):
+            response["result"] = task.get("result")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error getting content generation status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
