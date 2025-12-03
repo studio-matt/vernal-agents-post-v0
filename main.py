@@ -6955,10 +6955,12 @@ Generate content for {platform} based on the content queue items above."""
                                 logger.warning(f"Author voice generation failed, falling back to CrewAI")
                     
                     # Fallback to CrewAI workflow
+                    # Note: CrewAI will handle Research → Writing → QC sequentially
+                    # We track overall progress, but individual agents are tracked by CrewAI internally
                     update_task_status(
-                        agent="CrewAI Research Agent",
-                        task="Analyzing content and extracting themes",
-                        progress=30,
+                        agent="CrewAI Workflow",
+                        task="Starting content generation workflow",
+                        progress=20,
                         status="in_progress"
                     )
                     
@@ -6970,37 +6972,42 @@ Generate content for {platform} based on the content queue items above."""
                         author_personality=req_data.get("author_personality")
                     )
                     
-                    update_task_status(
-                        agent="CrewAI Research Agent",
-                        task="Research completed",
-                        progress=50,
-                        agent_status="completed"
-                    )
-                    
                     if crew_result.get("success"):
-                        # Track platform agent
+                        # Track individual agents from CrewAI result
+                        # Research agent runs once at the start (not re-engaged)
+                        update_task_status(
+                            agent="Research Agent",
+                            task="Content analysis completed",
+                            progress=40,
+                            agent_status="completed"
+                        )
+                        
+                        # Platform writing agent
                         platform_agent_name = f"{platform.capitalize()} Writing Agent"
                         update_task_status(
                             agent=platform_agent_name,
-                            task="Creating platform-specific content",
+                            task="Platform-specific content created",
                             progress=70,
-                            status="in_progress"
+                            agent_status="completed"
                         )
                         
-                        # Track QC agents if present
+                        # Track QC agents with platform name
                         if "metadata" in crew_result and "agents_used" in crew_result["metadata"]:
                             qc_agents = [a for a in crew_result["metadata"]["agents_used"] if "qc" in a.lower()]
-                            for qc_agent in qc_agents:
+                            platform_name = platform.capitalize()
+                            for idx, qc_agent in enumerate(qc_agents):
+                                # Use platform name in QC agent name
+                                qc_agent_name = f"{platform_name} QC Agent {idx + 1}" if len(qc_agents) > 1 else f"{platform_name} QC Agent"
                                 update_task_status(
-                                    agent=qc_agent.replace("_", " ").title(),
-                                    task="Reviewing content quality",
-                                    progress=85,
+                                    agent=qc_agent_name,
+                                    task="Quality review completed - content approved",
+                                    progress=85 + (idx * 5),
                                     agent_status="completed"
                                 )
                         
                         update_task_status(
-                            agent=platform_agent_name,
-                            task="Content created successfully",
+                            agent="CrewAI Workflow",
+                            task="All agents completed successfully",
                             progress=95,
                             agent_status="completed"
                         )

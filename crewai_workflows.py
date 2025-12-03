@@ -303,13 +303,27 @@ def create_content_generation_crew(
                 qc_description = qc_task_desc.description
                 qc_expected_output = qc_task_desc.expected_output
                 
+                # Get platform-friendly name for QC agent
+                platform_name = platform.capitalize()
+                # Use agent role if available, otherwise create descriptive name
+                base_name = qc_agent_obj.role or "QC Agent"
+                # Always prefix with platform name for clarity
+                if not base_name.startswith(platform_name):
+                    qc_agent_name = f"{platform_name} {base_name}"
+                else:
+                    qc_agent_name = base_name
+                
+                # If multiple QC agents, add number
+                if len(qc_agents_list) > 1:
+                    qc_agent_name = f"{qc_agent_name} {idx + 1}"
+                
                 # For multiple QC agents, each reviews the previous output
                 if idx == 0:
                     # First QC agent reviews writing agent output
                     qc_input_description = "the content created by the writing agent"
                 else:
                     # Subsequent QC agents review previous QC agent output
-                    qc_input_description = f"the content reviewed by QC Agent {idx}"
+                    qc_input_description = f"the content reviewed by the previous QC agent"
                 
                 qc_task = Task(
                     description=f"""{qc_description}
@@ -322,6 +336,7 @@ def create_content_generation_crew(
                     - Accuracy and relevance to the original research
                     
                     The content is based on the research output. Review it thoroughly and provide refined content.
+                    If the content passes all quality checks, return it as-is. If issues are found, provide specific feedback and revised content.
                     """,
                     expected_output=qc_expected_output,
                     agent=qc_agent_obj
@@ -360,7 +375,9 @@ def create_content_generation_crew(
         )
         
         # Execute the crew
-        logger.info(f"🚀 Starting CrewAI workflow: Research → {platform} Writing → QC")
+        # Note: Research agent runs ONCE at the start, then Writing → QC sequentially
+        # CrewAI's sequential process ensures research is not re-engaged after QC feedback
+        logger.info(f"🚀 Starting CrewAI workflow: Research (once) → {platform} Writing → QC")
         result = crew.kickoff(inputs={
             "text": text,
             "week": week,
