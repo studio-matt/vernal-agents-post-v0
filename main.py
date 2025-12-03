@@ -6816,14 +6816,26 @@ async def generate_campaign_content(
                     day = req_data.get("day", "Monday")
                     parent_idea = req_data.get("parent_idea", "")
                     author_personality_id = req_data.get("author_personality_id")
+                    brand_personality_id = req_data.get("brand_personality_id")  # NEW: Support brand personality
                     use_author_voice = req_data.get("use_author_voice", True)
                     use_validation = req_data.get("use_validation", False)
+                    
+                    # Get brand personality guidelines if provided
+                    brand_guidelines = ""
+                    if brand_personality_id:
+                        from models import BrandPersonality
+                        brand_personality = session.query(BrandPersonality).filter(
+                            BrandPersonality.id == brand_personality_id,
+                            BrandPersonality.user_id == user_id
+                        ).first()
+                        if brand_personality and brand_personality.guidelines:
+                            brand_guidelines = f"\n\nBrand Voice Guidelines:\n{brand_personality.guidelines}"
                     
                     # Build writing context
                     writing_context = f"""Content Queue Foundation:
 {queue_context}
 
-{f'Parent Idea: {parent_idea}' if parent_idea else ''}
+{f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}
 
 Generate content for {platform} based on the content queue items above."""
                     

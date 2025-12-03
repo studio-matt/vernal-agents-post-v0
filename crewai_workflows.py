@@ -296,32 +296,59 @@ def create_content_generation_crew(
         finally:
             db.close()
         
-        # If we have multiple QC agents, we'll use the first one for the task
-        # In the future, we could create multiple QC tasks for multiple QC agents
-        primary_qc_agent = qc_agents_list[0] if qc_agents_list else qc_agent
-        
-        qc_description = qc_task_desc.description
-        qc_expected_output = qc_task_desc.expected_output
-        
-        qc_task = Task(
-            description=f"""{qc_description}
-            
-            Review the content created by the writing agent for:
-            - Quality and clarity
-            - Platform-specific requirements ({platform})
-            - Compliance with guidelines
-            - Author personality match ({author_personality or 'professional'})
-            - Accuracy and relevance to the original research
-            
-            The writing agent has created content based on the research. Review it thoroughly.
-            """,
-            expected_output=qc_expected_output,
-            agent=primary_qc_agent
-        )
+        # Create QC tasks for ALL QC agents (not just the first one)
+        qc_tasks = []
+        if qc_agents_list:
+            for idx, qc_agent_obj in enumerate(qc_agents_list):
+                qc_description = qc_task_desc.description
+                qc_expected_output = qc_task_desc.expected_output
+                
+                # For multiple QC agents, each reviews the previous output
+                if idx == 0:
+                    # First QC agent reviews writing agent output
+                    qc_input_description = "the content created by the writing agent"
+                else:
+                    # Subsequent QC agents review previous QC agent output
+                    qc_input_description = f"the content reviewed by QC Agent {idx}"
+                
+                qc_task = Task(
+                    description=f"""{qc_description}
+                    
+                    Review {qc_input_description} for:
+                    - Quality and clarity
+                    - Platform-specific requirements ({platform})
+                    - Compliance with guidelines
+                    - Author personality match ({author_personality or 'professional'})
+                    - Accuracy and relevance to the original research
+                    
+                    The content is based on the research output. Review it thoroughly and provide refined content.
+                    """,
+                    expected_output=qc_expected_output,
+                    agent=qc_agent_obj
+                )
+                qc_tasks.append(qc_task)
+        else:
+            # Fallback to default QC agent
+            qc_task = Task(
+                description=f"""{qc_task_desc.description}
+                
+                Review the content created by the writing agent for:
+                - Quality and clarity
+                - Platform-specific requirements ({platform})
+                - Compliance with guidelines
+                - Author personality match ({author_personality or 'professional'})
+                - Accuracy and relevance to the original research
+                
+                The writing agent has created content based on the research. Review it thoroughly.
+                """,
+                expected_output=qc_task_desc.expected_output,
+                agent=qc_agent
+            )
+            qc_tasks.append(qc_task)
         
         # Build agents list: research + writing + all QC agents
         all_agents = [script_research_agent, writing_agent] + qc_agents_list
-        all_tasks = [research_task, writing_task, qc_task]
+        all_tasks = [research_task, writing_task] + qc_tasks
         
         # Create Crew with sequential process
         crew = Crew(
