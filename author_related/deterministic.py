@@ -32,37 +32,111 @@ def _sentences(text: str) -> list[str]:
     return [segment.strip() for segment in re.split(r"(?<=[.!?])\s+", text) if segment.strip()]
 
 
+def _paragraphs(text: str) -> list[str]:
+    """Split text into paragraphs for windowed analysis."""
+    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
+def _bucket_sentence_length(word_count: int) -> str:
+    """Bucket sentence lengths into categories for cadence patterns.
+    
+    Increased granularity: finer buckets to avoid tight cadence windows.
+    """
+    if word_count <= 8:
+        return "very_short"
+    elif word_count <= 15:
+        return "short"
+    elif word_count <= 22:
+        return "medium"
+    elif word_count <= 30:
+        return "long"
+    elif word_count <= 40:
+        return "very_long"
+    else:
+        return "extremely_long"
+
+
 def enforce_cadence(text: str, pattern: str, max_run: int) -> tuple[str, int]:
-    """Ensure sentence-length cadence stays within the configured run.
+    """Ensure sentence-length cadence stays within the configured run using bucketed lengths.
 
     Returns the potentially adjusted text and the number of sentences that
     exceeded the allowed run.
+    
+    Improved: Uses bucketed sentence lengths for better cadence pattern enforcement.
     """
     sentences = _sentences(text)
-    long_sentences = [s for s in sentences if len(s.split()) > 28]
+    sentence_buckets = [_bucket_sentence_length(len(s.split())) for s in sentences]
+    
+    # Parse pattern like "3_long_1_short" to understand expected cadence
+    pattern_parts = pattern.split("_")
+    expected_buckets = []
+    i = 0
+    while i < len(pattern_parts):
+        if pattern_parts[i].isdigit():
+            count = int(pattern_parts[i])
+            if i + 1 < len(pattern_parts):
+                bucket_type = pattern_parts[i + 1]
+                expected_buckets.extend([bucket_type] * count)
+                i += 2
+            else:
+                i += 1
+        else:
+            i += 1
+    
     errors = 0
-    if len(long_sentences) > max_run:
-        errors = len(long_sentences) - max_run
-        sentences = [" ".join(s.split()[:28]) + "..." if len(s.split()) > 28 else s for s in sentences]
-    adjusted = " ".join(sentences)
+    adjusted_sentences = []
+    run_count = 0
+    last_bucket = None
+    
+    for i, (sentence, bucket) in enumerate(zip(sentences, sentence_buckets)):
+        # Check for runs of same bucket type
+        if bucket == last_bucket and bucket in ("very_long", "extremely_long"):
+            run_count += 1
+            if run_count > max_run:
+                # Truncate extremely long sentences
+                words = sentence.split()
+                if len(words) > 30:
+                    adjusted_sentences.append(" ".join(words[:30]) + "...")
+                    errors += 1
+                else:
+                    adjusted_sentences.append(sentence)
+            else:
+                adjusted_sentences.append(sentence)
+        else:
+            run_count = 1 if bucket == last_bucket else 0
+            adjusted_sentences.append(sentence)
+        last_bucket = bucket
+    
+    adjusted = " ".join(adjusted_sentences)
     return adjusted, errors
 
 
 def enforce_pronoun_distance(text: str, pronoun_distance: str) -> tuple[str, int]:
-    """Count pronoun drift relative to the configured distance."""
+    """Count pronoun drift relative to the configured distance using paragraph-windowed checks.
+    
+    Improved: Checks pronoun drift within paragraph windows rather than globally.
+    """
     pronouns = {
         "we": {"we", "our", "ours"},
         "you": {"you", "your", "yours"},
         "i": {"i", "me", "my", "mine"},
     }
     target = pronouns.get(pronoun_distance, set())
-    tokens = re.findall(r"\b\w+\b", text.lower())
-    drift = sum(
-        1
-        for token in tokens
-        if token in {"i", "me", "my", "mine", "you", "your", "yours", "we", "our", "ours"} and token not in target
-    )
-    return text, drift
+    
+    # Split into paragraphs for windowed analysis
+    paragraphs = _paragraphs(text)
+    total_drift = 0
+    
+    for para in paragraphs:
+        tokens = re.findall(r"\b\w+\b", para.lower())
+        para_drift = sum(
+            1
+            for token in tokens
+            if token in {"i", "me", "my", "mine", "you", "your", "yours", "we", "our", "ours"} and token not in target
+        )
+        total_drift += para_drift
+    
+    return text, total_drift
 
 
 def enforce_empathy(text: str, empathy_target: str) -> tuple[str, int]:
@@ -71,11 +145,58 @@ def enforce_empathy(text: str, empathy_target: str) -> tuple[str, int]:
     return text, max(desired_frequency - hits, 0)
 
 
+def _get_word_stem(word: str) -> str:
+    """Extract stem from word for alignment checking."""
+    word_lower = word.lower()
+    # Common suffixes to remove for stem alignment
+    suffixes = ["ing", "ed", "er", "est", "ly", "s", "es", "tion", "sion", "ness", "ment"]
+    for suffix in suffixes:
+        if word_lower.endswith(suffix) and len(word_lower) > len(suffix) + 2:
+            return word_lower[:-len(suffix)]
+    return word_lower
+
+
+def _is_likely_noun_or_verb(word: str) -> tuple[bool, bool]:
+    """Heuristic to identify noun/verb candidates using suffix patterns."""
+    word_lower = word.lower()
+    # Verb indicators
+    is_verb = (
+        word_lower.endswith("ing") or
+        word_lower.endswith("ed") or
+        word_lower.endswith("es") or
+        (word_lower.endswith("s") and len(word_lower) > 3)
+    )
+    # Noun indicators (common noun suffixes)
+    is_noun = (
+        word_lower.endswith("tion") or
+        word_lower.endswith("sion") or
+        word_lower.endswith("ness") or
+        word_lower.endswith("ment") or
+        word_lower.endswith("ity") or
+        word_lower.endswith("er") or
+        word_lower.endswith("or")
+    )
+    return is_noun, is_verb
+
+
 def enforce_metaphors(text: str, allowed_stems: Iterable[str]) -> tuple[str, int]:
+    """Enforce metaphor usage with stem-aligned noun/verb candidate detection.
+    
+    Improved: Focuses on stem-aligned noun/verb candidates rather than all words.
+    """
+    allowed_stem_set = {_get_word_stem(stem) for stem in allowed_stems}
     errors = 0
-    for metaphor in re.findall(r"\b([a-zA-Z]{4,})\b", text):
-        if metaphor.lower() not in {stem.lower() for stem in allowed_stems}:
+    
+    # Find potential metaphor words (longer words that could be metaphors)
+    words = re.findall(r"\b([a-zA-Z]{5,})\b", text)
+    for word in words:
+        word_stem = _get_word_stem(word)
+        is_noun, is_verb = _is_likely_noun_or_verb(word)
+        
+        # Only check noun/verb candidates
+        if (is_noun or is_verb) and word_stem not in allowed_stem_set:
             errors += 1
+    
     return text, errors
 
 

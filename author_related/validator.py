@@ -16,7 +16,24 @@ class StyleValidator:
         self.loader = loader or AssetLoader()
         self.baselines = self.loader.load_liwc_baselines()
 
-    def _z_score(self, category: str, value: float) -> float:
+    def _z_score(self, category: str, value: float, domain: str | None = None) -> float:
+        """Calculate z-score with optional domain-aware baselines.
+        
+        Improved: Domain-aware LIWC validation with context-specific z-scores.
+        """
+        # Try domain-specific baseline first if domain is provided
+        if domain:
+            try:
+                domain_baselines = self.loader.load_domain_baselines()
+                domain_key = f"LWC{domain}" if not domain.startswith("LWC") else domain
+                if domain_key in domain_baselines:
+                    mean, stdev = domain_baselines[domain_key]
+                    stdev = stdev if stdev > 0 else 1.0
+                    return (value - mean) / stdev
+            except Exception:
+                pass  # Fall back to global baseline
+        
+        # Fall back to global LIWC baseline
         baseline = self.baselines.get(category, {"mean": 0.0, "stdev": 1.0})
         stdev = baseline.get("stdev", 1.0) or 1.0
         return (value - baseline.get("mean", 0.0)) / stdev
@@ -32,19 +49,24 @@ class StyleValidator:
         return findings
 
     def compare_liwc(
-        self, profile: AuthorProfile, measured: Mapping[str, float]
+        self, profile: AuthorProfile, measured: Mapping[str, float], domain: str | None = None
     ) -> tuple[dict[str, float], list[ValidationFinding]]:
+        """Compare LIWC scores with domain-aware validation.
+        
+        Improved: Uses domain-aware LIWC validation with context-specific z-scores.
+        """
         deltas: dict[str, float] = {}
         findings: list[ValidationFinding] = []
         for category, expected in profile.liwc_profile.categories.items():
-            actual_z = self._z_score(category, measured.get(category, expected.mean))
+            actual_z = self._z_score(category, measured.get(category, expected.mean), domain)
             delta = abs(actual_z - expected.z)
             deltas[category] = delta
             if delta > profile.tolerance.liwc_z:
+                domain_context = f" (domain: {domain})" if domain else ""
                 findings.append(
                     ValidationFinding(
                         category,
-                        f"LIWC z-score drift {delta:.2f} exceeds tolerance {profile.tolerance.liwc_z}",
+                        f"LIWC z-score drift {delta:.2f} exceeds tolerance {profile.tolerance.liwc_z}{domain_context}",
                         "warning",
                     )
                 )
@@ -56,7 +78,12 @@ class StyleValidator:
         config: StyleConfig,
         profile: AuthorProfile,
         measured_liwc: Mapping[str, float],
+        domain: str | None = None,
     ) -> ValidationReport:
+        """Validate output with domain-aware LIWC validation.
+        
+        Improved: Supports domain-aware validation with context-specific z-scores.
+        """
         style_findings = self.validate_style_config(config)
         enforced, deterministic_counts, enforcement_findings = enforce_all(
             text,
@@ -66,7 +93,7 @@ class StyleValidator:
             config.lexicon_hints.get("metaphor_stems", []) if config.lexicon_hints else profile.lexicon.metaphor_stems,
             profile.tolerance.sentence_length_max_run,
         )
-        liwc_deltas, liwc_findings = self.compare_liwc(profile, measured_liwc)
+        liwc_deltas, liwc_findings = self.compare_liwc(profile, measured_liwc, domain)
         findings = style_findings + enforcement_findings + liwc_findings
         return ValidationReport(
             findings=findings,
