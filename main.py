@@ -7017,6 +7017,15 @@ Generate content for {platform} based on the content queue items above."""
                             "data": crew_result.get("data"),
                             "error": None
                         }
+                        # Mark all agents as completed before final status update
+                        if "agent_statuses" in CONTENT_GEN_TASKS[tid]:
+                            for agent_status in CONTENT_GEN_TASKS[tid]["agent_statuses"]:
+                                if agent_status.get("status") == "running":
+                                    agent_status["status"] = "completed"
+                                    agent_status["agent_status"] = "completed"
+                        # Clear current agent/task when completed
+                        CONTENT_GEN_TASKS[tid]["current_agent"] = None
+                        CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
                         update_task_status(progress=100, status="completed", task="Content generation completed")
                     else:
                         error_msg = crew_result.get("error", "Unknown error")
