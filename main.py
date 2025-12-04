@@ -7251,18 +7251,28 @@ async def get_content_generation_status(
         
         task = CONTENT_GEN_TASKS[task_id]
         
+        # If task is completed, clear current_agent and current_task
+        task_status = task.get("status", "pending")
+        if task_status == "completed":
+            # Clear current agent/task when completed
+            current_agent = None
+            current_task = "Content generation completed"
+        else:
+            current_agent = task.get("current_agent")
+            current_task = task.get("current_task", "Processing")
+        
         # If task is completed and has result, include it
         response = {
-            "status": task.get("status", "pending"),
+            "status": task_status,
             "progress": task.get("progress", 0),
-            "current_agent": task.get("current_agent"),
-            "current_task": task.get("current_task", "Processing"),
+            "current_agent": current_agent,
+            "current_task": current_task,
             "agent_statuses": task.get("agent_statuses", []),
             "error": task.get("error")
         }
         
         # If completed, include result
-        if task.get("status") == "completed" and task.get("result"):
+        if task_status == "completed" and task.get("result"):
             response["result"] = task.get("result")
         
         return response
