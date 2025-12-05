@@ -7495,24 +7495,47 @@ async def generate_image_machine_content_get(
     db: Session = Depends(get_db)
 ):
     """GET endpoint for image generation (backward compatibility)"""
-    # Create a mock request object for GET
-    from fastapi import Request
-    from starlette.requests import Request as StarletteRequest
-    from starlette.datastructures import QueryParams
-    
-    class MockRequest:
-        def __init__(self, query_params_dict):
-            self.query_params = QueryParams(query_params_dict)
+    try:
+        # Import image generation function
+        try:
+            from tools import generate_image
+        except ImportError:
+            logger.error("Could not import generate_image from tools")
+            raise HTTPException(
+                status_code=500,
+                detail="Image generation service not available"
+            )
         
-        async def json(self):
-            raise ValueError("Not a JSON request")
-    
-    mock_request = MockRequest({"id": id, "query": query})
-    return await generate_image_machine_content_endpoint(
-        request=mock_request,
-        current_user=current_user,
-        db=db
-    )
+        # Build prompt from article content (query parameter)
+        article_content = query
+        article_summary = article_content[:300].strip() if len(article_content) > 300 else article_content.strip()
+        final_prompt = f"{article_summary}. Create a relevant, visually appealing image."
+        
+        logger.info(f"🖼️ Generating image (GET) with prompt: {final_prompt[:200]}...")
+        
+        # Generate image
+        try:
+            image_url = generate_image(query=article_content, content=final_prompt)
+            
+            return {
+                "status": "success",
+                "image_url": image_url,
+                "message": image_url
+            }
+        except Exception as img_error:
+            logger.error(f"Error generating image: {img_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate image: {str(img_error)}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in generate_image_machine_content GET endpoint: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
