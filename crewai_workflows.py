@@ -160,12 +160,17 @@ def create_content_generation_crew(
     week: int = 1,
     platform: str = "linkedin",
     days_list: Optional[list] = None,
-    author_personality: Optional[str] = None
+    author_personality: Optional[str] = None,
+    update_task_status_callback: Optional[callable] = None
 ) -> Dict[str, Any]:
     """
-    Create and execute a CrewAI workflow for content generation.
+    Create and execute an ITERATIVE CrewAI workflow for content generation.
     
-    Flow: Research Agent → Writing Agent → QC Agent
+    Flow: Research Agent → Writing Agent → QC Agent (iterative loop)
+    - Research runs once
+    - Writing creates content
+    - QC reviews and can REJECT with feedback, sending back to Writing
+    - Loop continues until QC APPROVES or rejection limit reached
     
     Args:
         text: Input text to analyze
@@ -173,6 +178,7 @@ def create_content_generation_crew(
         platform: Target platform (linkedin, twitter, etc.)
         days_list: List of days for subcontent
         author_personality: Author personality style
+        update_task_status_callback: Optional callback to update task status (for progress tracking)
         
     Returns:
         Dict with success status, data, and metadata
@@ -221,7 +227,8 @@ def create_content_generation_crew(
             {text}
             """,
             expected_output=research_expected_output,
-            agent=script_research_agent
+            agent=script_research_agent,
+            verbose=True  # Enable verbose logging for this task
         )
         
         # Task 2: Writing Agent - Create platform-specific content from research
@@ -239,7 +246,8 @@ def create_content_generation_crew(
             The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.
             """,
             expected_output=writing_expected_output,
-            agent=writing_agent
+            agent=writing_agent,
+            verbose=True  # Enable verbose logging for this task
         )
         
         # Task 3: QC Agent(s) - Review the written content
@@ -339,7 +347,8 @@ def create_content_generation_crew(
                     If the content passes all quality checks, return it as-is. If issues are found, provide specific feedback and revised content.
                     """,
                     expected_output=qc_expected_output,
-                    agent=qc_agent_obj
+                    agent=qc_agent_obj,
+                    verbose=True  # Enable verbose logging for this task
                 )
                 qc_tasks.append(qc_task)
         else:
@@ -357,28 +366,29 @@ def create_content_generation_crew(
                 The writing agent has created content based on the research. Review it thoroughly.
                 """,
                 expected_output=qc_task_desc.expected_output,
-                agent=qc_agent
+                agent=qc_agent,
+                verbose=True  # Enable verbose logging for this task
             )
             qc_tasks.append(qc_task)
         
-        # Build agents list: research + writing + all QC agents
-        all_agents = [script_research_agent, writing_agent] + qc_agents_list
-        all_tasks = [research_task, writing_task] + qc_tasks
+        # STEP 1: Run Research Agent ONCE (never re-engaged)
+        logger.info(f"🔬 Step 1: Running Research Agent (one-time)")
+        if update_task_status_callback:
+            update_task_status_callback(
+                agent="Research Agent",
+                task="Analyzing content and extracting themes",
+                progress=20,
+                agent_status="running"
+            )
         
-        # Create Crew with sequential process
-        crew = Crew(
-            agents=all_agents,
-            tasks=all_tasks,
-            process=Process.sequential,  # Research → Writing → QC
+        research_crew = Crew(
+            agents=[script_research_agent],
+            tasks=[research_task],
+            process=Process.sequential,
             verbose=True,
-            memory=True  # Agents remember previous interactions
+            memory=True
         )
-        
-        # Execute the crew
-        # Note: Research agent runs ONCE at the start, then Writing → QC sequentially
-        # CrewAI's sequential process ensures research is not re-engaged after QC feedback
-        logger.info(f"🚀 Starting CrewAI workflow: Research (once) → {platform} Writing → QC")
-        result = crew.kickoff(inputs={
+        research_result = research_crew.kickoff(inputs={
             "text": text,
             "week": week,
             "platform": platform,
@@ -386,15 +396,380 @@ def create_content_generation_crew(
             "author_personality": author_personality or "professional"
         })
         
+        # Extract research output
+        research_output = None
+        if hasattr(research_result, 'tasks_output') and research_result.tasks_output:
+            research_output = research_result.tasks_output[0]
+        elif hasattr(research_result, 'raw'):
+            research_output = research_result.raw
+        else:
+            research_output = str(research_result)
+        
+        if update_task_status_callback:
+            update_task_status_callback(
+                agent="Research Agent",
+                task="Content analysis completed",
+                progress=30,
+                agent_status="completed"
+            )
+        
+        # STEP 2: ITERATIVE Writing → QC Loop
+        # Get rejection limits for QC agents
+        db = SessionLocal()
+        qc_rejection_limits = {}
+        try:
+            # Get QC agent IDs to look up rejection limits
+            agents_list_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "qc_agents_list"
+            ).first()
+            if agents_list_setting and agents_list_setting.setting_value:
+                try:
+                    qc_agent_ids = json.loads(agents_list_setting.setting_value)
+                    for qc_agent_id in qc_agent_ids:
+                        reject_after_setting = db.query(SystemSettings).filter(
+                            SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_reject_after"
+                        ).first()
+                        if reject_after_setting and reject_after_setting.setting_value:
+                            qc_rejection_limits[qc_agent_id] = int(reject_after_setting.setting_value)
+                        else:
+                            qc_rejection_limits[qc_agent_id] = 5  # Default limit
+                except json.JSONDecodeError:
+                    pass
+        finally:
+            db.close()
+        
+        # Initialize iteration tracking
+        iteration_count = 0
+        max_iterations = max(qc_rejection_limits.values()) if qc_rejection_limits else 5
+        current_content = None
+        qc_feedback_history = []
+        rejection_counts = {}  # Track rejections per QC agent
+        
+        logger.info(f"🔄 Starting iterative Writing → QC loop (max {max_iterations} iterations)")
+        
+        while iteration_count < max_iterations:
+            iteration_count += 1
+            logger.info(f"📝 Iteration {iteration_count}/{max_iterations}: Writing Agent creating content")
+            
+            if update_task_status_callback:
+                update_task_status_callback(
+                    agent=f"{platform.capitalize()} Writing Agent",
+                    task=f"Creating platform-specific content (Iteration {iteration_count})" + (f"\n\nQC Feedback:\n{qc_feedback_history[-1]}" if qc_feedback_history else ""),
+                    progress=40 + (iteration_count * 5),
+                    agent_status="running"
+                )
+            
+            # Create writing task with research output and any QC feedback
+            writing_task_iter = Task(
+                description=f"""{writing_description}
+                
+                Use the research output from the research agent to create {platform}-specific content.
+                Platform: {platform}
+                Author personality: {author_personality or 'professional'}
+                Week: {week}
+                
+                Research Output:
+                {research_output}
+                
+                {f'QC Feedback from Previous Review:\n{qc_feedback_history[-1]}\n\nPlease address the feedback and revise the content accordingly.' if qc_feedback_history else 'The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.'}
+                """,
+                expected_output=writing_expected_output,
+                agent=writing_agent,
+                verbose=True
+            )
+            
+            # Execute writing agent
+            writing_crew = Crew(
+                agents=[writing_agent],
+                tasks=[writing_task_iter],
+                process=Process.sequential,
+                verbose=True,
+                memory=True
+            )
+            writing_result = writing_crew.kickoff(inputs={
+                "text": text,
+                "week": week,
+                "platform": platform,
+                "days_list": days_list,
+                "author_personality": author_personality or "professional"
+            })
+            
+            # Extract writing output
+            if hasattr(writing_result, 'tasks_output') and writing_result.tasks_output:
+                current_content = writing_result.tasks_output[0]
+            elif hasattr(writing_result, 'raw'):
+                current_content = writing_result.raw
+            else:
+                current_content = str(writing_result)
+            
+            if update_task_status_callback:
+                update_task_status_callback(
+                    agent=f"{platform.capitalize()} Writing Agent",
+                    task="Content created, sending to QC for review",
+                    progress=50 + (iteration_count * 5),
+                    agent_status="completed"
+                )
+            
+            # STEP 3: QC Agent Review (with structured approval/rejection)
+            logger.info(f"🔍 Iteration {iteration_count}: QC Agent reviewing content")
+            
+            # Get the first QC agent (for now, we'll use the primary QC agent)
+            primary_qc_agent = qc_agents_list[0] if qc_agents_list else qc_agent
+            primary_qc_agent_id = None
+            
+            # Find QC agent ID for rejection limit tracking
+            db = SessionLocal()
+            try:
+                agents_list_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == "qc_agents_list"
+                ).first()
+                if agents_list_setting and agents_list_setting.setting_value:
+                    try:
+                        qc_agent_ids = json.loads(agents_list_setting.setting_value)
+                        if qc_agent_ids:
+                            primary_qc_agent_id = qc_agent_ids[0]
+                    except json.JSONDecodeError:
+                        pass
+            finally:
+                db.close()
+            
+            # Get rejection limit for this QC agent
+            rejection_limit = qc_rejection_limits.get(primary_qc_agent_id, 5) if primary_qc_agent_id else 5
+            current_rejection_count = rejection_counts.get(primary_qc_agent_id, 0)
+            
+            if current_rejection_count >= rejection_limit:
+                error_msg = f"QC Agent rejection limit ({rejection_limit}) reached. Content failed quality checks after {iteration_count} iterations."
+                logger.error(f"❌ {error_msg}")
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} QC Agent",
+                        task=f"FAILURE: {error_msg}",
+                        error=error_msg,
+                        agent_status="error"
+                    )
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "data": {
+                        "research": research_output,
+                        "writing": current_content,
+                        "quality_control": None,
+                        "final_content": None,
+                        "platform": platform,
+                        "week": week,
+                        "iterations": iteration_count,
+                        "rejection_count": current_rejection_count
+                    },
+                    "metadata": {
+                        "workflow": "crewai_content_generation_iterative",
+                        "agents_used": ["script_research_agent", f"{platform}_agent", "qc_agent"],
+                        "iterations": iteration_count,
+                        "rejection_limit_reached": True
+                    }
+                }
+            
+            # Create QC task with structured output requirement
+            qc_task_iter = Task(
+                description=f"""{qc_task_desc.description}
+                
+                Review the content created by the writing agent for:
+                - Quality and clarity
+                - Platform-specific requirements ({platform})
+                - Compliance with guidelines
+                - Author personality match ({author_personality or 'professional'})
+                - Accuracy and relevance to the original research
+                
+                Content to Review:
+                {current_content}
+                
+                IMPORTANT: You must provide a structured response in the following format:
+                
+                STATUS: [APPROVED or REJECTED]
+                
+                If STATUS is APPROVED:
+                Provide the final approved content below.
+                
+                If STATUS is REJECTED:
+                Provide specific feedback on what needs to be changed, then provide the revised content.
+                
+                FEEDBACK: [Your detailed feedback on what needs improvement]
+                
+                REVISED_CONTENT: [The improved content addressing the feedback]
+                
+                The writing agent will use your feedback to revise the content in the next iteration.
+                """,
+                expected_output="A structured response with STATUS (APPROVED/REJECTED), FEEDBACK (if rejected), and content.",
+                agent=primary_qc_agent,
+                verbose=True
+            )
+            
+            if update_task_status_callback:
+                update_task_status_callback(
+                    agent=f"{platform.capitalize()} QC Agent",
+                    task=f"Reviewing content quality (Iteration {iteration_count}, Rejections: {current_rejection_count}/{rejection_limit})",
+                    progress=60 + (iteration_count * 5),
+                    agent_status="running"
+                )
+            
+            # Execute QC agent
+            qc_crew = Crew(
+                agents=[primary_qc_agent],
+                tasks=[qc_task_iter],
+                process=Process.sequential,
+                verbose=True,
+                memory=True
+            )
+            qc_result = qc_crew.kickoff(inputs={
+                "text": text,
+                "week": week,
+                "platform": platform,
+                "days_list": days_list,
+                "author_personality": author_personality or "professional"
+            })
+            
+            # Extract QC output
+            qc_output_raw = None
+            if hasattr(qc_result, 'tasks_output') and qc_result.tasks_output:
+                qc_output_raw = qc_result.tasks_output[0]
+            elif hasattr(qc_result, 'raw'):
+                qc_output_raw = qc_result.raw
+            else:
+                qc_output_raw = str(qc_result)
+            
+            # Parse QC response for approval/rejection
+            qc_output_str = str(qc_output_raw)
+            is_approved = False
+            feedback = None
+            revised_content = None
+            
+            # Check for structured response
+            if "STATUS:" in qc_output_str.upper():
+                status_line = [line for line in qc_output_str.split('\n') if 'STATUS:' in line.upper()][0]
+                if "APPROVED" in status_line.upper():
+                    is_approved = True
+                    revised_content = qc_output_str
+                elif "REJECTED" in status_line.upper():
+                    is_approved = False
+                    # Extract feedback
+                    if "FEEDBACK:" in qc_output_str.upper():
+                        feedback_start = qc_output_str.upper().find("FEEDBACK:")
+                        feedback_end = qc_output_str.upper().find("REVISED_CONTENT:", feedback_start)
+                        if feedback_end > feedback_start:
+                            feedback = qc_output_str[feedback_start + 9:feedback_end].strip()
+                        else:
+                            feedback = qc_output_str[feedback_start + 9:].strip()
+                    # Extract revised content
+                    if "REVISED_CONTENT:" in qc_output_str.upper():
+                        revised_start = qc_output_str.upper().find("REVISED_CONTENT:")
+                        revised_content = qc_output_str[revised_start + 16:].strip()
+                    else:
+                        revised_content = qc_output_str
+            else:
+                # Fallback: Try to detect approval/rejection from content
+                # If QC output is very similar to input, likely approved
+                # If QC output has significant changes or mentions issues, likely rejected
+                qc_lower = qc_output_str.lower()
+                rejection_keywords = ["reject", "fail", "issue", "problem", "needs", "improve", "revise", "change"]
+                if any(keyword in qc_lower for keyword in rejection_keywords):
+                    is_approved = False
+                    feedback = "QC agent identified issues requiring revision"
+                    revised_content = qc_output_str
+                else:
+                    is_approved = True
+                    revised_content = qc_output_str
+            
+            if is_approved:
+                logger.info(f"✅ Iteration {iteration_count}: QC Agent APPROVED content")
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} QC Agent",
+                        task=f"Content APPROVED after {iteration_count} iteration(s)",
+                        progress=90,
+                        agent_status="completed"
+                    )
+                # Break out of loop - content approved
+                break
+            else:
+                logger.warning(f"⚠️ Iteration {iteration_count}: QC Agent REJECTED content")
+                current_rejection_count += 1
+                rejection_counts[primary_qc_agent_id] = current_rejection_count
+                qc_feedback_history.append(feedback or "QC agent requested revisions")
+                
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} QC Agent",
+                        task=f"Content REJECTED (Rejection {current_rejection_count}/{rejection_limit})\n\nFeedback: {feedback or 'Revision requested'}",
+                        progress=70 + (iteration_count * 5),
+                        agent_status="completed"
+                    )
+                
+                # Continue loop - send feedback back to writing agent
+                current_content = revised_content  # Use revised content as starting point for next iteration
+        
+        # If we exited loop due to max iterations, fail
+        if iteration_count >= max_iterations and not is_approved:
+            error_msg = f"Maximum iterations ({max_iterations}) reached without QC approval. Content failed quality checks."
+            logger.error(f"❌ {error_msg}")
+            if update_task_status_callback:
+                update_task_status_callback(
+                    agent=f"{platform.capitalize()} QC Agent",
+                    task=f"FAILURE: {error_msg}",
+                    error=error_msg,
+                    agent_status="error"
+                )
+            return {
+                "success": False,
+                "error": error_msg,
+                "data": {
+                    "research": research_output,
+                    "writing": current_content,
+                    "quality_control": None,
+                    "final_content": None,
+                    "platform": platform,
+                    "week": week,
+                    "iterations": iteration_count,
+                    "rejection_count": current_rejection_count
+                },
+                "metadata": {
+                    "workflow": "crewai_content_generation_iterative",
+                    "agents_used": ["script_research_agent", f"{platform}_agent", "qc_agent"],
+                    "iterations": iteration_count,
+                    "max_iterations_reached": True
+                }
+            }
+        
+        # Success - content approved
+        final_output = revised_content or current_content
+        
+        # Helper function to extract text from CrewAI TaskOutput objects
+        def extract_task_output(task_output):
+            """Extract text content from CrewAI TaskOutput object"""
+            if task_output is None:
+                return None
+            # TaskOutput objects have .raw property
+            if hasattr(task_output, 'raw'):
+                raw = task_output.raw
+                if isinstance(raw, str):
+                    return raw
+                elif isinstance(raw, dict):
+                    # Try common content keys
+                    return raw.get('content') or raw.get('text') or raw.get('output') or str(raw)
+                else:
+                    return str(raw)
+            # Fallback to string conversion
+            if isinstance(task_output, str):
+                return task_output
+            return str(task_output)
+        
         # Parse result
         # CrewAI returns a CrewOutput object with tasks_output
         final_output = None
         if hasattr(result, 'tasks_output'):
-            # Get the last task output (QC agent's review)
+            # Get the last task output (QC agent's review - this is the final content)
             if result.tasks_output:
-                final_output = result.tasks_output[-1]
+                final_output = extract_task_output(result.tasks_output[-1])
         elif hasattr(result, 'raw'):
-            final_output = result.raw
+            final_output = extract_task_output(result.raw) if hasattr(result.raw, 'raw') else str(result.raw)
         else:
             final_output = str(result)
         
@@ -405,11 +780,13 @@ def create_content_generation_crew(
         
         if hasattr(result, 'tasks_output'):
             if len(result.tasks_output) >= 1:
-                research_output = result.tasks_output[0]  # Research agent output
+                research_output = extract_task_output(result.tasks_output[0])  # Research agent output
             if len(result.tasks_output) >= 2:
-                writing_output = result.tasks_output[1]  # Writing agent output
+                writing_output = extract_task_output(result.tasks_output[1])  # Writing agent output
+            # Get all QC agent outputs (there may be multiple)
             if len(result.tasks_output) >= 3:
-                qc_output = result.tasks_output[2]  # QC agent output
+                # Last output is from the final QC agent
+                qc_output = extract_task_output(result.tasks_output[-1])
         
         return {
             "success": True,

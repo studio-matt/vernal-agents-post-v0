@@ -132,6 +132,8 @@ def create_agent_safely(agent_name: str, default_role: str, default_goal: str, d
             llm="gpt-4o-mini",
             memory=True,
             verbose=True,
+            reasoning=True,  # Enable explicit reasoning for verbose logs
+            max_reasoning_attempts=3,  # Multiple rounds of reflection for more detailed logs
         )
         logger.info(f"Agent {agent_name} created successfully")
         return agent
@@ -146,6 +148,8 @@ def create_agent_safely(agent_name: str, default_role: str, default_goal: str, d
             llm="gpt-4o-mini",
             memory=True,
             verbose=True,
+            reasoning=True,  # Enable explicit reasoning for verbose logs
+            max_reasoning_attempts=3,  # Multiple rounds of reflection for more detailed logs
         )
 
 # Create all agents with error handling

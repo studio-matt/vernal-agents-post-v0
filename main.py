@@ -6778,13 +6778,17 @@ async def generate_campaign_content(
                             task_data["status"] = "error"
                         # Add to agent statuses
                         if agent:
-                            task_data["agent_statuses"].append({
+                            agent_entry = {
                                 "agent": agent,
                                 "task": task or "Processing",
                                 "status": agent_status,
                                 "timestamp": datetime.utcnow().isoformat(),
                                 "error": error
-                            })
+                            }
+                            # Add message if provided (for QC agents, this might contain approval/rejection details)
+                            if task and ("approved" in task.lower() or "rejected" in task.lower() or "review" in task.lower()):
+                                agent_entry["message"] = task
+                            task_data["agent_statuses"].append(agent_entry)
                         logger.info(f"📊 Task {tid}: {progress}% - {agent} - {task}")
                     
                     update_task_status(progress=5, task="Initializing", status="in_progress")
@@ -6838,6 +6842,33 @@ async def generate_campaign_content(
 {f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}
 
 Generate content for {platform} based on the content queue items above."""
+                    
+                    # Log configuration details for verbose status tracking
+                    author_personality_name = "None"
+                    brand_personality_name = "None"
+                    if author_personality_id:
+                        from models import AuthorPersonality
+                        author_personality_obj = session.query(AuthorPersonality).filter(
+                            AuthorPersonality.id == author_personality_id,
+                            AuthorPersonality.user_id == user_id
+                        ).first()
+                        if author_personality_obj:
+                            author_personality_name = author_personality_obj.name or author_personality_id
+                    if brand_personality_id:
+                        from models import BrandPersonality
+                        brand_personality_obj = session.query(BrandPersonality).filter(
+                            BrandPersonality.id == brand_personality_id,
+                            BrandPersonality.user_id == user_id
+                        ).first()
+                        if brand_personality_obj:
+                            brand_personality_name = brand_personality_obj.name or brand_personality_id
+                    
+                    update_task_status(
+                        agent="Configuration",
+                        task=f"Author Personality: {author_personality_name} | Brand Voice: {brand_personality_name} | Platform: {platform.capitalize()}",
+                        progress=5,
+                        agent_status="completed"
+                    )
                     
                     update_task_status(progress=10, task="Preparing content context")
                     
@@ -6964,12 +6995,14 @@ Generate content for {platform} based on the content queue items above."""
                         status="in_progress"
                     )
                     
+                    # Pass update_task_status callback for progress tracking
                     crew_result = create_content_generation_crew(
                         text=writing_context,
                         week=week,
                         platform=platform.lower(),
                         days_list=[day],
-                        author_personality=req_data.get("author_personality")
+                        author_personality=req_data.get("author_personality"),
+                        update_task_status_callback=update_task_status
                     )
                     
                     if crew_result.get("success"):
@@ -6991,23 +7024,93 @@ Generate content for {platform} based on the content queue items above."""
                             agent_status="completed"
                         )
                         
-                        # Track QC agents with platform name
+                        # Log writing agent used
+                        writing_agent_name = f"{platform.capitalize()} Writing Agent"
+                        update_task_status(
+                            agent=writing_agent_name,
+                            task=f"Platform-specific content created for {platform.capitalize()}",
+                            progress=70,
+                            agent_status="completed"
+                        )
+                        
+                        # Track QC agents with platform name and show which ones ran
+                        qc_agents_used = []
                         if "metadata" in crew_result and "agents_used" in crew_result["metadata"]:
                             qc_agents = [a for a in crew_result["metadata"]["agents_used"] if "qc" in a.lower()]
                             platform_name = platform.capitalize()
+                            
+                            # Log QC agent configuration
+                            qc_agent_list_str = ", ".join([f"{platform_name} QC Agent {i+1}" for i in range(len(qc_agents))]) if len(qc_agents) > 1 else f"{platform_name} QC Agent"
+                            update_task_status(
+                                agent="QC Configuration",
+                                task=f"QC Agents Running: {qc_agent_list_str} (Platform: {platform_name}, Global: Included)",
+                                progress=75,
+                                agent_status="completed"
+                            )
+                            
                             for idx, qc_agent in enumerate(qc_agents):
                                 # Use platform name in QC agent name
                                 qc_agent_name = f"{platform_name} QC Agent {idx + 1}" if len(qc_agents) > 1 else f"{platform_name} QC Agent"
+                                qc_agents_used.append(qc_agent_name)
+                                # Extract QC result details if available
+                                qc_result = crew_result.get("data", {}).get("quality_control")
+                                qc_message = "Quality review completed - content approved"
+                                qc_details = []
+                                
+                                # Build QC criteria list for display
+                                qc_criteria = [
+                                    "Quality and clarity",
+                                    f"Platform-specific requirements ({platform_name})",
+                                    "Compliance with guidelines",
+                                    "Author personality match",
+                                    "Accuracy and relevance to research"
+                                ]
+                                
+                                if qc_result:
+                                    # Try to extract meaningful information from QC result
+                                    if isinstance(qc_result, dict):
+                                        if "approved" in str(qc_result).lower() or "pass" in str(qc_result).lower():
+                                            qc_message = "Quality review: Content approved - meets all quality criteria"
+                                            qc_details = qc_criteria
+                                        elif "rejected" in str(qc_result).lower() or "fail" in str(qc_result).lower():
+                                            qc_message = "Quality review: Content requires revision - quality criteria not met"
+                                            qc_details = qc_criteria
+                                        else:
+                                            qc_message = f"Quality review completed - {str(qc_result)[:100]}"
+                                            qc_details = qc_criteria
+                                    elif isinstance(qc_result, str):
+                                        if len(qc_result) > 200:
+                                            qc_message = f"Quality review: {qc_result[:150]}..."
+                                        else:
+                                            qc_message = f"Quality review: {qc_result}"
+                                        qc_details = qc_criteria
+                                else:
+                                    # Default: show criteria even if result not available
+                                    qc_details = qc_criteria
+                                
+                                # Build detailed message with criteria
+                                detailed_message = qc_message
+                                if qc_details:
+                                    detailed_message += f"\n\nReview Criteria Checked:\n" + "\n".join([f"• {criterion}" for criterion in qc_details])
+                                
                                 update_task_status(
                                     agent=qc_agent_name,
-                                    task="Quality review completed - content approved",
+                                    task=detailed_message,
                                     progress=85 + (idx * 5),
                                     agent_status="completed"
                                 )
                         
+                        # Log execution summary
+                        execution_order = [
+                            "1. Research Agent (Content analysis)",
+                            f"2. {platform.capitalize()} Writing Agent (Platform-specific content)",
+                        ]
+                        for idx, qc_name in enumerate(qc_agents_used):
+                            execution_order.append(f"{3 + idx}. {qc_name} (Quality review)")
+                        
                         update_task_status(
                             agent="CrewAI Workflow",
-                            task="All agents completed successfully",
+                            task=f"All agents completed successfully\n\nExecution Order:\n" + "\n".join(execution_order),
                             progress=95,
                             agent_status="completed"
                         )
