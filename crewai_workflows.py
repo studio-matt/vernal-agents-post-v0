@@ -761,48 +761,29 @@ def create_content_generation_crew(
                 return task_output
             return str(task_output)
         
-        # Parse result
-        # CrewAI returns a CrewOutput object with tasks_output
-        final_output = None
-        if hasattr(result, 'tasks_output'):
-            # Get the last task output (QC agent's review - this is the final content)
-            if result.tasks_output:
-                final_output = extract_task_output(result.tasks_output[-1])
-        elif hasattr(result, 'raw'):
-            final_output = extract_task_output(result.raw) if hasattr(result.raw, 'raw') else str(result.raw)
+        # Extract final content from string or TaskOutput
+        if isinstance(final_output, str):
+            final_content_text = final_output
         else:
-            final_output = str(result)
-        
-        # Extract outputs from each agent
-        research_output = None
-        writing_output = None
-        qc_output = None
-        
-        if hasattr(result, 'tasks_output'):
-            if len(result.tasks_output) >= 1:
-                research_output = extract_task_output(result.tasks_output[0])  # Research agent output
-            if len(result.tasks_output) >= 2:
-                writing_output = extract_task_output(result.tasks_output[1])  # Writing agent output
-            # Get all QC agent outputs (there may be multiple)
-            if len(result.tasks_output) >= 3:
-                # Last output is from the final QC agent
-                qc_output = extract_task_output(result.tasks_output[-1])
+            final_content_text = extract_task_output(final_output) if final_output else str(current_content)
         
         return {
             "success": True,
             "data": {
                 "research": research_output,
-                "writing": writing_output,
-                "quality_control": qc_output,
-                "final_content": final_output,
+                "writing": current_content,
+                "quality_control": final_content_text,
+                "final_content": final_content_text,
                 "platform": platform,
                 "week": week
             },
             "metadata": {
-                "workflow": "crewai_content_generation",
+                "workflow": "crewai_content_generation_iterative",
                 "agents_used": ["script_research_agent", f"{platform}_agent"] + [f"qc_{i}" for i in range(len(qc_agents_list))],
                 "qc_agents_count": len(qc_agents_list),
-                "process": "sequential"
+                "iterations": iteration_count,
+                "rejection_counts": rejection_counts,
+                "process": "iterative"
             }
         }
         
