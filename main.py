@@ -7384,6 +7384,136 @@ async def get_content_generation_status(
         logger.error(f"Error getting content generation status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Image Generation Endpoint
+@app.post("/generate_image_machine_content")
+async def generate_image_machine_content_endpoint(
+    request: Request,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate an image for machine content using DALL·E.
+    Accepts POST with body: { id, query (article content), image_settings (optional) }
+    Also accepts GET with query params: ?id=...&query=...
+    
+    The prompt is built by:
+    1. Using the article content (query) to determine what the image should depict
+    2. Incorporating image settings (style, color, additional prompt) to style the image
+    """
+    try:
+        # Try to get data from POST body first
+        try:
+            body = await request.json()
+            content_id = body.get("id")
+            article_content = body.get("query")  # This is the article content/summary
+            image_settings = body.get("image_settings") or body.get("imageSettings")
+        except:
+            # Fallback to query params (for GET requests)
+            content_id = request.query_params.get("id")
+            article_content = request.query_params.get("query")
+            image_settings = None
+        
+        if not content_id or not article_content:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required parameters: 'id' and 'query' (article content) are required"
+            )
+        
+        # Import image generation function
+        try:
+            from tools import generate_image
+        except ImportError:
+            logger.error("Could not import generate_image from tools")
+            raise HTTPException(
+                status_code=500,
+                detail="Image generation service not available"
+            )
+        
+        # Build the image prompt:
+        # 1. Extract key visual elements from article content (what the image should show)
+        # 2. Apply image settings (style, color, additional prompt) to style it
+        
+        # Start with article content - this determines WHAT the image depicts
+        # Extract a summary or key visual concept from the article
+        article_summary = article_content[:500] if len(article_content) > 500 else article_content
+        
+        # Build style components from image settings
+        style_components = []
+        if image_settings:
+            style = image_settings.get("style", "")
+            color = image_settings.get("color", "")
+            additional_prompt = image_settings.get("prompt", "") or image_settings.get("additionalPrompt", "")
+            
+            if style:
+                style_components.append(f"in {style} style")
+            if color:
+                style_components.append(f"with {color} color palette")
+            if additional_prompt:
+                style_components.append(additional_prompt)
+        
+        # Combine: Article content (what) + Image settings (how)
+        if style_components:
+            final_prompt = f"{article_summary}. Create an image {', '.join(style_components)}."
+        else:
+            final_prompt = f"{article_summary}. Create a relevant image."
+        
+        logger.info(f"🖼️ Generating image with prompt: {final_prompt[:200]}...")
+        
+        # Generate image using the combined prompt
+        # The generate_image function takes (query, content) where:
+        # - query: used for style matching in Airtable
+        # - content: the actual prompt for DALL·E
+        try:
+            image_url = generate_image(query=article_content, content=final_prompt)
+            
+            return {
+                "status": "success",
+                "image_url": image_url,
+                "message": image_url
+            }
+        except Exception as img_error:
+            logger.error(f"Error generating image: {img_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate image: {str(img_error)}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in generate_image_machine_content endpoint: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Also support GET for backward compatibility
+@app.get("/generate_image_machine_content")
+async def generate_image_machine_content_get(
+    id: str,
+    query: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """GET endpoint for image generation (backward compatibility)"""
+    # Create a mock request object for GET
+    from fastapi import Request
+    from starlette.requests import Request as StarletteRequest
+    from starlette.datastructures import QueryParams
+    
+    class MockRequest:
+        def __init__(self, query_params_dict):
+            self.query_params = QueryParams(query_params_dict)
+        
+        async def json(self):
+            raise ValueError("Not a JSON request")
+    
+    mock_request = MockRequest({"id": id, "query": query})
+    return await generate_image_machine_content_endpoint(
+        request=mock_request,
+        current_user=current_user,
+        db=db
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
