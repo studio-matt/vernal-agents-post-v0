@@ -7604,6 +7604,167 @@ async def generate_image_machine_content_get(
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+# Scheduled Posts Endpoints
+@app.get("/scheduled-posts")
+def get_scheduled_posts(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all scheduled posts for the authenticated user"""
+    try:
+        from models import Content
+        from datetime import datetime
+        
+        # Get all content for the user that has been scheduled (status = 'scheduled' or has schedule_time in future)
+        scheduled_posts = db.query(Content).filter(
+            Content.user_id == current_user.id,
+            Content.status.in_(["draft", "scheduled", "published"])
+        ).order_by(Content.schedule_time.asc()).all()
+        
+        posts_data = []
+        for post in scheduled_posts:
+            posts_data.append({
+                "id": post.id,
+                "title": post.title,
+                "content": post.content,
+                "platform": post.platform,
+                "schedule_time": post.schedule_time.isoformat() if post.schedule_time else None,
+                "day": post.day,
+                "week": post.week,
+                "status": post.status,
+                "image_url": post.image_url,
+                "campaign_id": post.campaign_id,
+                "can_edit": post.can_edit if hasattr(post, 'can_edit') else True,
+                "is_draft": post.is_draft if hasattr(post, 'is_draft') else True,
+            })
+        
+        return {
+            "status": "success",
+            "message": {
+                "posts": posts_data
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching scheduled posts: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch scheduled posts: {str(e)}"
+        )
+
+@app.post("/campaigns/{campaign_id}/schedule-content")
+async def schedule_campaign_content(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Schedule content items for a campaign - saves them to database with 'scheduled' status"""
+    try:
+        from models import Content, Campaign
+        from datetime import datetime
+        import json
+        
+        # Verify campaign exists and belongs to user
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(
+                status_code=404,
+                detail="Campaign not found"
+            )
+        
+        # Get content items from request
+        content_items = request_data.get("content_items", [])
+        
+        if not content_items:
+            raise HTTPException(
+                status_code=400,
+                detail="No content items provided"
+            )
+        
+        scheduled_count = 0
+        for item in content_items:
+            # Parse schedule time
+            schedule_time_str = item.get("schedule_time")
+            if schedule_time_str:
+                try:
+                    schedule_time = datetime.fromisoformat(schedule_time_str.replace('Z', '+00:00'))
+                except:
+                    # Fallback: try parsing as date string
+                    schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%dT%H:%M:%S")
+            else:
+                # Default to today at 9 AM
+                schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+            
+            # Check if content already exists (by campaign_id, week, day, platform)
+            existing_content = db.query(Content).filter(
+                Content.campaign_id == campaign_id,
+                Content.week == item.get("week", 1),
+                Content.day == item.get("day", "Monday"),
+                Content.platform == item.get("platform", "linkedin").lower(),
+                Content.user_id == current_user.id
+            ).first()
+            
+            if existing_content:
+                # Update existing content
+                existing_content.content = item.get("description", item.get("content", ""))
+                existing_content.title = item.get("title", "")
+                existing_content.schedule_time = schedule_time
+                existing_content.status = "scheduled"  # Move from draft to scheduled
+                existing_content.is_draft = False
+                existing_content.can_edit = True  # Can still edit scheduled content
+                if item.get("image"):
+                    existing_content.image_url = item.get("image")
+                scheduled_count += 1
+            else:
+                # Create new content
+                new_content = Content(
+                    user_id=current_user.id,
+                    campaign_id=campaign_id,
+                    week=item.get("week", 1),
+                    day=item.get("day", "Monday"),
+                    content=item.get("description", item.get("content", "")),
+                    title=item.get("title", ""),
+                    status="scheduled",  # Status: scheduled (was draft, now committed)
+                    date_upload=datetime.now(),
+                    platform=item.get("platform", "linkedin").lower(),
+                    file_name=f"{campaign_id}_{item.get('week', 1)}_{item.get('day', 'Monday')}_{item.get('platform', 'linkedin')}.txt",
+                    file_type="text",
+                    platform_post_no=item.get("platform_post_no", "1"),
+                    schedule_time=schedule_time,
+                    image_url=item.get("image"),
+                    is_draft=False,  # No longer a draft
+                    can_edit=True,  # Can still edit scheduled content
+                    knowledge_graph_location=item.get("knowledge_graph_location"),
+                    parent_idea=item.get("parent_idea"),
+                    landing_page_url=item.get("landing_page_url")
+                )
+                db.add(new_content)
+                scheduled_count += 1
+        
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": f"Successfully scheduled {scheduled_count} content item(s)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error scheduling content: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to schedule content: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
