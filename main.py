@@ -7866,14 +7866,26 @@ async def save_content_item(
             existing_content.can_edit = True
             existing_content.schedule_time = schedule_time
         else:
+            # Validate required fields
+            content_text = item.get("description") or item.get("content", "")
+            title_text = item.get("title", "")
+            
+            # If content is empty, use a placeholder (for image-only saves)
+            if not content_text or not content_text.strip():
+                content_text = f"Content for {platform.title()} - {day}"
+            
+            # If title is empty, generate a default
+            if not title_text or not title_text.strip():
+                title_text = f"{platform.title()} Post - {day}"
+            
             # Create new content
             new_content = Content(
                 user_id=current_user.id,
                 campaign_id=campaign_id,
                 week=week,
                 day=day,
-                content=item.get("description") or item.get("content", ""),
-                title=item.get("title", ""),
+                content=content_text,
+                title=title_text,
                 status="draft",
                 date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
                 platform=platform,
