@@ -7691,15 +7691,34 @@ async def schedule_campaign_content(
         for item in content_items:
             # Parse schedule time
             schedule_time_str = item.get("schedule_time")
+            schedule_time = None
             if schedule_time_str:
                 try:
-                    schedule_time = datetime.fromisoformat(schedule_time_str.replace('Z', '+00:00'))
-                except:
-                    # Fallback: try parsing as date string
-                    schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%dT%H:%M:%S")
+                    # Try ISO format first
+                    if 'T' in schedule_time_str:
+                        schedule_time = datetime.fromisoformat(schedule_time_str.replace('Z', '+00:00'))
+                    else:
+                        # Try other formats
+                        try:
+                            schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%dT%H:%M:%S")
+                        except:
+                            schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%d %H:%M:%S")
+                except Exception as parse_error:
+                    logger.warning(f"Failed to parse schedule_time '{schedule_time_str}': {parse_error}")
+                    # Default to today at 9 AM if parsing fails
+                    schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
             else:
                 # Default to today at 9 AM
                 schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+            
+            # Ensure schedule_time is timezone-aware (convert to UTC if needed)
+            if schedule_time.tzinfo is None:
+                # Assume local time and convert to UTC
+                from datetime import timezone
+                schedule_time = schedule_time.replace(tzinfo=timezone.utc)
+            else:
+                # Convert to UTC if timezone-aware, then remove timezone for MySQL
+                schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
             
             # Check if content already exists (by campaign_id, week, day, platform)
             existing_content = db.query(Content).filter(
@@ -7763,6 +7782,159 @@ async def schedule_campaign_content(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to schedule content: {str(e)}"
+        )
+
+@app.post("/campaigns/{campaign_id}/save-content-item")
+async def save_content_item(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Save a single content item (draft) to database - called when content/image is generated"""
+    try:
+        from models import Content, Campaign
+        from datetime import datetime
+        
+        # Verify campaign exists
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        item = request_data
+        week = item.get("week", 1)
+        day = item.get("day", "Monday")
+        platform = item.get("platform", "linkedin").lower()
+        
+        # Check if content already exists
+        existing_content = db.query(Content).filter(
+            Content.campaign_id == campaign_id,
+            Content.week == week,
+            Content.day == day,
+            Content.platform == platform,
+            Content.user_id == current_user.id
+        ).first()
+        
+        # Parse schedule time if provided
+        schedule_time = None
+        if item.get("schedule_time"):
+            try:
+                schedule_time_str = item.get("schedule_time")
+                if 'T' in schedule_time_str:
+                    schedule_time = datetime.fromisoformat(schedule_time_str.replace('Z', '+00:00'))
+                else:
+                    schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%dT%H:%M:%S")
+            except:
+                schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        else:
+            schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        
+        if schedule_time.tzinfo is None:
+            from datetime import timezone
+            schedule_time = schedule_time.replace(tzinfo=timezone.utc)
+        
+        if existing_content:
+            # Update existing content
+            if item.get("title"):
+                existing_content.title = item.get("title")
+            if item.get("description") or item.get("content"):
+                existing_content.content = item.get("description") or item.get("content", "")
+            if item.get("image"):
+                existing_content.image_url = item.get("image")
+            existing_content.status = "draft"
+            existing_content.is_draft = True
+            existing_content.can_edit = True
+            existing_content.schedule_time = schedule_time
+        else:
+            # Create new content
+            new_content = Content(
+                user_id=current_user.id,
+                campaign_id=campaign_id,
+                week=week,
+                day=day,
+                content=item.get("description") or item.get("content", ""),
+                title=item.get("title", ""),
+                status="draft",
+                date_upload=datetime.now(),
+                platform=platform,
+                file_name=f"{campaign_id}_{week}_{day}_{platform}.txt",
+                file_type="text",
+                platform_post_no=item.get("platform_post_no", "1"),
+                schedule_time=schedule_time,
+                image_url=item.get("image"),
+                is_draft=True,
+                can_edit=True,
+                knowledge_graph_location=item.get("knowledge_graph_location"),
+                parent_idea=item.get("parent_idea"),
+                landing_page_url=item.get("landing_page_url")
+            )
+            db.add(new_content)
+        
+        db.commit()
+        
+        return {
+            "status": "success",
+            "message": "Content item saved"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving content item: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save content item: {str(e)}"
+        )
+
+@app.get("/campaigns/{campaign_id}/content-items")
+def get_campaign_content_items(
+    campaign_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all draft/scheduled content items for a campaign"""
+    try:
+        from models import Content
+        
+        content_items = db.query(Content).filter(
+            Content.campaign_id == campaign_id,
+            Content.user_id == current_user.id,
+            Content.status.in_(["draft", "scheduled"])
+        ).order_by(Content.week.asc(), Content.day.asc()).all()
+        
+        items_data = []
+        for item in content_items:
+            items_data.append({
+                "id": f"week-{item.week}-{item.day}-{item.platform}-{item.id}",
+                "title": item.title,
+                "description": item.content,
+                "week": item.week,
+                "day": item.day,
+                "platform": item.platform,
+                "image": item.image_url or "",
+                "status": item.status,
+                "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
+            })
+        
+        return {
+            "status": "success",
+            "message": {
+                "items": items_data
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching content items: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch content items: {str(e)}"
         )
 
 if __name__ == "__main__":
