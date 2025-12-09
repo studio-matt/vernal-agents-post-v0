@@ -7711,14 +7711,11 @@ async def schedule_campaign_content(
                 # Default to today at 9 AM
                 schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
             
-            # Ensure schedule_time is timezone-aware (convert to UTC if needed)
-            if schedule_time.tzinfo is None:
-                # Assume local time and convert to UTC
-                from datetime import timezone
-                schedule_time = schedule_time.replace(tzinfo=timezone.utc)
-            else:
-                # Convert to UTC if timezone-aware, then remove timezone for MySQL
+            # MySQL doesn't support timezone-aware datetimes, so convert to naive UTC
+            from datetime import timezone
+            if schedule_time.tzinfo is not None:
                 schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
+            # If already naive, assume it's UTC and use as-is
             
             # Check if content already exists (by campaign_id, week, day, platform)
             existing_content = db.query(Content).filter(
@@ -7750,7 +7747,7 @@ async def schedule_campaign_content(
                     content=item.get("description", item.get("content", "")),
                     title=item.get("title", ""),
                     status="scheduled",  # Status: scheduled (was draft, now committed)
-                    date_upload=datetime.now(),
+                    date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
                     platform=item.get("platform", "linkedin").lower(),
                     file_name=f"{campaign_id}_{item.get('week', 1)}_{item.get('day', 'Monday')}_{item.get('platform', 'linkedin')}.txt",
                     file_type="text",
@@ -7860,7 +7857,7 @@ async def save_content_item(
                 content=item.get("description") or item.get("content", ""),
                 title=item.get("title", ""),
                 status="draft",
-                date_upload=datetime.now(),
+                date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
                 platform=platform,
                 file_name=f"{campaign_id}_{week}_{day}_{platform}.txt",
                 file_type="text",
