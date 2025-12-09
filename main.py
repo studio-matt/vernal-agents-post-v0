@@ -5038,8 +5038,19 @@ async def generate_ideas_endpoint(
             capitalized = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', recommendations)
             topics_list = list(set(bold_keywords + quoted_keywords + capitalized[:5]))  # Limit capitalized to avoid noise
         
+        # If still no topics, try to extract from posts
+        if not topics_list and posts_list:
+            # Use the post content as a topic if available
+            topics_list = [post[:100] for post in posts_list if post.strip()]  # Use first 100 chars of post as topic
+        
+        # If still no topics, allow proceeding with a generic topic
+        # This allows users to proceed with content creation even if topics weren't explicitly provided
+        # The selected items from ContentQueue/ResearchAssistant should be sufficient
         if not topics_list:
-            return {"status": "error", "message": "Topics are required"}
+            # Use a generic topic to allow the process to continue
+            # The user has already selected items, so we should proceed
+            topics_list = ["Content creation"]  # Generic fallback to allow proceeding
+            logger.info("⚠️ No explicit topics provided, using generic fallback to allow content creation to proceed")
         
         if num_ideas < 1:
             return {"status": "error", "message": "Number of ideas must be at least 1"}
@@ -7382,6 +7393,62 @@ async def get_content_generation_status(
         
     except Exception as e:
         logger.error(f"Error getting content generation status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/campaigns/{campaign_id}/generate-content/force-complete/{task_id}")
+async def force_complete_content_generation(
+    campaign_id: str,
+    task_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Force complete a hung content generation task.
+    Marks all running agents as error and sets task status to error.
+    """
+    try:
+        from models import Campaign
+        
+        # Verify campaign ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        if task_id not in CONTENT_GEN_TASKS:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        task = CONTENT_GEN_TASKS[task_id]
+        
+        # Mark all running agents as error
+        if "agent_statuses" in task:
+            for agent_status in task["agent_statuses"]:
+                if agent_status.get("status") == "running":
+                    agent_status["status"] = "error"
+                    agent_status["agent_status"] = "error"
+                    agent_status["error"] = "Force completed by user - agent was hung"
+                    agent_status["task"] = f"{agent_status.get('task', 'Processing')} - FORCE COMPLETED"
+        
+        # Set task status to error
+        task["status"] = "error"
+        task["error"] = "Task force completed due to hung agents"
+        task["current_agent"] = None
+        task["current_task"] = "Task force completed - agents were hung"
+        task["progress"] = task.get("progress", 0)
+        
+        logger.warning(f"⚠️ Task {task_id} force completed by user {current_user.id}")
+        
+        return {
+            "status": "error",
+            "message": "Task force completed",
+            "task_id": task_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Error force completing task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Image Generation Endpoint
