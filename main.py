@@ -7833,9 +7833,10 @@ async def save_content_item(
         else:
             schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
         
-        if schedule_time.tzinfo is None:
+        # MySQL doesn't support timezone-aware datetimes, so convert to naive UTC
+        if schedule_time.tzinfo is not None:
             from datetime import timezone
-            schedule_time = schedule_time.replace(tzinfo=timezone.utc)
+            schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
         
         if existing_content:
             # Update existing content
