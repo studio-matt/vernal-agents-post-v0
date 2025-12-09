@@ -7728,8 +7728,15 @@ async def schedule_campaign_content(
             
             if existing_content:
                 # Update existing content
-                existing_content.content = item.get("description", item.get("content", ""))
-                existing_content.title = item.get("title", "")
+                content_text = item.get("description") or item.get("content", "")
+                title_text = item.get("title", "")
+                
+                # Validate and update content
+                if content_text and content_text.strip():
+                    existing_content.content = content_text
+                if title_text and title_text.strip():
+                    existing_content.title = title_text
+                
                 existing_content.schedule_time = schedule_time
                 existing_content.status = "scheduled"  # Move from draft to scheduled
                 existing_content.is_draft = False
@@ -7738,14 +7745,25 @@ async def schedule_campaign_content(
                     existing_content.image_url = item.get("image")
                 scheduled_count += 1
             else:
+                # Validate required fields
+                content_text = item.get("description") or item.get("content", "")
+                title_text = item.get("title", "")
+                
+                if not content_text or not content_text.strip():
+                    logger.warning(f"Skipping item with empty content: {item.get('id', 'unknown')}")
+                    continue
+                
+                if not title_text or not title_text.strip():
+                    title_text = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
+                
                 # Create new content
                 new_content = Content(
                     user_id=current_user.id,
                     campaign_id=campaign_id,
                     week=item.get("week", 1),
                     day=item.get("day", "Monday"),
-                    content=item.get("description", item.get("content", "")),
-                    title=item.get("title", ""),
+                    content=content_text,
+                    title=title_text,
                     status="scheduled",  # Status: scheduled (was draft, now committed)
                     date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
                     platform=item.get("platform", "linkedin").lower(),
