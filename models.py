@@ -234,6 +234,7 @@ class Campaign(Base):
     content_queue_items_json = Column(Text, nullable=True)  # JSON string for checked items from content queue
     custom_keywords_json = Column(Text, nullable=True)  # JSON string for custom keywords/ideas: ["keyword1", "keyword2"]
     personality_settings_json = Column(Text, nullable=True)  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
+    image_settings_json = Column(Text, nullable=True)  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
     # Site Builder campaign fields
     site_base_url = Column(String(500), nullable=True)  # Base URL for Site Builder campaigns
     target_keywords_json = Column(Text, nullable=True)  # JSON string for target keywords: ["keyword1", "keyword2"]

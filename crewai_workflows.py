@@ -11,9 +11,43 @@ from models import SystemSettings
 from typing import Dict, Any, Optional, List
 import logging
 import json
+import threading
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 db_manager = DatabaseManager()
+
+# Timeout for CrewAI operations (10 minutes)
+CREWAI_TIMEOUT_SECONDS = 600
+
+
+def run_with_timeout(func, timeout_seconds=CREWAI_TIMEOUT_SECONDS, *args, **kwargs):
+    """
+    Run a function with a timeout using threading.
+    Returns the result or raises TimeoutError if the function doesn't complete in time.
+    """
+    result = [None]
+    exception = [None]
+    
+    def target():
+        try:
+            result[0] = func(*args, **kwargs)
+        except Exception as e:
+            exception[0] = e
+    
+    thread = threading.Thread(target=target)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+    
+    if thread.is_alive():
+        logger.error(f"⚠️ Operation timed out after {timeout_seconds} seconds")
+        raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+    
+    if exception[0]:
+        raise exception[0]
+    
+    return result[0]
 
 def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
     """
@@ -388,13 +422,38 @@ def create_content_generation_crew(
             verbose=True,
             memory=True
         )
-        research_result = research_crew.kickoff(inputs={
-            "text": text,
-            "week": week,
-            "platform": platform,
-            "days_list": days_list,
-            "author_personality": author_personality or "professional"
-        })
+        try:
+            research_result = run_with_timeout(
+                research_crew.kickoff,
+                timeout_seconds=CREWAI_TIMEOUT_SECONDS,
+                inputs={
+                    "text": text,
+                    "week": week,
+                    "platform": platform,
+                    "days_list": days_list,
+                    "author_personality": author_personality or "professional"
+                }
+            )
+        except TimeoutError as te:
+            logger.error(f"❌ Research agent timed out after {CREWAI_TIMEOUT_SECONDS} seconds")
+            if update_task_status_callback:
+                update_task_status_callback(
+                    agent="Research Agent",
+                    task=f"TIMEOUT: Operation exceeded {CREWAI_TIMEOUT_SECONDS} seconds",
+                    error=str(te),
+                    agent_status="error"
+                )
+            raise
+        except Exception as e:
+            logger.error(f"❌ Research agent error: {e}")
+            if update_task_status_callback:
+                update_task_status_callback(
+                    agent="Research Agent",
+                    task=f"ERROR: {str(e)}",
+                    error=str(e),
+                    agent_status="error"
+                )
+            raise
         
         # Extract research output
         research_output = None
@@ -478,7 +537,7 @@ def create_content_generation_crew(
                 verbose=True
             )
             
-            # Execute writing agent
+            # Execute writing agent with timeout protection
             writing_crew = Crew(
                 agents=[writing_agent],
                 tasks=[writing_task_iter],
@@ -486,13 +545,38 @@ def create_content_generation_crew(
                 verbose=True,
                 memory=True
             )
-            writing_result = writing_crew.kickoff(inputs={
-                "text": text,
-                "week": week,
-                "platform": platform,
-                "days_list": days_list,
-                "author_personality": author_personality or "professional"
-            })
+            try:
+                writing_result = run_with_timeout(
+                    writing_crew.kickoff,
+                    timeout_seconds=CREWAI_TIMEOUT_SECONDS,
+                    inputs={
+                        "text": text,
+                        "week": week,
+                        "platform": platform,
+                        "days_list": days_list,
+                        "author_personality": author_personality or "professional"
+                    }
+                )
+            except TimeoutError as te:
+                logger.error(f"❌ Writing agent timed out after {CREWAI_TIMEOUT_SECONDS} seconds")
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} Writing Agent",
+                        task=f"TIMEOUT: Operation exceeded {CREWAI_TIMEOUT_SECONDS} seconds",
+                        error=str(te),
+                        agent_status="error"
+                    )
+                raise
+            except Exception as e:
+                logger.error(f"❌ Writing agent error: {e}")
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} Writing Agent",
+                        task=f"ERROR: {str(e)}",
+                        error=str(e),
+                        agent_status="error"
+                    )
+                raise
             
             # Extract writing output
             if hasattr(writing_result, 'tasks_output') and writing_result.tasks_output:
@@ -611,7 +695,7 @@ def create_content_generation_crew(
                     agent_status="running"
                 )
             
-            # Execute QC agent
+            # Execute QC agent with timeout protection
             qc_crew = Crew(
                 agents=[primary_qc_agent],
                 tasks=[qc_task_iter],
@@ -619,13 +703,38 @@ def create_content_generation_crew(
                 verbose=True,
                 memory=True
             )
-            qc_result = qc_crew.kickoff(inputs={
-                "text": text,
-                "week": week,
-                "platform": platform,
-                "days_list": days_list,
-                "author_personality": author_personality or "professional"
-            })
+            try:
+                qc_result = run_with_timeout(
+                    qc_crew.kickoff,
+                    timeout_seconds=CREWAI_TIMEOUT_SECONDS,
+                    inputs={
+                        "text": text,
+                        "week": week,
+                        "platform": platform,
+                        "days_list": days_list,
+                        "author_personality": author_personality or "professional"
+                    }
+                )
+            except TimeoutError as te:
+                logger.error(f"❌ QC agent timed out after {CREWAI_TIMEOUT_SECONDS} seconds")
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} QC Agent",
+                        task=f"TIMEOUT: Operation exceeded {CREWAI_TIMEOUT_SECONDS} seconds",
+                        error=str(te),
+                        agent_status="error"
+                    )
+                raise
+            except Exception as e:
+                logger.error(f"❌ QC agent error: {e}")
+                if update_task_status_callback:
+                    update_task_status_callback(
+                        agent=f"{platform.capitalize()} QC Agent",
+                        task=f"ERROR: {str(e)}",
+                        error=str(e),
+                        agent_status="error"
+                    )
+                raise
             
             # Extract QC output
             qc_output_raw = None

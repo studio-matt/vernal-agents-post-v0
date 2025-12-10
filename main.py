@@ -304,6 +304,7 @@ class CampaignUpdate(BaseModel):
     modelingSettings: Optional[Dict[str, Any]] = None
     custom_keywords: Optional[List[str]] = None  # Custom keywords/ideas for content queue
     personality_settings_json: Optional[str] = None  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
+    image_settings_json: Optional[str] = None  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
@@ -666,6 +667,8 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "top_ideas_count": campaign.top_ideas_count,
                 # Custom keywords/ideas
                 "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else [],
+                # Image settings
+                "image_settings": json.loads(campaign.image_settings_json) if campaign.image_settings_json else None,
                 # Look Alike specific fields
                 "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
             }
@@ -732,6 +735,9 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
         if campaign_data.personality_settings_json is not None:
             campaign.personality_settings_json = campaign_data.personality_settings_json
             logger.info(f"Saved personality_settings_json for campaign {campaign_id}: {campaign_data.personality_settings_json}")
+        if campaign_data.image_settings_json is not None:
+            campaign.image_settings_json = campaign_data.image_settings_json
+            logger.info(f"Saved image_settings_json for campaign {campaign_id}: {campaign_data.image_settings_json}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
@@ -7734,107 +7740,123 @@ async def schedule_campaign_content(
             )
         
         scheduled_count = 0
+        errors = []
         for item in content_items:
-            # Parse schedule time
-            schedule_time_str = item.get("schedule_time")
-            schedule_time = None
-            if schedule_time_str:
-                try:
-                    # Try ISO format first
-                    if 'T' in schedule_time_str:
-                        schedule_time = datetime.fromisoformat(schedule_time_str.replace('Z', '+00:00'))
-                    else:
-                        # Try other formats
-                        try:
-                            schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%dT%H:%M:%S")
-                        except:
-                            schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%d %H:%M:%S")
-                except Exception as parse_error:
-                    logger.warning(f"Failed to parse schedule_time '{schedule_time_str}': {parse_error}")
-                    # Default to today at 9 AM if parsing fails
+            try:
+                # Parse schedule time
+                schedule_time_str = item.get("schedule_time")
+                schedule_time = None
+                if schedule_time_str:
+                    try:
+                        # Try ISO format first
+                        if 'T' in schedule_time_str:
+                            schedule_time = datetime.fromisoformat(schedule_time_str.replace('Z', '+00:00'))
+                        else:
+                            # Try other formats
+                            try:
+                                schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%dT%H:%M:%S")
+                            except:
+                                schedule_time = datetime.strptime(schedule_time_str, "%Y-%m-%d %H:%M:%S")
+                    except Exception as parse_error:
+                        logger.warning(f"Failed to parse schedule_time '{schedule_time_str}': {parse_error}")
+                        # Default to today at 9 AM if parsing fails
+                        schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+                else:
+                    # Default to today at 9 AM
                     schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
-            else:
-                # Default to today at 9 AM
-                schedule_time = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
-            
-            # MySQL doesn't support timezone-aware datetimes, so convert to naive UTC
-            from datetime import timezone
-            if schedule_time.tzinfo is not None:
-                schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
-            # If already naive, assume it's UTC and use as-is
-            
-            # Check if content already exists (by campaign_id, week, day, platform)
-            existing_content = db.query(Content).filter(
-                Content.campaign_id == campaign_id,
-                Content.week == item.get("week", 1),
-                Content.day == item.get("day", "Monday"),
-                Content.platform == item.get("platform", "linkedin").lower(),
-                Content.user_id == current_user.id
-            ).first()
-            
-            if existing_content:
-                # Update existing content
-                content_text = item.get("description") or item.get("content", "")
-                title_text = item.get("title", "")
                 
-                # Validate and update content - ensure we don't overwrite with empty strings
-                if content_text and content_text.strip():
-                    existing_content.content = content_text
-                elif not existing_content.content or not existing_content.content.strip():
-                    # Only set default if content is truly empty
-                    existing_content.content = f"Content for {item.get('platform', 'linkedin').title()} - {item.get('day', 'Monday')}"
+                # MySQL doesn't support timezone-aware datetimes, so convert to naive UTC
+                from datetime import timezone
+                if schedule_time.tzinfo is not None:
+                    schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
+                # If already naive, assume it's UTC and use as-is
                 
-                if title_text and title_text.strip():
-                    existing_content.title = title_text
-                elif not existing_content.title or not existing_content.title.strip():
-                    # Only set default if title is truly empty
-                    existing_content.title = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
+                # Check if content already exists (by campaign_id, week, day, platform)
+                existing_content = db.query(Content).filter(
+                    Content.campaign_id == campaign_id,
+                    Content.week == item.get("week", 1),
+                    Content.day == item.get("day", "Monday"),
+                    Content.platform == item.get("platform", "linkedin").lower(),
+                    Content.user_id == current_user.id
+                ).first()
                 
-                existing_content.schedule_time = schedule_time
-                existing_content.status = "scheduled"  # Move from draft to scheduled
-                existing_content.is_draft = False
-                existing_content.can_edit = True  # Can still edit scheduled content
-                if item.get("image"):
-                    existing_content.image_url = item.get("image")
-                scheduled_count += 1
-            else:
-                # Validate required fields
-                content_text = item.get("description") or item.get("content", "")
-                title_text = item.get("title", "")
-                
-                if not content_text or not content_text.strip():
-                    logger.warning(f"Skipping item with empty content: {item.get('id', 'unknown')}")
-                    continue
-                
-                if not title_text or not title_text.strip():
-                    title_text = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
-                
-                # Create new content
-                new_content = Content(
-                    user_id=current_user.id,
-                    campaign_id=campaign_id,
-                    week=item.get("week", 1),
-                    day=item.get("day", "Monday"),
-                    content=content_text,
-                    title=title_text,
-                    status="scheduled",  # Status: scheduled (was draft, now committed)
-                    date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
-                    platform=item.get("platform", "linkedin").lower(),
-                    file_name=f"{campaign_id}_{item.get('week', 1)}_{item.get('day', 'Monday')}_{item.get('platform', 'linkedin')}.txt",
-                    file_type="text",
-                    platform_post_no=item.get("platform_post_no", "1"),
-                    schedule_time=schedule_time,
-                    image_url=item.get("image"),
-                    is_draft=False,  # No longer a draft
-                    can_edit=True,  # Can still edit scheduled content
-                    knowledge_graph_location=item.get("knowledge_graph_location"),
-                    parent_idea=item.get("parent_idea"),
-                    landing_page_url=item.get("landing_page_url")
-                )
-                db.add(new_content)
-                scheduled_count += 1
+                if existing_content:
+                    # Update existing content
+                    content_text = item.get("description") or item.get("content", "")
+                    title_text = item.get("title", "")
+                    
+                    # Validate and update content - ensure we don't overwrite with empty strings
+                    if content_text and content_text.strip():
+                        existing_content.content = content_text
+                    elif not existing_content.content or not existing_content.content.strip():
+                        # Only set default if content is truly empty
+                        existing_content.content = f"Content for {item.get('platform', 'linkedin').title()} - {item.get('day', 'Monday')}"
+                    
+                    if title_text and title_text.strip():
+                        existing_content.title = title_text
+                    elif not existing_content.title or not existing_content.title.strip():
+                        # Only set default if title is truly empty
+                        existing_content.title = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
+                    
+                    existing_content.schedule_time = schedule_time
+                    existing_content.status = "scheduled"  # Move from draft to scheduled
+                    existing_content.is_draft = False
+                    existing_content.can_edit = True  # Can still edit scheduled content
+                    if item.get("image"):
+                        existing_content.image_url = item.get("image")
+                    scheduled_count += 1
+                else:
+                    # Validate required fields
+                    content_text = item.get("description") or item.get("content", "")
+                    title_text = item.get("title", "")
+                    
+                    if not content_text or not content_text.strip():
+                        logger.warning(f"Skipping item with empty content: {item.get('id', 'unknown')}")
+                        continue
+                    
+                    if not title_text or not title_text.strip():
+                        title_text = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
+                    
+                    # Create new content
+                    new_content = Content(
+                        user_id=current_user.id,
+                        campaign_id=campaign_id,
+                        week=item.get("week", 1),
+                        day=item.get("day", "Monday"),
+                        content=content_text,
+                        title=title_text,
+                        status="scheduled",  # Status: scheduled (was draft, now committed)
+                        date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
+                        platform=item.get("platform", "linkedin").lower(),
+                        file_name=f"{campaign_id}_{item.get('week', 1)}_{item.get('day', 'Monday')}_{item.get('platform', 'linkedin')}.txt",
+                        file_type="text",
+                        platform_post_no=item.get("platform_post_no", "1"),
+                        schedule_time=schedule_time,
+                        image_url=item.get("image"),
+                        is_draft=False,  # No longer a draft
+                        can_edit=True,  # Can still edit scheduled content
+                        knowledge_graph_location=item.get("knowledge_graph_location"),
+                        parent_idea=item.get("parent_idea"),
+                        landing_page_url=item.get("landing_page_url")
+                    )
+                    db.add(new_content)
+                    scheduled_count += 1
+            except Exception as item_error:
+                logger.error(f"Error processing content item {item.get('id', 'unknown')}: {item_error}")
+                import traceback
+                traceback.print_exc()
+                errors.append(f"Item {item.get('id', 'unknown')}: {str(item_error)}")
+                continue  # Continue with next item
         
         db.commit()
+        
+        if errors:
+            logger.warning(f"Scheduled {scheduled_count} items with {len(errors)} errors")
+            return {
+                "status": "partial_success",
+                "message": f"Successfully scheduled {scheduled_count} content item(s), {len(errors)} failed",
+                "errors": errors
+            }
         
         return {
             "status": "success",
