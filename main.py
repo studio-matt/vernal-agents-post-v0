@@ -682,8 +682,8 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "modelingSettings": modeling_settings,
                 # Site Builder specific fields
                 "site_base_url": campaign.site_base_url,
-                "target_keywords": json.loads(campaign.target_keywords_json) if campaign.target_keywords_json else None,
-                "top_ideas_count": campaign.top_ideas_count,
+                "target_keywords": json.loads(campaign.target_keywords_json) if hasattr(campaign, 'target_keywords_json') and campaign.target_keywords_json else None,
+                "top_ideas_count": campaign.top_ideas_count if hasattr(campaign, 'top_ideas_count') else None,
                 # Custom keywords/ideas
                 "custom_keywords": custom_keywords,
                 # Image settings
