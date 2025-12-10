@@ -7504,6 +7504,44 @@ async def generate_image_machine_content_endpoint(
         # Extract a summary or key visual concept from the article
         article_summary = article_content[:500] if len(article_content) > 500 else article_content
         
+        # Get Global Image Agent prompt
+        global_image_agent_prompt = ""
+        try:
+            from models import SystemSettings
+            global_agent_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "creative_agent_global_image_agent_prompt"
+            ).first()
+            if global_agent_setting and global_agent_setting.setting_value:
+                global_image_agent_prompt = global_agent_setting.setting_value
+            else:
+                # Try alternative: check if global_image_agent exists and get its prompt
+                global_agent_name = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == "creative_agent_global_image_agent_name"
+                ).first()
+                if global_agent_name:
+                    global_prompt_setting = db.query(SystemSettings).filter(
+                        SystemSettings.setting_key == "creative_agent_global_image_agent_prompt"
+                    ).first()
+                    if global_prompt_setting and global_prompt_setting.setting_value:
+                        global_image_agent_prompt = global_prompt_setting.setting_value
+        except Exception as e:
+            logger.warning(f"Could not fetch Global Image Agent prompt: {e}")
+        
+        # Get additional creative agent prompt if selected
+        additional_creative_agent_prompt = ""
+        if image_settings:
+            additional_agent_id = image_settings.get("additionalCreativeAgentId")
+            if additional_agent_id:
+                try:
+                    from models import SystemSettings
+                    additional_agent_setting = db.query(SystemSettings).filter(
+                        SystemSettings.setting_key == f"creative_agent_{additional_agent_id}_prompt"
+                    ).first()
+                    if additional_agent_setting and additional_agent_setting.setting_value:
+                        additional_creative_agent_prompt = additional_agent_setting.setting_value
+                except Exception as e:
+                    logger.warning(f"Could not fetch additional creative agent prompt: {e}")
+        
         # Build style components from image settings
         style_components = []
         if image_settings:
@@ -7518,11 +7556,24 @@ async def generate_image_machine_content_endpoint(
             if additional_prompt:
                 style_components.append(additional_prompt)
         
-        # Combine: Article content (what) + Image settings (how)
+        # Combine: Article content (what) + Global Image Agent prompt + Additional Creative Agent prompt + Image settings (how)
+        prompt_parts = [article_summary]
+        
+        # Add Global Image Agent prompt if available
+        if global_image_agent_prompt:
+            prompt_parts.append(f"Follow these guidelines: {global_image_agent_prompt}")
+        
+        # Add Additional Creative Agent prompt if available
+        if additional_creative_agent_prompt:
+            prompt_parts.append(f"Additional creative direction: {additional_creative_agent_prompt}")
+        
+        # Add style components
         if style_components:
-            final_prompt = f"{article_summary}. Create an image {', '.join(style_components)}."
+            prompt_parts.append(f"Create an image {', '.join(style_components)}.")
         else:
-            final_prompt = f"{article_summary}. Create a relevant image."
+            prompt_parts.append("Create a relevant image.")
+        
+        final_prompt = ". ".join(prompt_parts) + "."
         
         logger.info(f"🖼️ Generating image with prompt: {final_prompt[:200]}...")
         
