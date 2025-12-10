@@ -7940,6 +7940,9 @@ async def save_content_item(
         from models import Content, Campaign
         from datetime import datetime
         
+        logger.info(f"💾 save-content-item called for campaign {campaign_id} by user {current_user.id}")
+        logger.info(f"📦 Request data: {request_data}")
+        
         # Verify campaign exists
         campaign = db.query(Campaign).filter(
             Campaign.campaign_id == campaign_id,
@@ -7989,12 +7992,15 @@ async def save_content_item(
             content_update = item.get("description") or item.get("content", "")
             if content_update and content_update.strip():
                 existing_content.content = content_update
-            if item.get("image"):
-                existing_content.image_url = item.get("image")
+            # Update image if provided (support both field names)
+            image_url = item.get("image") or item.get("image_url")
+            if image_url:
+                existing_content.image_url = image_url
             existing_content.status = "draft"
             existing_content.is_draft = True
             existing_content.can_edit = True
             existing_content.schedule_time = schedule_time
+            logger.info(f"✅ Updated existing content: week={week}, day={day}, platform={platform}, image={image_url}")
         else:
             # Validate required fields
             content_text = item.get("description") or item.get("content", "")
@@ -8009,28 +8015,37 @@ async def save_content_item(
                 title_text = f"{platform.title()} Post - {day}"
             
             # Create new content
-            new_content = Content(
-                user_id=current_user.id,
-                campaign_id=campaign_id,
-                week=week,
-                day=day,
-                content=content_text,
-                title=title_text,
-                status="draft",
-                date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
-                platform=platform,
-                file_name=f"{campaign_id}_{week}_{day}_{platform}.txt",
-                file_type="text",
-                platform_post_no=item.get("platform_post_no", "1"),
-                schedule_time=schedule_time,
-                image_url=item.get("image"),
-                is_draft=True,
-                can_edit=True,
-                knowledge_graph_location=item.get("knowledge_graph_location"),
-                parent_idea=item.get("parent_idea"),
-                landing_page_url=item.get("landing_page_url")
-            )
-            db.add(new_content)
+            # Support both "image" and "image_url" field names
+            image_url = item.get("image") or item.get("image_url")
+            try:
+                new_content = Content(
+                    user_id=current_user.id,
+                    campaign_id=campaign_id,
+                    week=week,
+                    day=day,
+                    content=content_text,
+                    title=title_text,
+                    status="draft",
+                    date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
+                    platform=platform,
+                    file_name=f"{campaign_id}_{week}_{day}_{platform}.txt",
+                    file_type="text",
+                    platform_post_no=item.get("platform_post_no", "1"),
+                    schedule_time=schedule_time,
+                    image_url=image_url,
+                    is_draft=True,
+                    can_edit=True,
+                    knowledge_graph_location=item.get("knowledge_graph_location"),
+                    parent_idea=item.get("parent_idea"),
+                    landing_page_url=item.get("landing_page_url")
+                )
+                db.add(new_content)
+                logger.info(f"✅ Created new content: week={week}, day={day}, platform={platform}, image={image_url}")
+            except Exception as create_error:
+                logger.error(f"❌ Error creating Content object: {create_error}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
         
         db.commit()
         
@@ -8042,9 +8057,9 @@ async def save_content_item(
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error saving content item: {e}")
+        logger.error(f"❌ Error saving content item: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to save content item: {str(e)}"
