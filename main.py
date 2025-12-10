@@ -640,6 +640,23 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
             except (json.JSONDecodeError, TypeError):
                 logger.warning(f"Failed to parse modeling_settings_json for campaign {campaign_id}")
         
+        # Custom keywords/ideas
+        custom_keywords = []
+        if campaign.custom_keywords_json:
+            try:
+                custom_keywords = json.loads(campaign.custom_keywords_json)
+            except (json.JSONDecodeError, TypeError):
+                custom_keywords = []
+        
+        # Image settings (handle missing column gracefully with try-except)
+        image_settings = None
+        try:
+            if campaign.image_settings_json:
+                image_settings = json.loads(campaign.image_settings_json)
+        except (AttributeError, json.JSONDecodeError, TypeError):
+            # Column doesn't exist or invalid JSON - return None
+            image_settings = None
+        
         return {
             "status": "success",
             "campaign": {
@@ -666,11 +683,13 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "target_keywords": json.loads(campaign.target_keywords_json) if campaign.target_keywords_json else None,
                 "top_ideas_count": campaign.top_ideas_count,
                 # Custom keywords/ideas
-                "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else [],
-                # Image settings (handle missing column gracefully - check if attribute exists)
-                "image_settings": json.loads(campaign.image_settings_json) if hasattr(campaign, 'image_settings_json') and campaign.image_settings_json else None,
+                "custom_keywords": custom_keywords,
+                # Image settings
+                "image_settings": image_settings,
                 # Look Alike specific fields
                 "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
+            }
+        }
             }
         }
     except HTTPException:
