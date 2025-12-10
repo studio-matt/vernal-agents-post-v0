@@ -7712,28 +7712,35 @@ def get_scheduled_posts(
         from models import Content
         from datetime import datetime
         
+        logger.info(f"📋 Fetching scheduled posts for user {current_user.id}")
+        
         # Get all content for the user that has been scheduled (status = 'scheduled' or has schedule_time in future)
         scheduled_posts = db.query(Content).filter(
             Content.user_id == current_user.id,
             Content.status.in_(["draft", "scheduled", "published"])
         ).order_by(Content.schedule_time.asc()).all()
         
+        logger.info(f"📋 Found {len(scheduled_posts)} scheduled posts for user {current_user.id}")
+        
         posts_data = []
         for post in scheduled_posts:
             posts_data.append({
                 "id": post.id,
-                "title": post.title,
-                "content": post.content,
+                "title": post.title or "",
+                "content": post.content or "",
                 "platform": post.platform,
                 "schedule_time": post.schedule_time.isoformat() if post.schedule_time else None,
                 "day": post.day,
                 "week": post.week,
-                "status": post.status,
-                "image_url": post.image_url,
+                "status": post.status or "draft",
+                "image_url": post.image_url or "",
                 "campaign_id": post.campaign_id,
                 "can_edit": post.can_edit if hasattr(post, 'can_edit') else True,
                 "is_draft": post.is_draft if hasattr(post, 'is_draft') else True,
             })
+            logger.info(f"📋 Scheduled post: id={post.id}, campaign_id={post.campaign_id}, status={post.status}, has_image={bool(post.image_url)}")
+        
+        logger.info(f"✅ Returning {len(posts_data)} scheduled posts")
         
         return {
             "status": "success",
@@ -8017,6 +8024,10 @@ async def save_content_item(
             # Create new content
             # Support both "image" and "image_url" field names
             image_url = item.get("image") or item.get("image_url")
+            if image_url:
+                logger.info(f"💾 Saving image_url for new content: {image_url[:100]}...")
+            else:
+                logger.info(f"⚠️ No image_url provided in save request for new content")
             try:
                 new_content = Content(
                     user_id=current_user.id,
@@ -8040,7 +8051,7 @@ async def save_content_item(
                     landing_page_url=item.get("landing_page_url")
                 )
                 db.add(new_content)
-                logger.info(f"✅ Created new content: week={week}, day={day}, platform={platform}, image={image_url}")
+                logger.info(f"✅ Created new content: week={week}, day={day}, platform={platform}, has_image={bool(image_url)}")
             except Exception as create_error:
                 logger.error(f"❌ Error creating Content object: {create_error}")
                 import traceback
@@ -8075,14 +8086,19 @@ def get_campaign_content_items(
     try:
         from models import Content
         
+        logger.info(f"📋 Fetching content items for campaign {campaign_id}, user {current_user.id}")
+        
         # Get all content items regardless of status - we want to show all existing content
         content_items = db.query(Content).filter(
             Content.campaign_id == campaign_id,
             Content.user_id == current_user.id
         ).order_by(Content.week.asc(), Content.day.asc()).all()
         
+        logger.info(f"📋 Found {len(content_items)} content items for campaign {campaign_id}")
+        
         items_data = []
         for item in content_items:
+            image_url = item.image_url or ""
             items_data.append({
                 "id": f"week-{item.week}-{item.day}-{item.platform}-{item.id}",
                 "title": item.title or "",
@@ -8090,12 +8106,14 @@ def get_campaign_content_items(
                 "week": item.week,
                 "day": item.day,
                 "platform": item.platform,
-                "image": item.image_url or "",  # Ensure image_url is returned as "image" for frontend
-                "image_url": item.image_url or "",  # Also include image_url for compatibility
+                "image": image_url,  # Ensure image_url is returned as "image" for frontend
+                "image_url": image_url,  # Also include image_url for compatibility
                 "status": item.status or "draft",
                 "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
             })
+            logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}")
         
+        logger.info(f"✅ Returning {len(items_data)} items for campaign {campaign_id}")
         return {
             "status": "success",
             "message": {
