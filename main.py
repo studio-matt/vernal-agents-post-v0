@@ -593,6 +593,25 @@ def create_campaign(campaign_data: CampaignCreate, current_user = Depends(get_cu
             detail=f"Failed to create campaign: {str(e)}"
         )
 
+# Helper functions for safe attribute access (handles missing SQLAlchemy columns)
+def _safe_getattr(obj, attr_name, default=None):
+    """Safely get attribute from SQLAlchemy model, returning default if column doesn't exist"""
+    try:
+        return getattr(obj, attr_name, default)
+    except AttributeError:
+        return default
+
+def _safe_get_json(obj, attr_name, default=None):
+    """Safely get and parse JSON attribute from SQLAlchemy model"""
+    try:
+        import json
+        value = getattr(obj, attr_name, None)
+        if value:
+            return json.loads(value)
+        return default
+    except (AttributeError, json.JSONDecodeError, TypeError):
+        return default
+
 @app.get("/campaigns/{campaign_id}")
 def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get campaign by ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
