@@ -757,10 +757,10 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
             campaign.personality_settings_json = campaign_data.personality_settings_json
             logger.info(f"Saved personality_settings_json for campaign {campaign_id}: {campaign_data.personality_settings_json}")
         if campaign_data.image_settings_json is not None:
-            if hasattr(campaign, 'image_settings_json'):
+            try:
                 campaign.image_settings_json = campaign_data.image_settings_json
                 logger.info(f"Saved image_settings_json for campaign {campaign_id}: {campaign_data.image_settings_json}")
-            else:
+            except AttributeError:
                 logger.warning(f"image_settings_json column does not exist in database for campaign {campaign_id}")
         
         campaign.updated_at = datetime.utcnow()
