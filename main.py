@@ -7854,10 +7854,14 @@ async def schedule_campaign_content(
                     existing_content.status = "scheduled"  # Move from draft to scheduled
                     existing_content.is_draft = False
                     existing_content.can_edit = True  # Can still edit scheduled content
-                    # Update image if provided (support both field names)
+                    # Update image if provided (support both field names) - ALWAYS update even if empty to preserve existing
                     image_url = item.get("image") or item.get("image_url")
                     if image_url:
                         existing_content.image_url = image_url
+                        logger.info(f"💾 Updated image_url when scheduling: {image_url[:100]}...")
+                    else:
+                        logger.info(f"⚠️ No image_url provided when scheduling existing content (keeping existing: {existing_content.image_url[:100] if existing_content.image_url else 'none'}...)")
+                    logger.info(f"✅ Updated existing content to scheduled: week={item.get('week', 1)}, day={item.get('day', 'Monday')}, platform={item.get('platform', 'linkedin')}, has_image={bool(image_url or existing_content.image_url)}")
                     scheduled_count += 1
                 else:
                     # Validate required fields
@@ -7872,6 +7876,11 @@ async def schedule_campaign_content(
                         title_text = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
                     
                     # Create new content
+                    image_url = item.get("image") or item.get("image_url")
+                    if image_url:
+                        logger.info(f"💾 Saving image_url when scheduling new content: {image_url[:100]}...")
+                    else:
+                        logger.info(f"⚠️ No image_url provided when scheduling new content")
                     try:
                         new_content = Content(
                             user_id=current_user.id,
@@ -7887,17 +7896,18 @@ async def schedule_campaign_content(
                             file_type="text",
                             platform_post_no=item.get("platform_post_no", "1"),
                             schedule_time=schedule_time,
-                            image_url=item.get("image") or item.get("image_url") or None,  # Support both field names
+                            image_url=image_url,  # Support both field names
                             is_draft=False,  # No longer a draft
                             can_edit=True,  # Can still edit scheduled content
-                            knowledge_graph_location=item.get("knowledge_graph_location") or item.get("knowledge_graph_location"),
-                            parent_idea=item.get("parent_idea") or item.get("parent_idea"),
-                            landing_page_url=item.get("landing_page_url") or item.get("landing_page_url")
+                            knowledge_graph_location=item.get("knowledge_graph_location"),
+                            parent_idea=item.get("parent_idea"),
+                            landing_page_url=item.get("landing_page_url")
                         )
                         db.add(new_content)
+                        logger.info(f"✅ Created new scheduled content: week={item.get('week', 1)}, day={item.get('day', 'Monday')}, platform={item.get('platform', 'linkedin')}, has_image={bool(image_url)}")
                         scheduled_count += 1
                     except Exception as create_error:
-                        logger.error(f"Error creating Content object for item {item.get('id', 'unknown')}: {create_error}")
+                        logger.error(f"❌ Error creating Content object for item {item.get('id', 'unknown')}: {create_error}")
                         import traceback
                         logger.error(f"Traceback: {traceback.format_exc()}")
                         errors.append(f"Item {item.get('id', 'unknown')}: Failed to create content - {str(create_error)}")
