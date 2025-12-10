@@ -667,8 +667,8 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "top_ideas_count": campaign.top_ideas_count,
                 # Custom keywords/ideas
                 "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else [],
-                # Image settings (handle missing column gracefully)
-                "image_settings": None,
+                # Image settings (handle missing column gracefully - check if attribute exists)
+                "image_settings": json.loads(campaign.image_settings_json) if hasattr(campaign, 'image_settings_json') and campaign.image_settings_json else None,
                 # Look Alike specific fields
                 "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
             }
@@ -738,8 +738,11 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
             campaign.personality_settings_json = campaign_data.personality_settings_json
             logger.info(f"Saved personality_settings_json for campaign {campaign_id}: {campaign_data.personality_settings_json}")
         if campaign_data.image_settings_json is not None:
-            campaign.image_settings_json = campaign_data.image_settings_json
-            logger.info(f"Saved image_settings_json for campaign {campaign_id}: {campaign_data.image_settings_json}")
+            if hasattr(campaign, 'image_settings_json'):
+                campaign.image_settings_json = campaign_data.image_settings_json
+                logger.info(f"Saved image_settings_json for campaign {campaign_id}: {campaign_data.image_settings_json}")
+            else:
+                logger.warning(f"image_settings_json column does not exist in database for campaign {campaign_id}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
