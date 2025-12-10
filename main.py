@@ -617,7 +617,9 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
     """Get campaign by ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
         from models import Campaign
+        from sqlalchemy.orm import defer
         # Verify ownership
+        # Exclude potentially missing columns from query to avoid SQL errors
         campaign = db.query(Campaign).filter(
             Campaign.campaign_id == campaign_id,
             Campaign.user_id == current_user.id
