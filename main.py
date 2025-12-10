@@ -680,16 +680,16 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "preprocessingSettings": preprocessing_settings,
                 "entitySettings": entity_settings,
                 "modelingSettings": modeling_settings,
-                # Site Builder specific fields
-                "site_base_url": campaign.site_base_url,
-                "target_keywords": json.loads(campaign.target_keywords_json) if hasattr(campaign, 'target_keywords_json') and campaign.target_keywords_json else None,
-                "top_ideas_count": campaign.top_ideas_count if hasattr(campaign, 'top_ideas_count') else None,
+                # Site Builder specific fields (safely access potentially missing columns)
+                "site_base_url": _safe_getattr(campaign, 'site_base_url'),
+                "target_keywords": _safe_get_json(campaign, 'target_keywords_json'),
+                "top_ideas_count": _safe_getattr(campaign, 'top_ideas_count'),
                 # Custom keywords/ideas
                 "custom_keywords": custom_keywords,
                 # Image settings
                 "image_settings": image_settings,
                 # Look Alike specific fields
-                "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
+                "articles_url": _safe_getattr(campaign, 'articles_url')
             }
         }
     except HTTPException:
