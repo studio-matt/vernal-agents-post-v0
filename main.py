@@ -651,8 +651,10 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
         # Image settings (handle missing column gracefully with try-except)
         image_settings = None
         try:
-            if campaign.image_settings_json:
-                image_settings = json.loads(campaign.image_settings_json)
+            # Try to access the column - will raise AttributeError if column doesn't exist
+            img_settings_json = campaign.image_settings_json
+            if img_settings_json:
+                image_settings = json.loads(img_settings_json)
         except (AttributeError, json.JSONDecodeError, TypeError):
             # Column doesn't exist or invalid JSON - return None
             image_settings = None
