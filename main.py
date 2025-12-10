@@ -7504,28 +7504,24 @@ async def generate_image_machine_content_endpoint(
         # Extract a summary or key visual concept from the article
         article_summary = article_content[:500] if len(article_content) > 500 else article_content
         
-        # Get Global Image Agent prompt
+        # Get Global Image Agent prompt - ALWAYS use it for image generation
         global_image_agent_prompt = ""
         try:
             from models import SystemSettings
+            # Try to get the Global Image Agent prompt
             global_agent_setting = db.query(SystemSettings).filter(
                 SystemSettings.setting_key == "creative_agent_global_image_agent_prompt"
             ).first()
             if global_agent_setting and global_agent_setting.setting_value:
                 global_image_agent_prompt = global_agent_setting.setting_value
             else:
-                # Try alternative: check if global_image_agent exists and get its prompt
-                global_agent_name = db.query(SystemSettings).filter(
-                    SystemSettings.setting_key == "creative_agent_global_image_agent_name"
-                ).first()
-                if global_agent_name:
-                    global_prompt_setting = db.query(SystemSettings).filter(
-                        SystemSettings.setting_key == "creative_agent_global_image_agent_prompt"
-                    ).first()
-                    if global_prompt_setting and global_prompt_setting.setting_value:
-                        global_image_agent_prompt = global_prompt_setting.setting_value
+                # Fallback: use default prompt if Global Image Agent not configured yet
+                global_image_agent_prompt = "Create visually compelling images that align with the content's message and tone. Ensure images are professional, on-brand, and enhance the overall content experience."
+                logger.info("Using default Global Image Agent prompt (agent not yet configured)")
         except Exception as e:
             logger.warning(f"Could not fetch Global Image Agent prompt: {e}")
+            # Fallback to default prompt
+            global_image_agent_prompt = "Create visually compelling images that align with the content's message and tone. Ensure images are professional, on-brand, and enhance the overall content experience."
         
         # Get additional creative agent prompt if selected
         additional_creative_agent_prompt = ""
@@ -7559,9 +7555,8 @@ async def generate_image_machine_content_endpoint(
         # Combine: Article content (what) + Global Image Agent prompt + Additional Creative Agent prompt + Image settings (how)
         prompt_parts = [article_summary]
         
-        # Add Global Image Agent prompt if available
-        if global_image_agent_prompt:
-            prompt_parts.append(f"Follow these guidelines: {global_image_agent_prompt}")
+        # ALWAYS add Global Image Agent prompt (it has a fallback default if not configured)
+        prompt_parts.append(f"Follow these guidelines: {global_image_agent_prompt}")
         
         # Add Additional Creative Agent prompt if available
         if additional_creative_agent_prompt:
@@ -7782,11 +7777,18 @@ async def schedule_campaign_content(
                 content_text = item.get("description") or item.get("content", "")
                 title_text = item.get("title", "")
                 
-                # Validate and update content
+                # Validate and update content - ensure we don't overwrite with empty strings
                 if content_text and content_text.strip():
                     existing_content.content = content_text
+                elif not existing_content.content or not existing_content.content.strip():
+                    # Only set default if content is truly empty
+                    existing_content.content = f"Content for {item.get('platform', 'linkedin').title()} - {item.get('day', 'Monday')}"
+                
                 if title_text and title_text.strip():
                     existing_content.title = title_text
+                elif not existing_content.title or not existing_content.title.strip():
+                    # Only set default if title is truly empty
+                    existing_content.title = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
                 
                 existing_content.schedule_time = schedule_time
                 existing_content.status = "scheduled"  # Move from draft to scheduled
@@ -7908,8 +7910,9 @@ async def save_content_item(
             # Update existing content
             if item.get("title"):
                 existing_content.title = item.get("title")
-            if item.get("description") or item.get("content"):
-                existing_content.content = item.get("description") or item.get("content", "")
+            content_update = item.get("description") or item.get("content", "")
+            if content_update and content_update.strip():
+                existing_content.content = content_update
             if item.get("image"):
                 existing_content.image_url = item.get("image")
             existing_content.status = "draft"
