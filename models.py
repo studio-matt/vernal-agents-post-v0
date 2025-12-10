@@ -119,7 +119,7 @@ class Content(Base):
     file_type = Column(String(10), nullable=False)
     platform_post_no = Column(String(50), nullable=False)
     schedule_time = Column(DateTime, nullable=False)
-    image_url = Column(String(255), nullable=True)
+    image_url = Column(Text, nullable=True)  # Changed from String(255) to Text to support long DALL·E URLs with SAS tokens
     campaign_id = Column(String(255), nullable=True)  # Link to campaign
     is_draft = Column(Boolean, default=True)  # True until scheduled/published
     can_edit = Column(Boolean, default=True)  # True until sent out
