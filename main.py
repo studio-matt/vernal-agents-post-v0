@@ -7847,8 +7847,10 @@ async def schedule_campaign_content(
                     existing_content.status = "scheduled"  # Move from draft to scheduled
                     existing_content.is_draft = False
                     existing_content.can_edit = True  # Can still edit scheduled content
-                    if item.get("image"):
-                        existing_content.image_url = item.get("image")
+                    # Update image if provided (support both field names)
+                    image_url = item.get("image") or item.get("image_url")
+                    if image_url:
+                        existing_content.image_url = image_url
                     scheduled_count += 1
                 else:
                     # Validate required fields
@@ -7863,29 +7865,36 @@ async def schedule_campaign_content(
                         title_text = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
                     
                     # Create new content
-                    new_content = Content(
-                        user_id=current_user.id,
-                        campaign_id=campaign_id,
-                        week=item.get("week", 1),
-                        day=item.get("day", "Monday"),
-                        content=content_text,
-                        title=title_text,
-                        status="scheduled",  # Status: scheduled (was draft, now committed)
-                        date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
-                        platform=item.get("platform", "linkedin").lower(),
-                        file_name=f"{campaign_id}_{item.get('week', 1)}_{item.get('day', 'Monday')}_{item.get('platform', 'linkedin')}.txt",
-                        file_type="text",
-                        platform_post_no=item.get("platform_post_no", "1"),
-                        schedule_time=schedule_time,
-                        image_url=item.get("image"),
-                        is_draft=False,  # No longer a draft
-                        can_edit=True,  # Can still edit scheduled content
-                        knowledge_graph_location=item.get("knowledge_graph_location"),
-                        parent_idea=item.get("parent_idea"),
-                        landing_page_url=item.get("landing_page_url")
-                    )
-                    db.add(new_content)
-                    scheduled_count += 1
+                    try:
+                        new_content = Content(
+                            user_id=current_user.id,
+                            campaign_id=campaign_id,
+                            week=item.get("week", 1),
+                            day=item.get("day", "Monday"),
+                            content=content_text,
+                            title=title_text,
+                            status="scheduled",  # Status: scheduled (was draft, now committed)
+                            date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
+                            platform=item.get("platform", "linkedin").lower(),
+                            file_name=f"{campaign_id}_{item.get('week', 1)}_{item.get('day', 'Monday')}_{item.get('platform', 'linkedin')}.txt",
+                            file_type="text",
+                            platform_post_no=item.get("platform_post_no", "1"),
+                            schedule_time=schedule_time,
+                            image_url=item.get("image") or item.get("image_url") or None,  # Support both field names
+                            is_draft=False,  # No longer a draft
+                            can_edit=True,  # Can still edit scheduled content
+                            knowledge_graph_location=item.get("knowledge_graph_location") or item.get("knowledge_graph_location"),
+                            parent_idea=item.get("parent_idea") or item.get("parent_idea"),
+                            landing_page_url=item.get("landing_page_url") or item.get("landing_page_url")
+                        )
+                        db.add(new_content)
+                        scheduled_count += 1
+                    except Exception as create_error:
+                        logger.error(f"Error creating Content object for item {item.get('id', 'unknown')}: {create_error}")
+                        import traceback
+                        logger.error(f"Traceback: {traceback.format_exc()}")
+                        errors.append(f"Item {item.get('id', 'unknown')}: Failed to create content - {str(create_error)}")
+                        continue
             except Exception as item_error:
                 logger.error(f"Error processing content item {item.get('id', 'unknown')}: {item_error}")
                 import traceback
@@ -8047,27 +8056,28 @@ def get_campaign_content_items(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all draft/scheduled content items for a campaign"""
+    """Get all content items for a campaign (draft, scheduled, pending, uploaded)"""
     try:
         from models import Content
         
+        # Get all content items regardless of status - we want to show all existing content
         content_items = db.query(Content).filter(
             Content.campaign_id == campaign_id,
-            Content.user_id == current_user.id,
-            Content.status.in_(["draft", "scheduled"])
+            Content.user_id == current_user.id
         ).order_by(Content.week.asc(), Content.day.asc()).all()
         
         items_data = []
         for item in content_items:
             items_data.append({
                 "id": f"week-{item.week}-{item.day}-{item.platform}-{item.id}",
-                "title": item.title,
-                "description": item.content,
+                "title": item.title or "",
+                "description": item.content or "",
                 "week": item.week,
                 "day": item.day,
                 "platform": item.platform,
-                "image": item.image_url or "",
-                "status": item.status,
+                "image": item.image_url or "",  # Ensure image_url is returned as "image" for frontend
+                "image_url": item.image_url or "",  # Also include image_url for compatibility
+                "status": item.status or "draft",
                 "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
             })
         
