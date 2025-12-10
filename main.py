@@ -667,8 +667,8 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "top_ideas_count": campaign.top_ideas_count,
                 # Custom keywords/ideas
                 "custom_keywords": json.loads(campaign.custom_keywords_json) if campaign.custom_keywords_json else [],
-                # Image settings
-                "image_settings": json.loads(campaign.image_settings_json) if campaign.image_settings_json else None,
+                # Image settings (handle missing column gracefully)
+                "image_settings": None,
                 # Look Alike specific fields
                 "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
             }
@@ -677,9 +677,11 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
         raise
     except Exception as e:
         logger.error(f"Error fetching campaign: {str(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch campaign"
+            detail=f"Failed to fetch campaign: {str(e)}"
         )
 
 @app.put("/campaigns/{campaign_id}")
