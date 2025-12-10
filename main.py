@@ -690,8 +690,6 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "articles_url": campaign.articles_url if hasattr(campaign, 'articles_url') else None
             }
         }
-            }
-        }
     except HTTPException:
         raise
     except Exception as e:
