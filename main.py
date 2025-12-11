@@ -7749,7 +7749,59 @@ def get_scheduled_posts(
             }
         }
     except Exception as e:
-        logger.error(f"Error fetching scheduled posts: {e}")
+        logger.error(f"Error fetching scheduled posts: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch scheduled posts: {str(e)}"
+        )
+
+@app.delete("/posts/{post_id}")
+def delete_post(
+    post_id: int,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a scheduled post by ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
+    try:
+        from models import Content
+        
+        logger.info(f"🗑️ Deleting post {post_id} for user {current_user.id}")
+        
+        # Find the post and verify ownership
+        post = db.query(Content).filter(
+            Content.id == post_id,
+            Content.user_id == current_user.id
+        ).first()
+        
+        if not post:
+            raise HTTPException(
+                status_code=404,
+                detail="Post not found or access denied"
+            )
+        
+        # Delete the post
+        db.delete(post)
+        db.commit()
+        
+        logger.info(f"✅ Post {post_id} deleted successfully")
+        
+        return {
+            "status": "success",
+            "message": "Post deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting post: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete post: {str(e)}"
+        )(f"Error fetching scheduled posts: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
