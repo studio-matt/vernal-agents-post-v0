@@ -305,6 +305,7 @@ class CampaignUpdate(BaseModel):
     custom_keywords: Optional[List[str]] = None  # Custom keywords/ideas for content queue
     personality_settings_json: Optional[str] = None  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
     image_settings_json: Optional[str] = None  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
+    scheduling_settings_json: Optional[str] = None  # JSON string for scheduling settings: {activeDays, activePlatforms, post_frequency_type, post_frequency_value, start_date, day_frequency, defaultPosts}
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
@@ -783,6 +784,9 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
                 logger.info(f"Saved image_settings_json for campaign {campaign_id}: {campaign_data.image_settings_json}")
             except AttributeError:
                 logger.warning(f"image_settings_json column does not exist in database for campaign {campaign_id}")
+        if campaign_data.scheduling_settings_json is not None:
+            campaign.scheduling_settings_json = campaign_data.scheduling_settings_json
+            logger.info(f"Saved scheduling_settings_json for campaign {campaign_id}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
