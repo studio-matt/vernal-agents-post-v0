@@ -612,31 +612,41 @@ def generate_image(query, content):
         dall_e_url = response.data[0].url
         logger.info(f"🖼️ Generated DALL·E image: {dall_e_url[:100]}...")
         
-        # Download the image from DALL·E
+        # CRITICAL: Download the image immediately (whether it's DALL-E URL or Azure blob URL)
+        # Azure blob URLs expire, so we MUST download and store permanently
+        image_data = None
         try:
-            img_response = requests.get(dall_e_url, timeout=30)
+            img_response = requests.get(dall_e_url, timeout=60)  # Increased timeout for large images
             img_response.raise_for_status()
             image_data = img_response.content
-            logger.info(f"📥 Downloaded image from DALL·E ({len(image_data)} bytes)")
+            logger.info(f"📥 Downloaded image from source ({len(image_data)} bytes)")
         except Exception as download_error:
-            logger.error(f"❌ Failed to download image from DALL·E: {download_error}")
-            # Fallback: return temporary URL if download fails
-            return dall_e_url
+            logger.error(f"❌ CRITICAL: Failed to download image from source: {download_error}")
+            logger.error(f"❌ Image URL was: {dall_e_url[:200]}...")
+            # DO NOT return temporary URL - raise error instead
+            raise Exception(f"Failed to download image: {str(download_error)}. Image must be downloaded immediately to prevent expiration.")
+        
+        if not image_data:
+            raise Exception("Downloaded image data is empty. Cannot proceed with permanent storage.")
         
         # Generate a unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"dalle_{timestamp}_{hash(final_prompt) % 10000}.png"
+        import hashlib
+        content_hash = hashlib.md5(image_data).hexdigest()[:8]
+        filename = f"dalle_{timestamp}_{content_hash}.png"
         
-        # Upload to permanent storage (SFTP)
+        # Upload to permanent storage (SFTP) - REQUIRED, no fallback
         permanent_url = upload_image_to_sftp(image_data, filename)
         
         if permanent_url:
             logger.info(f"✅ Image stored permanently: {permanent_url}")
             return permanent_url
         else:
-            # Fallback: return temporary DALL·E URL if upload fails
-            logger.warning(f"⚠️ SFTP upload failed, returning temporary DALL·E URL")
-            return dall_e_url
+            # CRITICAL: SFTP upload failed - log error but don't return temporary URL
+            logger.error(f"❌ CRITICAL: SFTP upload failed. Image downloaded but not stored permanently.")
+            logger.error(f"❌ SFTP credentials check: HOST={bool(SFTP_HOST)}, USER={bool(SFTP_USER)}, PASS={bool(SFTP_PASS)}")
+            # Raise error instead of returning temporary URL
+            raise Exception("SFTP upload failed. Image was downloaded but could not be stored permanently. Please check SFTP configuration.")
             
     except Exception as e:
         raise Exception(f"Error generating image: {str(e)}")
