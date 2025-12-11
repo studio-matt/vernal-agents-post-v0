@@ -556,8 +556,44 @@ def find_matching_prompt(user_prompt, records):
             return fields.get("dalle prompt")
     return None  # No match found
 
+def upload_image_to_sftp(image_data: bytes, filename: str) -> str:
+    """Upload image data to SFTP server and return the permanent URL."""
+    try:
+        if not all([SFTP_HOST, SFTP_USER, SFTP_PASS]):
+            logger.warning("SFTP credentials not configured. Returning temporary DALL-E URL.")
+            return None
+        
+        remote_path = f"/home/{SFTP_USER}/public_html/nishant/{filename}"
+        base_url = f"https://{SFTP_HOST.replace('sftp.', '').replace('ftp.', '')}/nishant/{filename}"
+        
+        # Connect to SFTP and upload the file
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(hostname=SFTP_HOST, port=SFTP_PORT, username=SFTP_USER, password=SFTP_PASS)
+        sftp = ssh_client.open_sftp()
+        
+        # Upload the file
+        with sftp.file(remote_path, 'wb') as remote_file:
+            remote_file.write(image_data)
+        
+        sftp.close()
+        ssh_client.close()
+        
+        logger.info(f"✅ Uploaded image to SFTP: {base_url}")
+        return base_url
+        
+    except paramiko.AuthenticationException:
+        logger.error("SFTP authentication failed. Check credentials.")
+        return None
+    except paramiko.SSHException as ssh_e:
+        logger.error(f"SFTP error: {str(ssh_e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to upload image to SFTP: {str(e)}")
+        return None
+
 def generate_image(query, content):
-    """Generate an image using OpenAI's DALL·E based on content and query."""
+    """Generate an image using OpenAI's DALL·E, download it, and upload to permanent storage."""
     records = fetch_airtable_records()
     style_prompt = find_matching_prompt(query, records)
     
@@ -565,13 +601,43 @@ def generate_image(query, content):
     final_prompt = f"{content} {style_prompt}" if style_prompt else content
 
     try:
+        # Generate image with DALL·E
         response = client.images.generate(
             model="dall-e-3",
             prompt=final_prompt,
             size="1024x1024",
             n=1
         )
-        return response.data[0].url
+        
+        dall_e_url = response.data[0].url
+        logger.info(f"🖼️ Generated DALL·E image: {dall_e_url[:100]}...")
+        
+        # Download the image from DALL·E
+        try:
+            img_response = requests.get(dall_e_url, timeout=30)
+            img_response.raise_for_status()
+            image_data = img_response.content
+            logger.info(f"📥 Downloaded image from DALL·E ({len(image_data)} bytes)")
+        except Exception as download_error:
+            logger.error(f"❌ Failed to download image from DALL·E: {download_error}")
+            # Fallback: return temporary URL if download fails
+            return dall_e_url
+        
+        # Generate a unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"dalle_{timestamp}_{hash(final_prompt) % 10000}.png"
+        
+        # Upload to permanent storage (SFTP)
+        permanent_url = upload_image_to_sftp(image_data, filename)
+        
+        if permanent_url:
+            logger.info(f"✅ Image stored permanently: {permanent_url}")
+            return permanent_url
+        else:
+            # Fallback: return temporary DALL·E URL if upload fails
+            logger.warning(f"⚠️ SFTP upload failed, returning temporary DALL·E URL")
+            return dall_e_url
+            
     except Exception as e:
         raise Exception(f"Error generating image: {str(e)}")
     
