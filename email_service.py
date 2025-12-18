@@ -122,8 +122,8 @@ class EmailService:
             logger.error(f"Failed to send password reset email: {str(e)}")
             return False
 
-# Global email service instance
-email_service = EmailService()
+# Global email service instance (initialized lazily to handle errors)
+email_service = None
 
 # Fallback mock email service if real email fails
 class MockEmailService:
@@ -137,8 +137,23 @@ class MockEmailService:
 
 # Use real email service if configured, otherwise mock
 def get_email_service():
-    if os.getenv("MAIL_USERNAME") and os.getenv("MAIL_PASSWORD"):
-        return email_service
-    else:
+    global email_service
+    
+    # Check if email credentials are configured
+    mail_username = os.getenv("MAIL_USERNAME")
+    mail_password = os.getenv("MAIL_PASSWORD")
+    
+    if not mail_username or not mail_password:
         logger.warning("Email credentials not configured, using mock email service")
         return MockEmailService()
+    
+    # Initialize email service if not already initialized
+    if email_service is None:
+        try:
+            email_service = EmailService()
+            logger.info("Email service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize email service: {e}, using mock email service")
+            return MockEmailService()
+    
+    return email_service
