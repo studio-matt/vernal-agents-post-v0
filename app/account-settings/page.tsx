@@ -44,6 +44,27 @@ export default function AccountSettings() {
       {},
     ),
   )
+  
+  // Load selected platforms from onboarding
+  useEffect(() => {
+    const selectedPlatformsStr = localStorage.getItem("selected_platforms")
+    if (selectedPlatformsStr) {
+      try {
+        const selectedPlatforms = JSON.parse(selectedPlatformsStr)
+        // Set active platforms based on onboarding selections
+        setActivePlatforms((prev) => {
+          const updated = { ...prev }
+          ALL_PLATFORMS.forEach((platform) => {
+            // Enable if selected in onboarding, or if already enabled
+            updated[platform] = selectedPlatforms[platform] === true || prev[platform] === true
+          })
+          return updated
+        })
+      } catch (e) {
+        console.error("Failed to parse selected platforms:", e)
+      }
+    }
+  }, [])
 
   const [mergedData, setMergedData] = useState<(PlatformConnection & { platform: string })[]>([])
   const [siteUrl, setSiteUrl] = useState("")
@@ -66,7 +87,7 @@ export default function AccountSettings() {
   const [twitterMessageType, setTwitterMessageType] = useState<"success" | "error" | null>(null)
   const [wordpressMessageType, setWordpressMessageType] = useState<"success" | "error" | null>(null)
 
-  const [wordpressConnecting, setWordpressConnecting] = useState(false)
+  const [wordpressConnecting, setWordpressConnecting] = useState(true)
 
   const [isSignInPhase, setIsSignInPhase] = useState(true)
 
@@ -418,7 +439,27 @@ export default function AccountSettings() {
     }
   }
 
+  const handleEnablePlatform = (platform: string) => {
+    setActivePlatforms((prev) => ({
+      ...prev,
+      [platform]: true,
+    }))
+    // Update selected platforms in localStorage
+    const selectedPlatformsStr = localStorage.getItem("selected_platforms")
+    if (selectedPlatformsStr) {
+      try {
+        const selectedPlatforms = JSON.parse(selectedPlatformsStr)
+        selectedPlatforms[platform] = true
+        localStorage.setItem("selected_platforms", JSON.stringify(selectedPlatforms))
+      } catch (e) {
+        console.error("Failed to update selected platforms:", e)
+      }
+    }
+  }
+
   const renderPlatformCard = (platform: string) => {
+    const isDisabled = ["YouTube", "TikTok", "Claude", "Eleven Labs"].includes(platform)
+    const isActive = activePlatforms[platform] && !isDisabled
     const fields = (() => {
       switch (platform) {
         case "OpenAI":
@@ -456,57 +497,82 @@ export default function AccountSettings() {
     return (
       <Card
         key={platform}
-        className={`transition-all duration-300 ${activePlatforms[platform] ? "opacity-100" : "opacity-50"}`}
+        className={`transition-all duration-300 ${isActive ? "opacity-100" : "opacity-50"}`}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-base font-medium">{platform} Connection</CardTitle>
+          <CardTitle className="text-base font-medium">
+            {platform} Connection
+            {isDisabled && <span className="ml-2 text-sm text-gray-500">(Coming Soon)</span>}
+          </CardTitle>
           <Checkbox
-            checked={activePlatforms[platform]}
-            onCheckedChange={(checked) => handleCheckboxChange(platform, checked as boolean)}
+            checked={isActive}
+            onCheckedChange={(checked) => !isDisabled && handleCheckboxChange(platform, checked as boolean)}
+            disabled={isDisabled}
           />
         </CardHeader>
         <CardContent className="space-y-4">
-          {fields.map(({ key, label }) => (
-            <div key={key} className="space-y-2">
-              <h3 className="text-[1.1rem] font-semibold">{label}</h3>
-              <Input
-                id={`${platform}-${key}`}
-                type="password"
-                value={connections[platform]?.[key as keyof PlatformConnection] || ""}
-                onChange={(e) => handleInputChange(platform, key as keyof PlatformConnection, e.target.value)}
-              />
-            </div>
-          ))}
-          <div className="relative pt-10">
-            <Button
-              onClick={() => handleSave(platform)}
-              disabled={savingPlatform === platform || !activePlatforms[platform]}
-              className="w-full bg-[#3d545f] text-white hover:bg-[#3d545f]/90 disabled:opacity-50"
-            >
-              {savingPlatform === platform ? (
-                <>
-                  <RotateCw className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                `Save ${platform} Connection`
-              )}
-            </Button>
-            {successMessage[platform] && (
-              <div
-                className={`absolute left-0 right-0 top-0 flex items-center justify-center font-medium ${
-                  successMessage[platform]?.toLowerCase().includes("error") ||
-                  successMessage[platform]?.toLowerCase().includes("failed") ||
-                  successMessage[platform]?.toLowerCase().includes("required")
-                    ? "text-red-600"
-                    : "text-green-600"
-                }`}
-              >
-                <Check className="w-4 h-4 mr-1" />
-                {successMessage[platform]}
+          {isActive ? (
+            <>
+              {fields.map(({ key, label }) => (
+                <div key={key} className="space-y-2">
+                  <h3 className="text-[1.1rem] font-semibold">{label}</h3>
+                  <Input
+                    id={`${platform}-${key}`}
+                    type="password"
+                    value={connections[platform]?.[key as keyof PlatformConnection] || ""}
+                    onChange={(e) => handleInputChange(platform, key as keyof PlatformConnection, e.target.value)}
+                    disabled={isDisabled}
+                  />
+                </div>
+              ))}
+              <div className="relative pt-10">
+                <Button
+                  onClick={() => handleSave(platform)}
+                  disabled={savingPlatform === platform || isDisabled}
+                  className="w-full bg-[#3d545f] text-white hover:bg-[#3d545f]/90 disabled:opacity-50"
+                >
+                  {savingPlatform === platform ? (
+                    <>
+                      <RotateCw className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    `Save ${platform} Connection`
+                  )}
+                </Button>
+                {successMessage[platform] && (
+                  <div
+                    className={`absolute left-0 right-0 top-0 flex items-center justify-center font-medium ${
+                      successMessage[platform]?.toLowerCase().includes("error") ||
+                      successMessage[platform]?.toLowerCase().includes("failed") ||
+                      successMessage[platform]?.toLowerCase().includes("required")
+                        ? "text-red-600"
+                        : "text-green-600"
+                    }`}
+                  >
+                    <Check className="w-4 h-4 mr-1" />
+                    {successMessage[platform]}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="py-4 text-center">
+              <p className="text-gray-500 mb-4">
+                {isDisabled
+                  ? "This platform is not yet available."
+                  : "This platform is not enabled. Enable it to configure settings."}
+              </p>
+              {!isDisabled && (
+                <Button
+                  onClick={() => handleEnablePlatform(platform)}
+                  className="bg-[#3d545f] text-white hover:bg-[#3d545f]/90"
+                >
+                  Enable this Platform
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     )

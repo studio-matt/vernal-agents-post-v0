@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signupUser, verifyEmail, resendotp } from "@/components/Service";
+import { signupUser, verifyEmail, resendotp, loginUser } from "@/components/Service";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,14 +69,38 @@ export default function Signup() {
       localStorage.setItem("email", formData.email);
       setMessage("Email verified successfully!");
 
-      setTimeout(() => {
-        router.push("/login");
-      }, 1500);
+      // Auto-login after successful verification
+      try {
+        const loginResponse = await loginUser({
+          username: formData.email,
+          password: formData.password,
+        });
+
+        if (loginResponse?.status === "success") {
+          localStorage.setItem("token", loginResponse.token);
+          localStorage.setItem("username", formData.username);
+          localStorage.setItem("email", formData.email);
+          
+          // Check if onboarding is completed
+          const onboardingCompleted = localStorage.getItem("onboarding_completed");
+          if (onboardingCompleted === "true") {
+            setTimeout(() => router.push("/dashboard/content-planner"), 1000);
+          } else {
+            setTimeout(() => router.push("/onboarding"), 1000);
+          }
+        } else {
+          // If auto-login fails, redirect to login page
+          setTimeout(() => router.push("/login"), 1500);
+        }
+      } catch (loginErr) {
+        // If auto-login fails, redirect to login page
+        console.error("Auto-login failed:", loginErr);
+        setTimeout(() => router.push("/login"), 1500);
+      }
     } catch (err) {
       setError("OTP verification failed.");
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleResendOtp = async () => {

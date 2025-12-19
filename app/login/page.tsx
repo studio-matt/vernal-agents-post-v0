@@ -59,7 +59,14 @@ export default function Login() {
         localStorage.setItem("token", response.token)
         localStorage.setItem("username", formData.username)
         localStorage.setItem("email", formData.username)
-        setTimeout(() => router.push("/account-settings"), 1000)
+        
+        // Check if onboarding is completed
+        const onboardingCompleted = localStorage.getItem("onboarding_completed")
+        if (onboardingCompleted === "true") {
+          setTimeout(() => router.push("/dashboard/content-planner"), 1000)
+        } else {
+          setTimeout(() => router.push("/onboarding"), 1000)
+        }
       } else {
         setError(response?.message || "Login failed. Please try again.")
       }
