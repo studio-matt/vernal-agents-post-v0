@@ -4911,6 +4911,7 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         
         prompt_template = prompt_setting.setting_value
         logger.info(f"✅ Using prompt for {agent_type} agent (key: research_agent_{agent_type}_prompt)")
+        logger.info(f"📝 Prompt template (first 500 chars): {prompt_template[:500]}")
         
         # Prepare context with word cloud data for keyword agent
         if agent_type == "keyword":
@@ -4941,6 +4942,7 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         
         # Format prompt with context
         prompt = prompt_template.format(context=context)
+        logger.info(f"📝 Formatted prompt (first 500 chars): {prompt[:500]}")
         
         # Call LLM
         import os
@@ -4973,6 +4975,7 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
             response = llm.invoke(prompt)
             recommendations_text = response.content if hasattr(response, 'content') else str(response)
             logger.info(f"✅ Successfully generated {agent_type} recommendations ({len(recommendations_text)} chars)")
+            logger.info(f"📝 LLM response (first 1000 chars): {recommendations_text[:1000]}")
         except Exception as e:
             error_msg = str(e)
             logger.error(f"❌ Error calling LLM for {agent_type} recommendations: {error_msg}")
