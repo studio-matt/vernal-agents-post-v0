@@ -5,8 +5,17 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer, PorterStemmer
 from nltk.corpus import stopwords
 from nltk import pos_tag, ne_chunk
-import gensim
-from gensim import corpora, models
+# Gensim is optional - only needed for system model topic extraction
+try:
+    import gensim
+    from gensim import corpora, models
+    GENSIM_AVAILABLE_TOP_LEVEL = True
+except ImportError:
+    gensim = None
+    corpora = None
+    models = None
+    GENSIM_AVAILABLE_TOP_LEVEL = False
+    logger.warning("⚠️ Gensim not available at module level - system model topic extraction will not work")
 from collections import Counter
 import numpy as np
 import logging
