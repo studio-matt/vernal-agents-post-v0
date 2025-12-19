@@ -4820,20 +4820,26 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
     Caches insights in database to avoid re-calling LLM for the same campaign/agent combination.
     REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
     """
-    # Verify campaign ownership
-    from models import Campaign
-    campaign = db.query(Campaign).filter(
-        Campaign.campaign_id == campaign_id,
-        Campaign.user_id == current_user.id
-    ).first()
-    if not campaign:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Campaign not found or access denied"
-        )
+    logger.info(f"🔍 Research agent endpoint called: campaign_id={campaign_id}, agent_type={request_data.agent_type if hasattr(request_data, 'agent_type') else 'unknown'}")
     
     try:
         agent_type = request_data.agent_type
+        logger.info(f"✅ Processing {agent_type} agent for campaign {campaign_id}")
+        
+        # Verify campaign ownership
+        from models import Campaign
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        if not campaign:
+            logger.error(f"❌ Campaign {campaign_id} not found or access denied for user {current_user.id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Campaign not found or access denied"
+            )
+        
+        logger.info(f"✅ Campaign {campaign_id} verified, proceeding with {agent_type} agent")
         from models import CampaignRawData, SystemSettings, CampaignResearchInsights
         
         # Check if insights already exist in database (cache)
@@ -4843,13 +4849,22 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         ).first()
         
         if existing_insights and existing_insights.insights_text:
-            logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id}")
-            return {
-                "status": "success",
-                "recommendations": existing_insights.insights_text,
-                "agent_type": agent_type,
-                "cached": True
-            }
+            # Validate cached data is not empty or error message
+            cached_text = existing_insights.insights_text.strip()
+            if cached_text and not cached_text.startswith("ERROR:") and len(cached_text) > 10:
+                logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id} ({len(cached_text)} chars)")
+                return {
+                    "status": "success",
+                    "recommendations": cached_text,
+                    "agent_type": agent_type,
+                    "cached": True
+                }
+            else:
+                # Cached data is invalid (empty or error) - delete it and regenerate
+                logger.warning(f"⚠️ Cached {agent_type} insights for campaign {campaign_id} are invalid (empty or error), regenerating...")
+                db.delete(existing_insights)
+                db.commit()
+                # Continue to generation below
         
         # Get raw data for context
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
@@ -5023,10 +5038,12 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         }
         
     except Exception as e:
-        logger.error(f"Error generating {agent_type} recommendations: {e}")
         import traceback
-        logger.error(traceback.format_exc())
-        return {"status": "error", "message": str(e)}
+        error_trace = traceback.format_exc()
+        logger.error(f"❌ CRITICAL: Error generating {agent_type} recommendations for campaign {campaign_id}: {e}")
+        logger.error(f"❌ Error type: {type(e).__name__}")
+        logger.error(f"❌ Full traceback:\n{error_trace}")
+        return {"status": "error", "message": f"Error generating recommendations: {str(e)}"}
 
 # Generate Ideas endpoint (for content queue)
 @app.post("/generate-ideas")
