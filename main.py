@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
@@ -192,6 +193,11 @@ async def options_handler(full_path: str, request: Request):
         )
     return JSONResponse(content={"error": "Origin not allowed"}, status_code=403)
 
+# Mount static files directory for images
+uploads_dir = os.path.join(os.path.dirname(__file__), "uploads", "images")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/images", StaticFiles(directory=uploads_dir), name="images")
+logger.info(f"✅ Static file serving enabled for images: {uploads_dir}")
 # --- ROUTER INCLUDES MUST BE HERE ---
 # This is REQUIRED for FastAPI to properly register endpoints
 # Using lazy imports to prevent blocking at startup
