@@ -653,11 +653,25 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
     try:
         # Import required libraries
         try:
+            # First check if gensim is available at module level
+            if not GENSIM_AVAILABLE_TOP_LEVEL:
+                # Try importing gensim directly (might have been installed after module load)
+                try:
+                    import gensim
+                    from gensim import corpora, models
+                    logger.info(f"✅ Gensim available (imported at function level): {gensim.__version__}")
+                except ImportError as e:
+                    logger.error(f"❌ Gensim not available - system model requires gensim. Import error: {e}")
+                    logger.error("❌ Install with: pip install gensim>=4.3.2 && sudo systemctl restart vernal-agents")
+                    return []
+            
             from gensim.models import Phrases, Phraser
             from gensim.models.coherencemodel import CoherenceModel
             GENSIM_AVAILABLE = True
-        except ImportError:
-            logger.error("❌ Gensim not available - system model requires gensim")
+            logger.info("✅ Gensim models imported successfully")
+        except ImportError as e:
+            logger.error(f"❌ Gensim not available - system model requires gensim. Import error: {e}")
+            logger.error("❌ Install with: pip install gensim>=4.3.2 && sudo systemctl restart vernal-agents")
             return []
         
         if not SKLEARN_AVAILABLE:
