@@ -556,12 +556,33 @@ def find_matching_prompt(user_prompt, records):
             return fields.get("dalle prompt")
     return None  # No match found
 
-def upload_image_to_sftp(image_data: bytes, filename: str) -> str:
-    """Upload image data to SFTP server and return the permanent URL."""
+def save_image_locally(image_data: bytes, filename: str) -> str:
+    """Save image data to local storage and return the permanent URL."""
     try:
-        if not all([SFTP_HOST, SFTP_USER, SFTP_PASS]):
-            logger.warning("SFTP credentials not configured. Returning temporary DALL-E URL.")
-            return None
+        # Get the directory where tools.py is located
+        tools_dir = os.path.dirname(os.path.abspath(__file__))
+        upload_dir = os.path.join(tools_dir, "uploads", "images")
+        
+        # Create directory if it doesn't exist
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Save file locally
+        file_path = os.path.join(upload_dir, filename)
+        with open(file_path, 'wb') as f:
+            f.write(image_data)
+        
+        # Return URL that will be served by FastAPI/nginx
+        base_url = f"https://themachine.vernalcontentum.com/images/{filename}"
+        
+        logger.info(f"✅ Saved image locally: {file_path}")
+        logger.info(f"✅ Image URL: {base_url}")
+        return base_url
+        
+    except Exception as e:
+        logger.error(f"Failed to save image locally: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
         
         remote_path = f"/home/{SFTP_USER}/public_html/nishant/{filename}"
         base_url = f"https://{SFTP_HOST.replace('sftp.', '').replace('ftp.', '')}/nishant/{filename}"
@@ -636,7 +657,7 @@ def generate_image(query, content):
         filename = f"dalle_{timestamp}_{content_hash}.png"
         
         # Upload to permanent storage (SFTP) - REQUIRED, no fallback
-        permanent_url = upload_image_to_sftp(image_data, filename)
+        permanent_url = save_image_locally(image_data, filename)
         
         if permanent_url:
             logger.info(f"✅ Image stored permanently: {permanent_url}")
