@@ -668,12 +668,12 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
             from gensim.models import Phrases
             from gensim.models.coherencemodel import CoherenceModel
             # Phraser was removed in gensim 4.x - Phrases can be used directly
+            PHRASER_AVAILABLE = False  # Initialize to False (gensim 4.x default)
             try:
                 from gensim.models import Phraser
                 PHRASER_AVAILABLE = True
             except ImportError:
                 # Phraser not available in gensim 4.x - use Phrases directly
-                PHRASER_AVAILABLE = False
                 logger.info("ℹ️ Phraser not available (gensim 4.x) - using Phrases directly")
             GENSIM_AVAILABLE = True
             logger.info("✅ Gensim models imported successfully")
