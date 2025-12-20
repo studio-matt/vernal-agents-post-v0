@@ -845,8 +845,9 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
             return []
         
         # Phrase mining with Gensim
-        bigram = Phrases(tokens_list, min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter=b"_")
-        trigram = Phrases(bigram[tokens_list], min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter=b"_")
+        # Use string delimiter (not bytes) since tokens_list contains strings
+        bigram = Phrases(tokens_list, min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter="_")
+        trigram = Phrases(bigram[tokens_list], min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter="_")
         # In gensim 4.x, Phraser was removed - Phrases can be used directly
         if PHRASER_AVAILABLE:
             bigr = Phraser(bigram)
