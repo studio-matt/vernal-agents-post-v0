@@ -847,9 +847,16 @@ def system_model_topics(texts: List[str], num_topics: int, query: str = "", keyw
         # Phrase mining with Gensim
         bigram = Phrases(tokens_list, min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter=b"_")
         trigram = Phrases(bigram[tokens_list], min_count=PHRASES_MIN_COUNT, threshold=PHRASES_THRESHOLD, delimiter=b"_")
-        bigr = Phraser(bigram)
-        trgr = Phraser(trigram)
-        tokens_phrased = [trgr[bigr[tok]] for tok in tokens_list]
+        # In gensim 4.x, Phraser was removed - Phrases can be used directly
+        if PHRASER_AVAILABLE:
+            bigr = Phraser(bigram)
+            trgr = Phraser(trigram)
+            tokens_phrased = [trgr[bigr[tok]] for tok in tokens_list]
+        else:
+            # Use Phrases directly (gensim 4.x compatibility)
+            bigr = bigram
+            trgr = trigram
+            tokens_phrased = [trgr[bigr[tok]] for tok in tokens_list]
         docs_str = [" ".join(t) for t in tokens_phrased]
         
         # Vectorize with TF-IDF
