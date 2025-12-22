@@ -8308,28 +8308,70 @@ async def check_platform_credentials(
 # ============================================================================
 
 @app.get("/linkedin/auth-v2")
+@app.post("/linkedin/auth-v2")
 async def linkedin_auth_v2(
+    request_data: Dict[str, Any] = None,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Initiate LinkedIn OAuth connection - returns auth URL for redirect"""
+    """Initiate LinkedIn OAuth - uses stored credentials or accepts new ones"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken
-        import os
-        from dotenv import load_dotenv
+        from typing import Dict, Any
+        from datetime import datetime
         
-        load_dotenv()
+        redirect_uri = "https://machine.vernalcontentum.com/linkedin/callback"
         
-        client_id = os.getenv("LINKEDIN_CLIENT_ID")
-        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
-        redirect_uri = os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        client_id = None
+        client_secret = None
         
-        if not client_id or not client_secret:
-            raise HTTPException(status_code=500, detail="LinkedIn OAuth credentials not configured")
+        # If POST with credentials, store them
+        if request_data and request_data.get("client_id") and request_data.get("client_secret"):
+            client_id = request_data.get("client_id", "").strip()
+            client_secret = request_data.get("client_secret", "").strip()
+            
+            if not client_id or not client_secret:
+                raise HTTPException(status_code=400, detail="LinkedIn Client ID and Client Secret are required")
+            
+            # Store credentials in database
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.LINKEDIN
+            ).first()
+            
+            if connection:
+                connection.platform_user_id = client_id
+                connection.refresh_token = client_secret
+            else:
+                connection = PlatformConnection(
+                    user_id=current_user.id,
+                    platform=PlatformEnum.LINKEDIN,
+                    platform_user_id=client_id,
+                    refresh_token=client_secret
+                )
+                db.add(connection)
+            db.commit()
+        else:
+            # GET request - check for stored credentials
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.LINKEDIN
+            ).first()
+            
+            if not connection or not connection.platform_user_id or not connection.refresh_token:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="LinkedIn credentials not found. Please provide Client ID and Client Secret."
+                )
+            
+            client_id = connection.platform_user_id
+            client_secret = connection.refresh_token
         
+        # Generate state for CSRF protection
         import secrets
         state = secrets.token_urlsafe(32)
         
+        # Store state in database
         existing_state = db.query(StateToken).filter(
             StateToken.user_id == current_user.id,
             StateToken.platform == PlatformEnum.LINKEDIN,
@@ -8347,6 +8389,7 @@ async def linkedin_auth_v2(
         
         db.commit()
         
+        # Build LinkedIn OAuth URL
         auth_url = (
             f"https://www.linkedin.com/oauth/v2/authorization?"
             f"response_type=code&"
@@ -8357,15 +8400,21 @@ async def linkedin_auth_v2(
         )
         
         logger.info(f"✅ LinkedIn auth URL generated for user {current_user.id}")
-        return {"status": "success", "auth_url": auth_url}
+        return {
+            "status": "success",
+            "auth_url": auth_url
+        }
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         logger.error(f"❌ Error generating LinkedIn auth URL: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate LinkedIn auth URL: {str(e)}")
-
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate LinkedIn auth URL: {str(e)}"
+        )
 @app.get("/linkedin/callback")
 async def linkedin_callback(
     code: str,
