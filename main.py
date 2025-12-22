@@ -8268,6 +8268,412 @@ def get_campaign_content_items(
         )
 
 # ============================================================================
+# ============================================================================
+# PLATFORM CONNECTION ENDPOINTS
+# ============================================================================
+
+@app.get("/linkedin/auth-v2")
+async def linkedin_auth_v2(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Initiate LinkedIn OAuth connection - returns auth URL for redirect"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        
+        client_id = os.getenv("LINKEDIN_CLIENT_ID")
+        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
+        redirect_uri = os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        
+        if not client_id or not client_secret:
+            raise HTTPException(status_code=500, detail="LinkedIn OAuth credentials not configured")
+        
+        import secrets
+        state = secrets.token_urlsafe(32)
+        
+        existing_state = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.LINKEDIN,
+            StateToken.state == state
+        ).first()
+        
+        if not existing_state:
+            new_state = StateToken(
+                user_id=current_user.id,
+                platform=PlatformEnum.LINKEDIN,
+                state=state,
+                created_at=datetime.now()
+            )
+            db.add(new_state)
+        
+        db.commit()
+        
+        auth_url = (
+            f"https://www.linkedin.com/oauth/v2/authorization?"
+            f"response_type=code&"
+            f"client_id={client_id}&"
+            f"redirect_uri={redirect_uri}&"
+            f"state={state}&"
+            f"scope=r_liteprofile%20r_emailaddress%20w_member_social"
+        )
+        
+        logger.info(f"✅ LinkedIn auth URL generated for user {current_user.id}")
+        return {"status": "success", "auth_url": auth_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error generating LinkedIn auth URL: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate LinkedIn auth URL: {str(e)}")
+
+@app.get("/linkedin/callback")
+async def linkedin_callback(
+    code: str,
+    state: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Handle LinkedIn OAuth callback and exchange code for access token"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken
+        import os
+        from dotenv import load_dotenv
+        import requests
+        
+        load_dotenv()
+        
+        client_id = os.getenv("LINKEDIN_CLIENT_ID")
+        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
+        redirect_uri = os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        
+        state_token = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.LINKEDIN,
+            StateToken.state == state
+        ).first()
+        
+        if not state_token:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        db.delete(state_token)
+        
+        token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+        token_data = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": client_id,
+            "client_secret": client_secret
+        }
+        
+        response = requests.post(token_url, data=token_data)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+        
+        token_response = response.json()
+        access_token = token_response.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token in response")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.LINKEDIN
+        ).first()
+        
+        if connection:
+            connection.access_token = access_token
+            connection.connected_at = datetime.now()
+        else:
+            connection = PlatformConnection(
+                user_id=current_user.id,
+                platform=PlatformEnum.LINKEDIN,
+                access_token=access_token,
+                connected_at=datetime.now()
+            )
+            db.add(connection)
+        
+        db.commit()
+        
+        logger.info(f"✅ LinkedIn connection successful for user {current_user.id}")
+        return JSONResponse(content={"status": "success", "message": "LinkedIn connected successfully"}, status_code=200)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error in LinkedIn callback: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to complete LinkedIn connection: {str(e)}")
+
+@app.get("/twitter/auth-v2")
+async def twitter_auth_v2(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Initiate Twitter OAuth connection - returns redirect URL"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken
+        import os
+        from dotenv import load_dotenv
+        from requests_oauthlib import OAuth1Session
+        
+        load_dotenv()
+        
+        consumer_key = os.getenv("TWITTER_API_KEY")
+        consumer_secret = os.getenv("TWITTER_API_SECRET")
+        callback_url = os.getenv("TWITTER_CALLBACK_URL", "https://machine.vernalcontentum.com/twitter/callback")
+        
+        if not consumer_key or not consumer_secret:
+            raise HTTPException(status_code=500, detail="Twitter OAuth credentials not configured")
+        
+        oauth = OAuth1Session(consumer_key, client_secret=consumer_secret, callback_uri=callback_url)
+        request_token_url = "https://api.twitter.com/oauth/request_token"
+        
+        try:
+            fetch_response = oauth.fetch_request_token(request_token_url)
+        except Exception as e:
+            logger.error(f"Error fetching Twitter request token: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get Twitter request token")
+        
+        oauth_token = fetch_response.get('oauth_token')
+        oauth_token_secret = fetch_response.get('oauth_token_secret')
+        
+        if not oauth_token:
+            raise HTTPException(status_code=500, detail="No oauth_token in response")
+        
+        new_state = StateToken(
+            user_id=current_user.id,
+            platform=PlatformEnum.TWITTER,
+            oauth_token=oauth_token,
+            oauth_token_secret=oauth_token_secret,
+            state=oauth_token,
+            created_at=datetime.now()
+        )
+        db.add(new_state)
+        db.commit()
+        
+        authorization_url = f"https://api.twitter.com/oauth/authorize?oauth_token={oauth_token}"
+        
+        logger.info(f"✅ Twitter auth URL generated for user {current_user.id}")
+        return {"status": "success", "redirect_url": authorization_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error generating Twitter auth URL: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate Twitter auth URL: {str(e)}")
+
+@app.get("/twitter/callback")
+async def twitter_callback(
+    oauth_token: str,
+    oauth_verifier: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Handle Twitter OAuth callback and exchange verifier for access token"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken
+        import os
+        from dotenv import load_dotenv
+        from requests_oauthlib import OAuth1Session
+        
+        load_dotenv()
+        
+        consumer_key = os.getenv("TWITTER_API_KEY")
+        consumer_secret = os.getenv("TWITTER_API_SECRET")
+        
+        state_token = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.TWITTER,
+            StateToken.oauth_token == oauth_token
+        ).first()
+        
+        if not state_token:
+            raise HTTPException(status_code=400, detail="Invalid oauth_token")
+        
+        oauth_token_secret = state_token.oauth_token_secret
+        db.delete(state_token)
+        
+        oauth = OAuth1Session(
+            consumer_key,
+            client_secret=consumer_secret,
+            resource_owner_key=oauth_token,
+            resource_owner_secret=oauth_token_secret,
+            verifier=oauth_verifier
+        )
+        
+        access_token_url = "https://api.twitter.com/oauth/access_token"
+        oauth_tokens = oauth.fetch_access_token(access_token_url)
+        
+        access_token = oauth_tokens.get('oauth_token')
+        access_token_secret = oauth_tokens.get('oauth_token_secret')
+        
+        if not access_token or not access_token_secret:
+            raise HTTPException(status_code=400, detail="Failed to get access tokens")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.TWITTER
+        ).first()
+        
+        if connection:
+            connection.access_token = access_token
+            connection.refresh_token = access_token_secret
+            connection.connected_at = datetime.now()
+        else:
+            connection = PlatformConnection(
+                user_id=current_user.id,
+                platform=PlatformEnum.TWITTER,
+                access_token=access_token,
+                refresh_token=access_token_secret,
+                connected_at=datetime.now()
+            )
+            db.add(connection)
+        
+        db.commit()
+        
+        logger.info(f"✅ Twitter connection successful for user {current_user.id}")
+        return JSONResponse(content={"status": "success", "message": "Twitter connected successfully"}, status_code=200)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error in Twitter callback: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to complete Twitter connection: {str(e)}")
+
+@app.post("/wordpress/auth-v2")
+async def wordpress_auth_v2(
+    request: Request,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Connect WordPress site using application password"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        import requests
+        from requests.auth import HTTPBasicAuth
+        
+        form_data = await request.form()
+        site_url = form_data.get("site_url", "").strip()
+        username = form_data.get("username", "").strip()
+        password = form_data.get("password", "").strip()
+        
+        if not site_url or not username or not password:
+            raise HTTPException(status_code=400, detail="Missing required fields: site_url, username, password")
+        
+        if not site_url.startswith(("http://", "https://")):
+            site_url = f"https://{site_url}"
+        
+        wp_api_url = f"{site_url}/wp-json/wp/v2/users/me"
+        
+        try:
+            response = requests.get(wp_api_url, auth=HTTPBasicAuth(username, password), timeout=10)
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"WordPress authentication failed: {response.status_code}")
+            logger.info(f"✅ WordPress connection verified for user {current_user.id}")
+        except requests.exceptions.RequestException as e:
+            raise HTTPException(status_code=400, detail=f"Failed to connect to WordPress: {str(e)}")
+        
+        existing_connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.WORDPRESS
+        ).first()
+        
+        if existing_connection:
+            existing_connection.platform_user_id = site_url
+            existing_connection.refresh_token = username
+            existing_connection.access_token = password
+            existing_connection.connected_at = datetime.now()
+        else:
+            new_connection = PlatformConnection(
+                user_id=current_user.id,
+                platform=PlatformEnum.WORDPRESS,
+                platform_user_id=site_url,
+                refresh_token=username,
+                access_token=password,
+                connected_at=datetime.now()
+            )
+            db.add(new_connection)
+        
+        db.commit()
+        
+        return {"status": "success", "message": "WordPress connected successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error connecting WordPress: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect WordPress: {str(e)}")
+
+@app.post("/instagram/connect")
+async def instagram_connect(
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Connect Instagram account using App ID, App Secret, and Access Token"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        import requests
+        
+        app_id = request_data.get("app_id", "").strip()
+        app_secret = request_data.get("app_secret", "").strip()
+        access_token = request_data.get("access_token", "").strip()
+        
+        if not app_id or not app_secret or not access_token:
+            raise HTTPException(status_code=400, detail="Missing required fields: app_id, app_secret, access_token")
+        
+        verify_url = f"https://graph.instagram.com/me?fields=id,username&access_token={access_token}"
+        
+        try:
+            response = requests.get(verify_url, timeout=10)
+            if response.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Instagram access token invalid: {response.status_code}")
+            logger.info(f"✅ Instagram connection verified for user {current_user.id}")
+        except requests.exceptions.RequestException as e:
+            raise HTTPException(status_code=400, detail=f"Failed to verify Instagram token: {str(e)}")
+        
+        existing_connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.INSTAGRAM
+        ).first()
+        
+        if existing_connection:
+            existing_connection.platform_user_id = app_id
+            existing_connection.access_token = access_token
+            existing_connection.connected_at = datetime.now()
+        else:
+            new_connection = PlatformConnection(
+                user_id=current_user.id,
+                platform=PlatformEnum.INSTAGRAM,
+                platform_user_id=app_id,
+                access_token=access_token,
+                connected_at=datetime.now()
+            )
+            db.add(new_connection)
+        
+        db.commit()
+        
+        return {"status": "success", "message": "Instagram connected successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error connecting Instagram: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect Instagram: {str(e)}")
+
+
 # PLATFORM POSTING ENDPOINTS (for scheduled content)
 # ============================================================================
 
