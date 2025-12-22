@@ -134,4 +134,4 @@ torchvision>=0.17.2
 # - MCP implementation is custom (no external MCP dependencies needed)
 # - Some packages may have transitive dependencies not listed here
 # - Test with: pip install -r requirements.txt
-# =============================================================================
+# =============================================================================requests-oauthlib>=1.3.1  # Required for Twitter OAuth 1.0a flow

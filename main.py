@@ -8267,6 +8267,289 @@ def get_campaign_content_items(
             detail=f"Failed to fetch content items: {str(e)}"
         )
 
+# ============================================================================
+# PLATFORM POSTING ENDPOINTS (for scheduled content)
+# ============================================================================
+
+@app.post("/platforms/linkedin/post")
+async def post_to_linkedin(
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Post content to LinkedIn using stored connection"""
+    try:
+        from models import PlatformConnection, PlatformEnum, Content
+        import requests
+        
+        content_id = request_data.get("content_id")
+        content_text = request_data.get("content", "")
+        image_url = request_data.get("image_url")
+        
+        if not content_text:
+            raise HTTPException(status_code=400, detail="Content text is required")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.LINKEDIN
+        ).first()
+        
+        if not connection or not connection.access_token:
+            raise HTTPException(status_code=400, detail="LinkedIn not connected. Please connect your LinkedIn account first.")
+        
+        api_url = "https://api.linkedin.com/v2/ugcPosts"
+        headers = {
+            "Authorization": f"Bearer {connection.access_token}",
+            "Content-Type": "application/json",
+            "X-Restli-Protocol-Version": "2.0.0"
+        }
+        
+        post_data = {
+            "author": f"urn:li:person:{current_user.id}",
+            "lifecycleState": "PUBLISHED",
+            "specificContent": {
+                "com.linkedin.ugc.ShareContent": {
+                    "shareCommentary": {"text": content_text},
+                    "shareMediaCategory": "NONE"
+                }
+            },
+            "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
+        }
+        
+        if image_url:
+            post_data["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [{
+                "status": "READY",
+                "media": image_url
+            }]
+        
+        response = requests.post(api_url, json=post_data, headers=headers, timeout=30)
+        
+        if response.status_code not in [200, 201]:
+            raise HTTPException(status_code=400, detail=f"LinkedIn API error: {response.status_code} - {response.text}")
+        
+        if content_id:
+            content = db.query(Content).filter(Content.id == content_id, Content.user_id == current_user.id).first()
+            if content:
+                content.status = "posted"
+                content.date_upload = datetime.now().replace(tzinfo=None)
+                db.commit()
+        
+        logger.info(f"✅ Posted to LinkedIn for user {current_user.id}")
+        return {"status": "success", "message": "Content posted to LinkedIn successfully", "post_id": response.json().get("id")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error posting to LinkedIn: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to post to LinkedIn: {str(e)}")
+
+@app.post("/platforms/twitter/post")
+async def post_to_twitter(
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Post content to Twitter/X using stored connection"""
+    try:
+        from models import PlatformConnection, PlatformEnum, Content
+        from requests_oauthlib import OAuth1Session
+        import requests
+        
+        content_id = request_data.get("content_id")
+        content_text = request_data.get("content", "")
+        image_url = request_data.get("image_url")
+        
+        if not content_text:
+            raise HTTPException(status_code=400, detail="Content text is required")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.TWITTER
+        ).first()
+        
+        if not connection or not connection.access_token or not connection.refresh_token:
+            raise HTTPException(status_code=400, detail="Twitter not connected. Please connect your Twitter account first.")
+        
+        api_url = "https://api.twitter.com/2/tweets"
+        from dotenv import load_dotenv
+        import os
+        load_dotenv()
+        
+        oauth = OAuth1Session(
+            os.getenv("TWITTER_API_KEY"),
+            client_secret=os.getenv("TWITTER_API_SECRET"),
+            resource_owner_key=connection.access_token,
+            resource_owner_secret=connection.refresh_token
+        )
+        
+        tweet_data = {"text": content_text[:280]}
+        
+        if image_url:
+            media_url = "https://upload.twitter.com/1.1/media/upload.json"
+            media_response = oauth.post(media_url, files={"media": requests.get(image_url).content})
+            if media_response.status_code == 200:
+                media_id = media_response.json().get("media_id_string")
+                tweet_data["media"] = {"media_ids": [media_id]}
+        
+        response = oauth.post(api_url, json=tweet_data, timeout=30)
+        
+        if response.status_code not in [200, 201]:
+            raise HTTPException(status_code=400, detail=f"Twitter API error: {response.status_code} - {response.text}")
+        
+        if content_id:
+            content = db.query(Content).filter(Content.id == content_id, Content.user_id == current_user.id).first()
+            if content:
+                content.status = "posted"
+                content.date_upload = datetime.now().replace(tzinfo=None)
+                db.commit()
+        
+        logger.info(f"✅ Posted to Twitter for user {current_user.id}")
+        return {"status": "success", "message": "Content posted to Twitter successfully", "tweet_id": response.json().get("data", {}).get("id")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error posting to Twitter: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to post to Twitter: {str(e)}")
+
+@app.post("/platforms/wordpress/post")
+async def post_to_wordpress(
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Post content to WordPress using stored connection"""
+    try:
+        from models import PlatformConnection, PlatformEnum, Content
+        import requests
+        from requests.auth import HTTPBasicAuth
+        
+        content_id = request_data.get("content_id")
+        title = request_data.get("title", "")
+        content_text = request_data.get("content", "")
+        image_url = request_data.get("image_url")
+        
+        if not content_text:
+            raise HTTPException(status_code=400, detail="Content text is required")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.WORDPRESS
+        ).first()
+        
+        if not connection or not connection.platform_user_id or not connection.access_token:
+            raise HTTPException(status_code=400, detail="WordPress not connected. Please connect your WordPress site first.")
+        
+        site_url = connection.platform_user_id
+        username = connection.refresh_token
+        app_password = connection.access_token
+        
+        api_url = f"{site_url}/wp-json/wp/v2/posts"
+        post_data = {"title": title or "New Post", "content": content_text, "status": "publish"}
+        
+        if image_url:
+            media_url = f"{site_url}/wp-json/wp/v2/media"
+            image_response = requests.get(image_url, timeout=30)
+            if image_response.status_code == 200:
+                files = {"file": ("image.jpg", image_response.content, "image/jpeg")}
+                media_response = requests.post(media_url, files=files, auth=HTTPBasicAuth(username, app_password), timeout=30)
+                if media_response.status_code == 201:
+                    post_data["featured_media"] = media_response.json().get("id")
+        
+        response = requests.post(api_url, json=post_data, auth=HTTPBasicAuth(username, app_password), timeout=30)
+        
+        if response.status_code not in [200, 201]:
+            raise HTTPException(status_code=400, detail=f"WordPress API error: {response.status_code} - {response.text}")
+        
+        if content_id:
+            content = db.query(Content).filter(Content.id == content_id, Content.user_id == current_user.id).first()
+            if content:
+                content.status = "posted"
+                content.date_upload = datetime.now().replace(tzinfo=None)
+                db.commit()
+        
+        logger.info(f"✅ Posted to WordPress for user {current_user.id}")
+        return {"status": "success", "message": "Content posted to WordPress successfully", "post_id": response.json().get("id"), "post_url": response.json().get("link")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error posting to WordPress: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to post to WordPress: {str(e)}")
+
+@app.post("/platforms/instagram/post")
+async def post_to_instagram(
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Post content to Instagram using stored connection"""
+    try:
+        from models import PlatformConnection, PlatformEnum, Content
+        import requests
+        
+        content_id = request_data.get("content_id")
+        content_text = request_data.get("content", "")
+        image_url = request_data.get("image_url")
+        
+        if not image_url:
+            raise HTTPException(status_code=400, detail="Image URL is required for Instagram posts")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.INSTAGRAM
+        ).first()
+        
+        if not connection or not connection.access_token:
+            raise HTTPException(status_code=400, detail="Instagram not connected. Please connect your Instagram account first.")
+        
+        access_token = connection.access_token
+        app_id = connection.platform_user_id
+        
+        create_url = f"https://graph.instagram.com/v18.0/{app_id}/media"
+        image_response = requests.get(image_url, timeout=30)
+        if image_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to download image")
+        
+        create_data = {"image_url": image_url, "caption": content_text[:2200], "access_token": access_token}
+        create_response = requests.post(create_url, data=create_data, timeout=30)
+        
+        if create_response.status_code not in [200, 201]:
+            raise HTTPException(status_code=400, detail=f"Instagram API error creating media: {create_response.status_code} - {create_response.text}")
+        
+        creation_id = create_response.json().get("id")
+        publish_url = f"https://graph.instagram.com/v18.0/{app_id}/media_publish"
+        publish_data = {"creation_id": creation_id, "access_token": access_token}
+        publish_response = requests.post(publish_url, data=publish_data, timeout=30)
+        
+        if publish_response.status_code not in [200, 201]:
+            raise HTTPException(status_code=400, detail=f"Instagram API error publishing: {publish_response.status_code} - {publish_response.text}")
+        
+        if content_id:
+            content = db.query(Content).filter(Content.id == content_id, Content.user_id == current_user.id).first()
+            if content:
+                content.status = "posted"
+                content.date_upload = datetime.now().replace(tzinfo=None)
+                db.commit()
+        
+        logger.info(f"✅ Posted to Instagram for user {current_user.id}")
+        return {"status": "success", "message": "Content posted to Instagram successfully", "media_id": publish_response.json().get("id")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error posting to Instagram: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to post to Instagram: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
