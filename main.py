@@ -8268,6 +8268,41 @@ def get_campaign_content_items(
         )
 
 # ============================================================================
+
+# ============================================================================
+# PLATFORM CREDENTIALS CHECK
+# ============================================================================
+
+@app.get("/platforms/{platform}/credentials")
+async def check_platform_credentials(
+    platform: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Check if user has stored OAuth credentials for a platform"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        
+        platform_enum = None
+        try:
+            platform_enum = PlatformEnum[platform.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == platform_enum
+        ).first()
+        
+        has_credentials = bool(connection and connection.platform_user_id and connection.refresh_token)
+        
+        return {"has_credentials": has_credentials, "platform": platform}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error checking credentials: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to check credentials: {str(e)}")
+
 # ============================================================================
 # PLATFORM CONNECTION ENDPOINTS
 # ============================================================================
