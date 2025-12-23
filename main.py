@@ -9079,6 +9079,206 @@ async def post_to_instagram(
         raise HTTPException(status_code=500, detail=f"Failed to post to Instagram: {str(e)}")
 
 
+# ============================================================================
+# PLATFORM CREDENTIALS MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.get("/platforms/credentials/all")
+async def get_all_platform_credentials(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all platform credentials for the current user"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        
+        connections = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id
+        ).all()
+        
+        credentials = {}
+        for conn in connections:
+            platform_name = conn.platform.value.lower()
+            
+            if conn.platform == PlatformEnum.LINKEDIN:
+                credentials[platform_name] = {
+                    "has_credentials": bool(conn.platform_user_id and conn.refresh_token),
+                    "client_id": conn.platform_user_id or "",
+                    "client_secret": conn.refresh_token or "",
+                    "access_token": conn.access_token or "",
+                }
+            elif conn.platform == PlatformEnum.TWITTER:
+                credentials[platform_name] = {
+                    "has_credentials": bool(conn.platform_user_id and conn.refresh_token),
+                    "api_key": conn.platform_user_id or "",
+                    "api_secret": conn.refresh_token or "",
+                    "access_token": conn.access_token or "",
+                }
+            elif conn.platform == PlatformEnum.WORDPRESS:
+                credentials[platform_name] = {
+                    "has_credentials": bool(conn.platform_user_id and conn.refresh_token and conn.access_token),
+                    "site_url": conn.platform_user_id or "",
+                    "username": conn.refresh_token or "",
+                    "app_password": conn.access_token or "",
+                }
+            elif conn.platform == PlatformEnum.INSTAGRAM:
+                credentials[platform_name] = {
+                    "has_credentials": bool(conn.access_token and conn.platform_user_id),
+                    "app_id": conn.platform_user_id or "",
+                    "app_secret": conn.refresh_token or "",
+                    "access_token": conn.access_token or "",
+                }
+            else:
+                credentials[platform_name] = {
+                    "has_credentials": bool(conn.access_token),
+                    "access_token": conn.access_token or "",
+                }
+        
+        return {"success": True, "credentials": credentials}
+    except Exception as e:
+        logger.error(f"❌ Error fetching platform credentials: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch credentials: {str(e)}")
+
+@app.post("/platforms/{platform}/credentials/save")
+async def save_platform_credentials(
+    platform: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Save or update platform credentials"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        from datetime import datetime
+        
+        try:
+            platform_enum = PlatformEnum[platform.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == platform_enum
+        ).first()
+        
+        if platform_enum == PlatformEnum.LINKEDIN:
+            client_id = request_data.get("client_id", "").strip()
+            client_secret = request_data.get("client_secret", "").strip()
+            if not client_id or not client_secret:
+                raise HTTPException(status_code=400, detail="LinkedIn Client ID and Client Secret are required")
+            if connection:
+                connection.platform_user_id = client_id
+                connection.refresh_token = client_secret
+                connection.connected_at = datetime.now()
+            else:
+                connection = PlatformConnection(
+                    user_id=current_user.id, platform=platform_enum,
+                    platform_user_id=client_id, refresh_token=client_secret,
+                    access_token="", connected_at=datetime.now()
+                )
+                db.add(connection)
+        elif platform_enum == PlatformEnum.TWITTER:
+            api_key = request_data.get("api_key", "").strip()
+            api_secret = request_data.get("api_secret", "").strip()
+            if not api_key or not api_secret:
+                raise HTTPException(status_code=400, detail="Twitter API Key and API Secret are required")
+            if connection:
+                connection.platform_user_id = api_key
+                connection.refresh_token = api_secret
+                connection.connected_at = datetime.now()
+            else:
+                connection = PlatformConnection(
+                    user_id=current_user.id, platform=platform_enum,
+                    platform_user_id=api_key, refresh_token=api_secret,
+                    access_token="", connected_at=datetime.now()
+                )
+                db.add(connection)
+        elif platform_enum == PlatformEnum.WORDPRESS:
+            site_url = request_data.get("site_url", "").strip()
+            username = request_data.get("username", "").strip()
+            app_password = request_data.get("app_password", "").strip()
+            if not site_url or not username or not app_password:
+                raise HTTPException(status_code=400, detail="WordPress Site URL, Username, and App Password are required")
+            if connection:
+                connection.platform_user_id = site_url
+                connection.refresh_token = username
+                connection.access_token = app_password
+                connection.connected_at = datetime.now()
+            else:
+                connection = PlatformConnection(
+                    user_id=current_user.id, platform=platform_enum,
+                    platform_user_id=site_url, refresh_token=username,
+                    access_token=app_password, connected_at=datetime.now()
+                )
+                db.add(connection)
+        elif platform_enum == PlatformEnum.INSTAGRAM:
+            app_id = request_data.get("app_id", "").strip()
+            app_secret = request_data.get("app_secret", "").strip()
+            access_token = request_data.get("access_token", "").strip()
+            if not app_id or not app_secret or not access_token:
+                raise HTTPException(status_code=400, detail="Instagram App ID, App Secret, and Access Token are required")
+            if connection:
+                connection.platform_user_id = app_id
+                connection.refresh_token = app_secret
+                connection.access_token = access_token
+                connection.connected_at = datetime.now()
+            else:
+                connection = PlatformConnection(
+                    user_id=current_user.id, platform=platform_enum,
+                    platform_user_id=app_id, refresh_token=app_secret,
+                    access_token=access_token, connected_at=datetime.now()
+                )
+                db.add(connection)
+        else:
+            raise HTTPException(status_code=400, detail=f"Platform {platform} not supported")
+        
+        db.commit()
+        return {"success": True, "message": f"{platform} credentials saved successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error saving platform credentials: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save credentials: {str(e)}")
+
+@app.delete("/platforms/{platform}/credentials")
+async def remove_platform_credentials(
+    platform: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Remove platform credentials"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        from datetime import datetime
+        
+        try:
+            platform_enum = PlatformEnum[platform.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == platform_enum
+        ).first()
+        
+        if connection:
+            connection.platform_user_id = None
+            connection.refresh_token = None
+            connection.access_token = None
+            connection.disconnected_at = datetime.now()
+            db.commit()
+            return {"success": True, "message": f"{platform} credentials removed successfully"}
+        else:
+            return {"success": True, "message": f"No {platform} credentials found to remove"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error removing platform credentials: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to remove credentials: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
