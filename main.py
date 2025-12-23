@@ -8395,12 +8395,14 @@ async def linkedin_auth_v2(
             db.add(new_state)
             db.commit()
         
-        # Build LinkedIn OAuth URL
+        # Build LinkedIn OAuth URL (URL-encode redirect_uri)
+        from urllib.parse import quote_plus
+        encoded_redirect_uri = quote_plus(redirect_uri)
         auth_url = (
             f"https://www.linkedin.com/oauth/v2/authorization?"
             f"response_type=code&"
             f"client_id={client_id}&"
-            f"redirect_uri={redirect_uri}&"
+            f"redirect_uri={encoded_redirect_uri}&"
             f"state={state}&"
             f"scope=openid%20profile%20email%20w_member_social"
         )
