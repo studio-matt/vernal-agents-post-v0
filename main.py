@@ -8352,7 +8352,7 @@ async def linkedin_auth_v2(
 ):
     """Initiate LinkedIn OAuth connection - uses platform's app credentials"""
     try:
-        from models import PlatformConnection, PlatformEnum, StateToken
+        from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
         import secrets
@@ -8360,15 +8360,19 @@ async def linkedin_auth_v2(
         
         load_dotenv()
         
-        # Use platform's LinkedIn app credentials (from env vars)
-        client_id = os.getenv("LINKEDIN_CLIENT_ID")
-        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
-        redirect_uri = os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        # Try system settings first, fall back to env vars
+        client_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_id").first()
+        client_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_secret").first()
+        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
+        
+        client_id = client_id_setting.setting_value if client_id_setting and client_id_setting.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
+        client_secret = client_secret_setting.setting_value if client_secret_setting and client_secret_setting.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
         
         if not client_id or not client_secret:
             raise HTTPException(
                 status_code=500,
-                detail="LinkedIn OAuth credentials not configured on server"
+                detail="LinkedIn OAuth credentials not configured. Please configure them in Admin Settings > System > LinkedIn OAuth Credentials."
             )
         
         # Generate state for CSRF protection
@@ -8535,16 +8539,27 @@ async def linkedin_callback(
 ):
     """Handle LinkedIn OAuth callback and exchange code for access token"""
     try:
-        from models import PlatformConnection, PlatformEnum, StateToken
+        from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
         import requests
         
         load_dotenv()
         
-        client_id = os.getenv("LINKEDIN_CLIENT_ID")
-        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
-        redirect_uri = os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        # Try system settings first, fall back to env vars
+        client_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_id").first()
+        client_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_secret").first()
+        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
+        
+        client_id = client_id_setting.setting_value if client_id_setting and client_id_setting.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
+        client_secret = client_secret_setting.setting_value if client_secret_setting and client_secret_setting.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        
+        if not client_id or not client_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="LinkedIn OAuth credentials not configured. Please configure them in Admin Settings > System > LinkedIn OAuth Credentials."
+            )
         
         state_token = db.query(StateToken).filter(
             StateToken.user_id == current_user.id,
