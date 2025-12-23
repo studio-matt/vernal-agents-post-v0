@@ -8346,6 +8346,78 @@ async def check_platform_credentials(
 # ============================================================================
 
 @app.get("/linkedin/auth-v2")
+async def linkedin_auth_v2(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Initiate LinkedIn OAuth connection - uses platform's app credentials"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken
+        import os
+        from dotenv import load_dotenv
+        import secrets
+        from datetime import datetime
+        
+        load_dotenv()
+        
+        # Use platform's LinkedIn app credentials (from env vars)
+        client_id = os.getenv("LINKEDIN_CLIENT_ID")
+        client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
+        redirect_uri = os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        
+        if not client_id or not client_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="LinkedIn OAuth credentials not configured on server"
+            )
+        
+        # Generate state for CSRF protection
+        state = secrets.token_urlsafe(32)
+        
+        # Store state in database
+        existing_state = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.LINKEDIN,
+            StateToken.state == state
+        ).first()
+        
+        if not existing_state:
+            new_state = StateToken(
+                user_id=current_user.id,
+                platform=PlatformEnum.LINKEDIN,
+                state=state,
+                created_at=datetime.now()
+            )
+            db.add(new_state)
+            db.commit()
+        
+        # Build LinkedIn OAuth URL
+        auth_url = (
+            f"https://www.linkedin.com/oauth/v2/authorization?"
+            f"response_type=code&"
+            f"client_id={client_id}&"
+            f"redirect_uri={redirect_uri}&"
+            f"state={state}&"
+            f"scope=openid%20profile%20email%20w_member_social"
+        )
+        
+        logger.info(f"✅ LinkedIn auth URL generated for user {current_user.id}")
+        return {
+            "status": "success",
+            "auth_url": auth_url
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error generating LinkedIn auth URL: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate LinkedIn auth URL: {str(e)}"
+        )
+
+
+
 @app.post("/linkedin/auth-v2")
 async def linkedin_auth_v2(
     request_data: Dict[str, Any] = None,
@@ -9101,11 +9173,11 @@ async def get_all_platform_credentials(
             platform_name = conn.platform.value.lower()
             
             if conn.platform == PlatformEnum.LINKEDIN:
+                # LinkedIn uses platform's app - only return connection status
                 credentials[platform_name] = {
-                    "has_credentials": bool(conn.platform_user_id and conn.refresh_token),
-                    "client_id": conn.platform_user_id or "",
-                    "client_secret": conn.refresh_token or "",
-                    "access_token": conn.access_token or "",
+                    "has_credentials": bool(conn.access_token),
+                    "connected": bool(conn.access_token),
+                    "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,
                 }
             elif conn.platform == PlatformEnum.TWITTER:
                 credentials[platform_name] = {
@@ -9162,21 +9234,11 @@ async def save_platform_credentials(
         ).first()
         
         if platform_enum == PlatformEnum.LINKEDIN:
-            client_id = request_data.get("client_id", "").strip()
-            client_secret = request_data.get("client_secret", "").strip()
-            if not client_id or not client_secret:
-                raise HTTPException(status_code=400, detail="LinkedIn Client ID and Client Secret are required")
-            if connection:
-                connection.platform_user_id = client_id
-                connection.refresh_token = client_secret
-                connection.connected_at = datetime.now()
-            else:
-                connection = PlatformConnection(
-                    user_id=current_user.id, platform=platform_enum,
-                    platform_user_id=client_id, refresh_token=client_secret,
-                    access_token="", connected_at=datetime.now()
-                )
-                db.add(connection)
+            # LinkedIn uses OAuth - users cannot provide Client ID/Secret
+            raise HTTPException(
+                status_code=400,
+                detail="LinkedIn uses OAuth flow. Use /linkedin/auth-v2 to connect your account."
+            )
         elif platform_enum == PlatformEnum.TWITTER:
             api_key = request_data.get("api_key", "").strip()
             api_secret = request_data.get("api_secret", "").strip()
