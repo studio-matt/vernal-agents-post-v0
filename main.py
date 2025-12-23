@@ -8622,7 +8622,7 @@ async def linkedin_callback(
         logger.error(f"❌ Error in LinkedIn callback: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to complete LinkedIn connection: {str(e)}")
+        return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
 
 @app.get("/twitter/auth-v2")
 async def twitter_auth_v2(
