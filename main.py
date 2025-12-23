@@ -8534,15 +8534,15 @@ async def linkedin_auth_v2(
 async def linkedin_callback(
     code: str,
     state: str,
-    current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Handle LinkedIn OAuth callback and exchange code for access token"""
+    """Handle LinkedIn OAuth callback and exchange code for access token - NO AUTH REQUIRED (OAuth callback)"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
         import requests
+        from fastapi.responses import RedirectResponse
         
         load_dotenv()
         
@@ -8556,22 +8556,23 @@ async def linkedin_callback(
         redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
         
         if not client_id or not client_secret:
-            raise HTTPException(
-                status_code=500,
-                detail="LinkedIn OAuth credentials not configured. Please configure them in Admin Settings > System > LinkedIn OAuth Credentials."
-            )
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=linkedin_not_configured")
         
+        # Verify state and get user_id from state token (OAuth callbacks don't have user auth)
         state_token = db.query(StateToken).filter(
-            StateToken.user_id == current_user.id,
             StateToken.platform == PlatformEnum.LINKEDIN,
             StateToken.state == state
         ).first()
         
         if not state_token:
-            raise HTTPException(status_code=400, detail="Invalid state parameter")
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=invalid_state")
         
+        user_id = state_token.user_id
+        
+        # Clean up state token
         db.delete(state_token)
         
+        # Exchange code for access token
         token_url = "https://www.linkedin.com/oauth/v2/accessToken"
         token_data = {
             "grant_type": "authorization_code",
@@ -8583,16 +8584,17 @@ async def linkedin_callback(
         
         response = requests.post(token_url, data=token_data)
         if response.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=token_exchange_failed")
         
         token_response = response.json()
         access_token = token_response.get("access_token")
         
         if not access_token:
-            raise HTTPException(status_code=400, detail="No access token in response")
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=no_access_token")
         
+        # Store or update connection
         connection = db.query(PlatformConnection).filter(
-            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.user_id == user_id,
             PlatformConnection.platform == PlatformEnum.LINKEDIN
         ).first()
         
@@ -8601,7 +8603,7 @@ async def linkedin_callback(
             connection.connected_at = datetime.now()
         else:
             connection = PlatformConnection(
-                user_id=current_user.id,
+                user_id=user_id,
                 platform=PlatformEnum.LINKEDIN,
                 access_token=access_token,
                 connected_at=datetime.now()
@@ -8610,8 +8612,8 @@ async def linkedin_callback(
         
         db.commit()
         
-        logger.info(f"✅ LinkedIn connection successful for user {current_user.id}")
-        return JSONResponse(content={"status": "success", "message": "LinkedIn connected successfully"}, status_code=200)
+        logger.info(f"✅ LinkedIn connection successful for user {user_id}")
+        return RedirectResponse(url="https://machine.vernalcontentum.com/account-settings?linkedin=connected")
     except HTTPException:
         raise
     except Exception as e:
