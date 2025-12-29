@@ -9360,6 +9360,380 @@ async def remove_platform_credentials(
         raise HTTPException(status_code=500, detail=f"Failed to remove credentials: {str(e)}")
 
 
+# [Paste endpoint code here]
+
+
+@app.get("/facebook/auth-v2")
+async def facebook_auth_v2(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Initiate Facebook OAuth connection - returns auth URL for redirect"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        
+        # Try system settings first, fall back to env vars
+        app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
+        app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
+        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_redirect_uri").first()
+        
+        app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
+        app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://machine.vernalcontentum.com/facebook/callback")
+        
+        if not app_id or not app_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="Facebook OAuth credentials not configured. Please configure them in Admin Settings > System > Platform Keys > Facebook."
+            )
+        
+        # Generate state for CSRF protection
+        import secrets
+        state = secrets.token_urlsafe(32)
+        
+        # Store state in database for verification
+        existing_state = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.FACEBOOK,
+            StateToken.state == state
+        ).first()
+        
+        if not existing_state:
+            new_state = StateToken(
+                user_id=current_user.id,
+                platform=PlatformEnum.FACEBOOK,
+                state=state,
+                created_at=datetime.now()
+            )
+            db.add(new_state)
+        
+        db.commit()
+        
+        # Build Facebook OAuth URL
+        auth_url = (
+            f"https://www.facebook.com/v18.0/dialog/oauth?"
+            f"client_id={app_id}&"
+            f"redirect_uri={redirect_uri}&"
+            f"state={state}&"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish"
+        )
+        
+        logger.info(f"✅ Facebook auth URL generated for user {current_user.id}")
+        return {
+            "status": "success",
+            "auth_url": auth_url
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error generating Facebook auth URL: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate Facebook auth URL: {str(e)}"
+        )
+
+@app.get("/facebook/callback")
+async def facebook_callback(
+    code: str,
+    state: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Handle Facebook OAuth callback and exchange code for access token"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
+        import os
+        from dotenv import load_dotenv
+        import requests
+        
+        load_dotenv()
+        
+        app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
+        app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
+        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_redirect_uri").first()
+        
+        app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
+        app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://machine.vernalcontentum.com/facebook/callback")
+        
+        if not app_id or not app_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="Facebook OAuth credentials not configured. Please configure them in Admin Settings > System > Platform Keys > Facebook."
+            )
+        
+        state_token = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.FACEBOOK,
+            StateToken.state == state
+        ).first()
+        
+        if not state_token:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        db.delete(state_token)
+        
+        token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+        token_params = {
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "redirect_uri": redirect_uri,
+            "code": code
+        }
+        
+        response = requests.get(token_url, params=token_params)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to exchange code for token: {response.text}")
+        
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token in response")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.FACEBOOK
+        ).first()
+        
+        if connection:
+            connection.access_token = access_token
+            connection.connected_at = datetime.now()
+        else:
+            connection = PlatformConnection(
+                user_id=current_user.id,
+                platform=PlatformEnum.FACEBOOK,
+                access_token=access_token,
+                connected_at=datetime.now()
+            )
+            db.add(connection)
+        
+        db.commit()
+        
+        logger.info(f"✅ Facebook connection successful for user {current_user.id}")
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Facebook connected successfully"
+            },
+            status_code=200
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error in Facebook callback: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to complete Facebook connection: {str(e)}"
+        )
+
+@app.get("/instagram/auth-v2")
+async def instagram_auth_v2(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Initiate Instagram OAuth connection - uses Facebook OAuth (Instagram is part of Facebook)"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
+        import os
+        from dotenv import load_dotenv
+        
+        load_dotenv()
+        
+        app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
+        app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
+        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "instagram_redirect_uri").first()
+        
+        app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
+        app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://machine.vernalcontentum.com/instagram/callback")
+        
+        if not app_id or not app_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="Instagram OAuth credentials not configured. Please configure Facebook App credentials in Admin Settings > System > Platform Keys > Facebook (Instagram uses Facebook OAuth)."
+            )
+        
+        import secrets
+        state = secrets.token_urlsafe(32)
+        
+        existing_state = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.INSTAGRAM,
+            StateToken.state == state
+        ).first()
+        
+        if not existing_state:
+            new_state = StateToken(
+                user_id=current_user.id,
+                platform=PlatformEnum.INSTAGRAM,
+                state=state,
+                created_at=datetime.now()
+            )
+            db.add(new_state)
+        
+        db.commit()
+        
+        auth_url = (
+            f"https://www.facebook.com/v18.0/dialog/oauth?"
+            f"client_id={app_id}&"
+            f"redirect_uri={redirect_uri}&"
+            f"state={state}&"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish"
+        )
+        
+        logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
+        return {
+            "status": "success",
+            "auth_url": auth_url
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error generating Instagram auth URL: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate Instagram auth URL: {str(e)}"
+        )
+
+@app.get("/instagram/callback")
+async def instagram_callback(
+    code: str,
+    state: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Handle Instagram OAuth callback and exchange code for access token, then get Instagram Business Account ID"""
+    try:
+        from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
+        import os
+        from dotenv import load_dotenv
+        import requests
+        
+        load_dotenv()
+        
+        app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
+        app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
+        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "instagram_redirect_uri").first()
+        
+        app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
+        app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://machine.vernalcontentum.com/instagram/callback")
+        
+        if not app_id or not app_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="Instagram OAuth credentials not configured. Please configure Facebook App credentials in Admin Settings > System > Platform Keys > Facebook (Instagram uses Facebook OAuth)."
+            )
+        
+        state_token = db.query(StateToken).filter(
+            StateToken.user_id == current_user.id,
+            StateToken.platform == PlatformEnum.INSTAGRAM,
+            StateToken.state == state
+        ).first()
+        
+        if not state_token:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        db.delete(state_token)
+        
+        token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+        token_params = {
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "redirect_uri": redirect_uri,
+            "code": code
+        }
+        
+        response = requests.get(token_url, params=token_params)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Failed to exchange code for token: {response.text}")
+        
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token in response")
+        
+        pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+        pages_params = {"access_token": access_token}
+        pages_response = requests.get(pages_url, params=pages_params)
+        
+        instagram_business_account_id = None
+        if pages_response.status_code == 200:
+            pages_data = pages_response.json()
+            pages = pages_data.get("data", [])
+            
+            for page in pages:
+                page_id = page.get("id")
+                page_access_token = page.get("access_token")
+                
+                instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                instagram_params = {
+                    "fields": "instagram_business_account",
+                    "access_token": page_access_token
+                }
+                instagram_response = requests.get(instagram_url, params=instagram_params)
+                
+                if instagram_response.status_code == 200:
+                    instagram_data = instagram_response.json()
+                    if instagram_data.get("instagram_business_account"):
+                        instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
+                        access_token = page_access_token
+                        break
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.INSTAGRAM
+        ).first()
+        
+        if connection:
+            connection.access_token = access_token
+            connection.platform_user_id = instagram_business_account_id if instagram_business_account_id else connection.platform_user_id
+            connection.connected_at = datetime.now()
+        else:
+            connection = PlatformConnection(
+                user_id=current_user.id,
+                platform=PlatformEnum.INSTAGRAM,
+                platform_user_id=instagram_business_account_id,
+                access_token=access_token,
+                connected_at=datetime.now()
+            )
+            db.add(connection)
+        
+        db.commit()
+        
+        logger.info(f"✅ Instagram connection successful for user {current_user.id}, Instagram Business Account ID: {instagram_business_account_id}")
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Instagram connected successfully",
+                "instagram_business_account_id": instagram_business_account_id
+            },
+            status_code=200
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error in Instagram callback: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to complete Instagram connection: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
