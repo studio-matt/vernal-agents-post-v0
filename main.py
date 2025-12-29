@@ -8533,7 +8533,11 @@ async def linkedin_auth_v2(
         )
 
 @app.get("/linkedin/callback")
-async def linkedin_callback(code: str, state: str, db: Session = Depends(get_db)):
+async def linkedin_callback(
+    code: str,
+    state: str,
+    db: Session = Depends(get_db)
+):
     """Handle LinkedIn OAuth callback - NO AUTH REQUIRED"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
@@ -8547,7 +8551,7 @@ async def linkedin_callback(code: str, state: str, db: Session = Depends(get_db)
         ru_s = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
         cid = cid_s.setting_value if cid_s and cid_s.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
         cs = cs_s.setting_value if cs_s and cs_s.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
-        ru = ru_s.setting_value if ru_s and ru_s.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        ru = ru_s.setting_value if ru_s and ru_s.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://themachine.vernalcontentum.com/linkedin/callback")
         if not cid or not cs:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=linkedin_not_configured")
         st = db.query(StateToken).filter(StateToken.platform == PlatformEnum.LINKEDIN, StateToken.state == state).first()
@@ -8571,12 +8575,14 @@ async def linkedin_callback(code: str, state: str, db: Session = Depends(get_db)
         db.commit()
         logger.info(f"✅ LinkedIn connection successful for user {uid}")
         return RedirectResponse(url="https://machine.vernalcontentum.com/account-settings?linkedin=connected")
-    except HTTPException: raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Error in LinkedIn callback: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
+
 
 @app.get("/twitter/auth-v2")
 async def twitter_auth_v2(
@@ -9393,7 +9399,11 @@ async def facebook_auth_v2(
         )
 
 @app.get("/facebook/callback")
-async def facebook_callback(code: str, state: str, db: Session = Depends(get_db)):
+async def facebook_callback(
+    code: str,
+    state: str,
+    db: Session = Depends(get_db)
+):
     """Handle Facebook OAuth callback - NO AUTH REQUIRED"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
@@ -9407,7 +9417,7 @@ async def facebook_callback(code: str, state: str, db: Session = Depends(get_db)
         ru_s = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_redirect_uri").first()
         aid = aid_s.setting_value if aid_s and aid_s.setting_value else os.getenv("FACEBOOK_APP_ID")
         asec = as_s.setting_value if as_s and as_s.setting_value else os.getenv("FACEBOOK_APP_SECRET")
-        ru = ru_s.setting_value if ru_s and ru_s.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://machine.vernalcontentum.com/facebook/callback")
+        ru = ru_s.setting_value if ru_s and ru_s.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://themachine.vernalcontentum.com/facebook/callback")
         if not aid or not asec:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=facebook_not_configured")
         st = db.query(StateToken).filter(StateToken.platform == PlatformEnum.FACEBOOK, StateToken.state == state).first()
@@ -9431,12 +9441,14 @@ async def facebook_callback(code: str, state: str, db: Session = Depends(get_db)
         db.commit()
         logger.info(f"✅ Facebook connection successful for user {uid}")
         return RedirectResponse(url="https://machine.vernalcontentum.com/account-settings?facebook=connected")
-    except HTTPException: raise
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ Error in Facebook callback: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
+
 
 @app.get("/instagram/auth-v2")
 async def instagram_auth_v2(
