@@ -8346,82 +8346,37 @@ async def check_platform_credentials(
 # ============================================================================
 
 @app.get("/linkedin/auth-v2")
-async def linkedin_auth_v2(
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Initiate LinkedIn OAuth connection - uses platform's app credentials"""
+async def linkedin_auth_v2(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Initiate LinkedIn OAuth connection - returns auth URL for redirect"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
-        import secrets
-        from datetime import datetime
-        
         load_dotenv()
-        
-        # Try system settings first, fall back to env vars
-        client_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_id").first()
-        client_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_secret").first()
-        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
-        
-        client_id = client_id_setting.setting_value if client_id_setting and client_id_setting.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
-        client_secret = client_secret_setting.setting_value if client_secret_setting and client_secret_setting.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
-        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
-        
-        if not client_id or not client_secret:
-            raise HTTPException(
-                status_code=500,
-                detail="LinkedIn OAuth credentials not configured. Please configure them in Admin Settings > System > LinkedIn OAuth Credentials."
-            )
-        
-        # Generate state for CSRF protection
+        cid_s = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_id").first()
+        cs_s = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_secret").first()
+        ru_s = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
+        cid = cid_s.setting_value if cid_s and cid_s.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
+        cs = cs_s.setting_value if cs_s and cs_s.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
+        ru = ru_s.setting_value if ru_s and ru_s.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://themachine.vernalcontentum.com/linkedin/callback")
+        if not cid or not cs:
+            raise HTTPException(status_code=500, detail="LinkedIn OAuth credentials not configured. Please configure them in Admin Settings > System > Platform Keys > LinkedIn.")
+        import secrets
         state = secrets.token_urlsafe(32)
-        
-        # Store state in database
-        existing_state = db.query(StateToken).filter(
-            StateToken.user_id == current_user.id,
-            StateToken.platform == PlatformEnum.LINKEDIN,
-            StateToken.state == state
-        ).first()
-        
+        existing_state = db.query(StateToken).filter(StateToken.user_id == current_user.id, StateToken.platform == PlatformEnum.LINKEDIN, StateToken.state == state).first()
         if not existing_state:
-            new_state = StateToken(
-                user_id=current_user.id,
-                platform=PlatformEnum.LINKEDIN,
-                state=state,
-                created_at=datetime.now()
-            )
+            new_state = StateToken(user_id=current_user.id, platform=PlatformEnum.LINKEDIN, state=state, created_at=datetime.now())
             db.add(new_state)
-            db.commit()
-        
-        # Build LinkedIn OAuth URL (URL-encode redirect_uri)
-        from urllib.parse import quote_plus
-        encoded_redirect_uri = quote_plus(redirect_uri)
-        auth_url = (
-            f"https://www.linkedin.com/oauth/v2/authorization?"
-            f"response_type=code&"
-            f"client_id={client_id}&"
-            f"redirect_uri={encoded_redirect_uri}&"
-            f"state={state}&"
-            f"scope=openid%20profile%20email%20w_member_social"
-        )
-        
+        db.commit()
+        auth_url = f"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={cid}&redirect_uri={ru}&state={state}&scope=openid%20profile%20email%20w_member_social"
         logger.info(f"✅ LinkedIn auth URL generated for user {current_user.id}")
-        return {
-            "status": "success",
-            "auth_url": auth_url
-        }
-    except HTTPException:
-        raise
+        return {"status": "success", "auth_url": auth_url}
+    except HTTPException: raise
     except Exception as e:
-        db.rollback()
         logger.error(f"❌ Error generating LinkedIn auth URL: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate LinkedIn auth URL: {str(e)}"
-        )
-
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate LinkedIn auth URL: {str(e)}")
 
 
 @app.post("/linkedin/auth-v2")
