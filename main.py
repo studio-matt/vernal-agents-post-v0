@@ -8533,91 +8533,45 @@ async def linkedin_auth_v2(
         )
 
 @app.get("/linkedin/callback")
-async def linkedin_callback(
-    code: str,
-    state: str,
-    db: Session = Depends(get_db)
-):
-    """Handle LinkedIn OAuth callback and exchange code for access token - NO AUTH REQUIRED (OAuth callback)"""
+async def linkedin_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """Handle LinkedIn OAuth callback - NO AUTH REQUIRED"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
         import requests
         from fastapi.responses import RedirectResponse
-        
         load_dotenv()
-        
-        # Try system settings first, fall back to env vars
-        client_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_id").first()
-        client_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_secret").first()
-        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
-        
-        client_id = client_id_setting.setting_value if client_id_setting and client_id_setting.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
-        client_secret = client_secret_setting.setting_value if client_secret_setting and client_secret_setting.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
-        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
-        
-        if not client_id or not client_secret:
+        cid_set = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_id").first()
+        cs_set = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_client_secret").first()
+        ru_set = db.query(SystemSettings).filter(SystemSettings.setting_key == "linkedin_redirect_uri").first()
+        cid = cid_set.setting_value if cid_set and cid_set.setting_value else os.getenv("LINKEDIN_CLIENT_ID")
+        cs = cs_set.setting_value if cs_set and cs_set.setting_value else os.getenv("LINKEDIN_CLIENT_SECRET")
+        ru = ru_set.setting_value if ru_set and ru_set.setting_value else os.getenv("LINKEDIN_REDIRECT_URI", "https://machine.vernalcontentum.com/linkedin/callback")
+        if not cid or not cs:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=linkedin_not_configured")
-        
-        # Verify state and get user_id from state token (OAuth callbacks don't have user auth)
-        state_token = db.query(StateToken).filter(
-            StateToken.platform == PlatformEnum.LINKEDIN,
-            StateToken.state == state
-        ).first()
-        
-        if not state_token:
+        st = db.query(StateToken).filter(StateToken.platform == PlatformEnum.LINKEDIN, StateToken.state == state).first()
+        if not st:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=invalid_state")
-        
-        user_id = state_token.user_id
-        
-        # Clean up state token
-        db.delete(state_token)
-        
-        # Exchange code for access token
-        token_url = "https://www.linkedin.com/oauth/v2/accessToken"
-        token_data = {
-            "grant_type": "authorization_code",
-            "code": code,
-            "redirect_uri": redirect_uri,
-            "client_id": client_id,
-            "client_secret": client_secret
-        }
-        
-        response = requests.post(token_url, data=token_data)
-        if response.status_code != 200:
+        uid = st.user_id
+        db.delete(st)
+        r = requests.post("https://www.linkedin.com/oauth/v2/accessToken", data={"grant_type": "authorization_code", "code": code, "redirect_uri": ru, "client_id": cid, "client_secret": cs})
+        if r.status_code != 200:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=token_exchange_failed")
-        
-        token_response = response.json()
-        access_token = token_response.get("access_token")
-        
-        if not access_token:
+        at = r.json().get("access_token")
+        if not at:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=no_access_token")
-        
-        # Store or update connection
-        connection = db.query(PlatformConnection).filter(
-            PlatformConnection.user_id == user_id,
-            PlatformConnection.platform == PlatformEnum.LINKEDIN
-        ).first()
-        
-        if connection:
-            connection.access_token = access_token
-            connection.connected_at = datetime.now()
+        conn = db.query(PlatformConnection).filter(PlatformConnection.user_id == uid, PlatformConnection.platform == PlatformEnum.LINKEDIN).first()
+        if conn:
+            conn.access_token = at
+            conn.connected_at = datetime.now()
         else:
-            connection = PlatformConnection(
-                user_id=user_id,
-                platform=PlatformEnum.LINKEDIN,
-                access_token=access_token,
-                connected_at=datetime.now()
-            )
-            db.add(connection)
-        
+            conn = PlatformConnection(user_id=uid, platform=PlatformEnum.LINKEDIN, access_token=at, connected_at=datetime.now())
+            db.add(conn)
         db.commit()
-        
-        logger.info(f"✅ LinkedIn connection successful for user {user_id}")
+        logger.info(f"✅ LinkedIn connection successful for user {uid}")
         return RedirectResponse(url="https://machine.vernalcontentum.com/account-settings?linkedin=connected")
-    except HTTPException:
-        raise
+    except HTTPException: raise
     except Exception as e:
         logger.error(f"❌ Error in LinkedIn callback: {e}")
         import traceback
@@ -9419,7 +9373,7 @@ async def facebook_auth_v2(
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list"
         )
         
         logger.info(f"✅ Facebook auth URL generated for user {current_user.id}")
@@ -9439,101 +9393,50 @@ async def facebook_auth_v2(
         )
 
 @app.get("/facebook/callback")
-async def facebook_callback(
-    code: str,
-    state: str,
-    current_user = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Handle Facebook OAuth callback and exchange code for access token"""
+async def facebook_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """Handle Facebook OAuth callback - NO AUTH REQUIRED"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
         import requests
-        
+        from fastapi.responses import RedirectResponse
         load_dotenv()
-        
-        app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
-        app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
-        redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_redirect_uri").first()
-        
-        app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
-        app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
-        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://machine.vernalcontentum.com/facebook/callback")
-        
-        if not app_id or not app_secret:
-            raise HTTPException(
-                status_code=500,
-                detail="Facebook OAuth credentials not configured. Please configure them in Admin Settings > System > Platform Keys > Facebook."
-            )
-        
-        state_token = db.query(StateToken).filter(
-            StateToken.user_id == current_user.id,
-            StateToken.platform == PlatformEnum.FACEBOOK,
-            StateToken.state == state
-        ).first()
-        
-        if not state_token:
-            raise HTTPException(status_code=400, detail="Invalid state parameter")
-        
-        db.delete(state_token)
-        
-        token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
-        token_params = {
-            "client_id": app_id,
-            "client_secret": app_secret,
-            "redirect_uri": redirect_uri,
-            "code": code
-        }
-        
-        response = requests.get(token_url, params=token_params)
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to exchange code for token: {response.text}")
-        
-        token_data = response.json()
-        access_token = token_data.get("access_token")
-        
-        if not access_token:
-            raise HTTPException(status_code=400, detail="No access token in response")
-        
-        connection = db.query(PlatformConnection).filter(
-            PlatformConnection.user_id == current_user.id,
-            PlatformConnection.platform == PlatformEnum.FACEBOOK
-        ).first()
-        
-        if connection:
-            connection.access_token = access_token
-            connection.connected_at = datetime.now()
+        aid_set = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
+        as_set = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
+        ru_set = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_redirect_uri").first()
+        aid = aid_set.setting_value if aid_set and aid_set.setting_value else os.getenv("FACEBOOK_APP_ID")
+        asec = as_set.setting_value if as_set and as_set.setting_value else os.getenv("FACEBOOK_APP_SECRET")
+        ru = ru_set.setting_value if ru_set and ru_set.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://machine.vernalcontentum.com/facebook/callback")
+        if not aid or not asec:
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=facebook_not_configured")
+        st = db.query(StateToken).filter(StateToken.platform == PlatformEnum.FACEBOOK, StateToken.state == state).first()
+        if not st:
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=invalid_state")
+        uid = st.user_id
+        db.delete(st)
+        r = requests.get("https://graph.facebook.com/v18.0/oauth/access_token", params={"client_id": aid, "client_secret": asec, "redirect_uri": ru, "code": code})
+        if r.status_code != 200:
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=token_exchange_failed")
+        at = r.json().get("access_token")
+        if not at:
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=no_access_token")
+        conn = db.query(PlatformConnection).filter(PlatformConnection.user_id == uid, PlatformConnection.platform == PlatformEnum.FACEBOOK).first()
+        if conn:
+            conn.access_token = at
+            conn.connected_at = datetime.now()
         else:
-            connection = PlatformConnection(
-                user_id=current_user.id,
-                platform=PlatformEnum.FACEBOOK,
-                access_token=access_token,
-                connected_at=datetime.now()
-            )
-            db.add(connection)
-        
+            conn = PlatformConnection(user_id=uid, platform=PlatformEnum.FACEBOOK, access_token=at, connected_at=datetime.now())
+            db.add(conn)
         db.commit()
-        
-        logger.info(f"✅ Facebook connection successful for user {current_user.id}")
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": "Facebook connected successfully"
-            },
-            status_code=200
-        )
-    except HTTPException:
-        raise
+        logger.info(f"✅ Facebook connection successful for user {uid}")
+        return RedirectResponse(url="https://machine.vernalcontentum.com/account-settings?facebook=connected")
+    except HTTPException: raise
     except Exception as e:
         logger.error(f"❌ Error in Facebook callback: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to complete Facebook connection: {str(e)}"
-        )
+        return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
 
 @app.get("/instagram/auth-v2")
 async def instagram_auth_v2(
@@ -9587,7 +9490,7 @@ async def instagram_auth_v2(
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list"
         )
         
         logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
