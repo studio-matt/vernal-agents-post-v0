@@ -738,6 +738,8 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "custom_keywords": custom_keywords,
                 # Image settings
                 "image_settings": image_settings,
+                # Content queue items
+                "content_queue_items_json": _safe_getattr(campaign, 'content_queue_items_json'),
                 # Look Alike specific fields
                 "articles_url": _safe_getattr(campaign, 'articles_url')
             }
