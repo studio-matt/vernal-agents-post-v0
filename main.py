@@ -893,6 +893,18 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Campaign not found or access denied"
             )
+        
+        # Delete associated raw data (cascade delete)
+        from models import CampaignRawData
+        raw_data_count = db.query(CampaignRawData).filter(
+            CampaignRawData.campaign_id == campaign_id
+        ).count()
+        if raw_data_count > 0:
+            db.query(CampaignRawData).filter(
+                CampaignRawData.campaign_id == campaign_id
+            ).delete()
+            logger.info(f"Deleted {raw_data_count} raw data records for campaign {campaign_id}")
+        
         db.delete(campaign)
         db.commit()
         logger.info(f"Campaign deleted successfully: {campaign_id}")
