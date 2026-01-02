@@ -312,6 +312,7 @@ class CampaignUpdate(BaseModel):
     personality_settings_json: Optional[str] = None  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
     image_settings_json: Optional[str] = None  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
     scheduling_settings_json: Optional[str] = None  # JSON string for scheduling settings: {activeDays, activePlatforms, post_frequency_type, post_frequency_value, start_date, day_frequency, defaultPosts}
+    content_queue_items_json: Optional[str] = None  # JSON string for content queue items: [{id, type, name, source, ...}]
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
@@ -814,6 +815,9 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
         if campaign_data.scheduling_settings_json is not None:
             campaign.scheduling_settings_json = campaign_data.scheduling_settings_json
             logger.info(f"Saved scheduling_settings_json for campaign {campaign_id}")
+        if campaign_data.content_queue_items_json is not None:
+            campaign.content_queue_items_json = campaign_data.content_queue_items_json
+            logger.info(f"Saved content_queue_items_json for campaign {campaign_id}")
         
         campaign.updated_at = datetime.utcnow()
         db.commit()
