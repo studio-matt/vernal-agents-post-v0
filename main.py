@@ -9480,43 +9480,47 @@ async def instagram_auth_v2(
 async def instagram_callback(
     code: str,
     state: str,
-    current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Handle Instagram OAuth callback and exchange code for access token, then get Instagram Business Account ID"""
+    """Handle Instagram OAuth callback - NO AUTH REQUIRED"""
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
         from dotenv import load_dotenv
         import requests
+        from fastapi.responses import RedirectResponse
+        from datetime import datetime
         
         load_dotenv()
         
+        # Instagram uses Facebook OAuth credentials
         app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
         app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
         redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "instagram_redirect_uri").first()
         
         app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
         app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
-        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://machine.vernalcontentum.com/instagram/callback")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://themachine.vernalcontentum.com/instagram/callback")
         
         if not app_id or not app_secret:
-            raise HTTPException(
-                status_code=500,
-                detail="Instagram OAuth credentials not configured. Please configure Facebook App credentials in Admin Settings > System > Platform Keys > Facebook (Instagram uses Facebook OAuth)."
-            )
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=instagram_not_configured")
         
+        # Verify state and get user_id from StateToken
         state_token = db.query(StateToken).filter(
-            StateToken.user_id == current_user.id,
             StateToken.platform == PlatformEnum.INSTAGRAM,
             StateToken.state == state
         ).first()
         
         if not state_token:
-            raise HTTPException(status_code=400, detail="Invalid state parameter")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=invalid_state")
         
+        user_id = state_token.user_id
+        
+        # Clean up state token
         db.delete(state_token)
+        db.commit()
         
+        # Exchange code for access token
         token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
         token_params = {
             "client_id": app_id,
@@ -9527,14 +9531,15 @@ async def instagram_callback(
         
         response = requests.get(token_url, params=token_params)
         if response.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to exchange code for token: {response.text}")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=token_exchange_failed")
         
         token_data = response.json()
         access_token = token_data.get("access_token")
         
         if not access_token:
-            raise HTTPException(status_code=400, detail="No access token in response")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_access_token")
         
+        # Get user's Facebook Pages (Instagram Business Accounts are linked to Pages)
         pages_url = "https://graph.facebook.com/v18.0/me/accounts"
         pages_params = {"access_token": access_token}
         pages_response = requests.get(pages_url, params=pages_params)
@@ -9544,10 +9549,12 @@ async def instagram_callback(
             pages_data = pages_response.json()
             pages = pages_data.get("data", [])
             
+            # Find the first page with an Instagram Business Account
             for page in pages:
                 page_id = page.get("id")
                 page_access_token = page.get("access_token")
                 
+                # Get Instagram Business Account for this page
                 instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
                 instagram_params = {
                     "fields": "instagram_business_account",
@@ -9559,11 +9566,13 @@ async def instagram_callback(
                     instagram_data = instagram_response.json()
                     if instagram_data.get("instagram_business_account"):
                         instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
+                        # Use the page access token for Instagram API calls
                         access_token = page_access_token
                         break
         
+        # Store or update connection
         connection = db.query(PlatformConnection).filter(
-            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.user_id == user_id,
             PlatformConnection.platform == PlatformEnum.INSTAGRAM
         ).first()
         
@@ -9573,7 +9582,7 @@ async def instagram_callback(
             connection.connected_at = datetime.now()
         else:
             connection = PlatformConnection(
-                user_id=current_user.id,
+                user_id=user_id,
                 platform=PlatformEnum.INSTAGRAM,
                 platform_user_id=instagram_business_account_id,
                 access_token=access_token,
@@ -9583,27 +9592,14 @@ async def instagram_callback(
         
         db.commit()
         
-        logger.info(f"✅ Instagram connection successful for user {current_user.id}, Instagram Business Account ID: {instagram_business_account_id}")
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": "Instagram connected successfully",
-                "instagram_business_account_id": instagram_business_account_id
-            },
-            status_code=200
-        )
-    except HTTPException:
-        raise
+        logger.info(f"✅ Instagram connection successful for user {user_id}, Instagram Business Account ID: {instagram_business_account_id}")
+        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?instagram=connected")
     except Exception as e:
         db.rollback()
         logger.error(f"❌ Error in Instagram callback: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to complete Instagram connection: {str(e)}"
-        )
-
+        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=instagram_connection_failed")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
