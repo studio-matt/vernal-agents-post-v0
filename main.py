@@ -9186,6 +9186,93 @@ async def get_all_platform_credentials(
         logger.error(f"❌ Error fetching platform credentials: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch credentials: {str(e)}")
 
+@app.post("/platforms/{platform}/refresh-profile")
+async def refresh_platform_profile(
+    platform: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Refresh user profile information for an existing OAuth connection"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        import requests
+        
+        try:
+            platform_enum = PlatformEnum[platform.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == platform_enum
+        ).first()
+        
+        if not connection or not connection.access_token:
+            raise HTTPException(status_code=404, detail=f"No {platform} connection found")
+        
+        access_token = connection.access_token
+        user_email = None
+        user_name = None
+        platform_user_identifier = None
+        
+        if platform_enum == PlatformEnum.LINKEDIN:
+            try:
+                # Try OpenID Connect userinfo endpoint first
+                profile_url = "https://api.linkedin.com/v2/userinfo"
+                headers = {"Authorization": f"Bearer {access_token}"}
+                profile_response = requests.get(profile_url, headers=headers)
+                
+                if profile_response.status_code == 200:
+                    profile_data = profile_response.json()
+                    user_email = profile_data.get("email")
+                    user_name = profile_data.get("name")
+                    logger.info(f"✅ Refreshed LinkedIn profile: email={user_email}, name={user_name}")
+                else:
+                    # Fallback to basic profile endpoint
+                    profile_url = "https://api.linkedin.com/v2/me"
+                    profile_response = requests.get(profile_url, headers=headers)
+                    if profile_response.status_code == 200:
+                        profile_data = profile_response.json()
+                        user_name = f"{profile_data.get('localizedFirstName', '')} {profile_data.get('localizedLastName', '')}".strip()
+                        logger.info(f"✅ Refreshed LinkedIn basic profile: name={user_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not refresh LinkedIn profile: {e}")
+            
+            platform_user_identifier = user_email or user_name or "LinkedIn User"
+            
+        elif platform_enum == PlatformEnum.FACEBOOK or platform_enum == PlatformEnum.INSTAGRAM:
+            try:
+                profile_url = "https://graph.facebook.com/v18.0/me"
+                params = {
+                    "access_token": access_token,
+                    "fields": "email,name"
+                }
+                profile_response = requests.get(profile_url, params=params)
+                
+                if profile_response.status_code == 200:
+                    profile_data = profile_response.json()
+                    user_email = profile_data.get("email")
+                    user_name = profile_data.get("name")
+                    logger.info(f"✅ Refreshed {platform} profile: email={user_email}, name={user_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not refresh {platform} profile: {e}")
+            
+            platform_user_identifier = user_email or user_name or f"{platform} User"
+        
+        if platform_user_identifier:
+            connection.platform_user_id = platform_user_identifier
+            db.commit()
+            return {"success": True, "message": f"{platform} profile refreshed", "platform_user_id": platform_user_identifier}
+        else:
+            return {"success": False, "message": f"Could not fetch {platform} profile information"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error refreshing {platform} profile: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh profile: {str(e)}")
+
 @app.post("/platforms/{platform}/credentials/save")
 async def save_platform_credentials(
     platform: str,
