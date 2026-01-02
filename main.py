@@ -9243,30 +9243,37 @@ async def remove_platform_credentials(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Remove platform credentials"""
+    """Remove platform credentials - DELETE all connections for this platform (permanent removal)"""
     try:
         from models import PlatformConnection, PlatformEnum
-        from datetime import datetime
         
+        # Convert platform name to enum
         try:
             platform_enum = PlatformEnum[platform.upper()]
         except KeyError:
             raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
         
-        connection = db.query(PlatformConnection).filter(
+        # Find ALL connections for this platform and user
+        connections = db.query(PlatformConnection).filter(
             PlatformConnection.user_id == current_user.id,
             PlatformConnection.platform == platform_enum
-        ).first()
+        ).all()
         
-        if connection:
-            connection.platform_user_id = None
-            connection.refresh_token = None
-            connection.access_token = None
-            connection.disconnected_at = datetime.now()
+        if connections:
+            # DELETE all connection records (permanent removal)
+            for connection in connections:
+                db.delete(connection)
             db.commit()
-            return {"success": True, "message": f"{platform} credentials removed successfully"}
+            
+            return {
+                "success": True,
+                "message": f"{platform} disconnected successfully - all connections removed"
+            }
         else:
-            return {"success": True, "message": f"No {platform} credentials found to remove"}
+            return {
+                "success": True,
+                "message": f"No {platform} connections found to remove"
+            }
     except HTTPException:
         raise
     except Exception as e:
