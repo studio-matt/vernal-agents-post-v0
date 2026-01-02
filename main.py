@@ -9107,11 +9107,12 @@ async def get_all_platform_credentials(
             platform_name = conn.platform.value.lower()
             
             if conn.platform == PlatformEnum.LINKEDIN:
-                # LinkedIn uses platform's app - only return connection status
+                # LinkedIn uses platform's app - return connection status and account info
                 credentials[platform_name] = {
                     "has_credentials": bool(conn.access_token),
                     "connected": bool(conn.access_token),
                     "connected_at": conn.connected_at.isoformat() if conn.connected_at else None,
+                    "platform_user_id": conn.platform_user_id or "",
                 }
             elif conn.platform == PlatformEnum.TWITTER:
                 credentials[platform_name] = {
@@ -9133,11 +9134,19 @@ async def get_all_platform_credentials(
                     "app_id": conn.platform_user_id or "",
                     "app_secret": conn.refresh_token or "",
                     "access_token": conn.access_token or "",
+                    "platform_user_id": conn.platform_user_id or "",
+                }
+            elif conn.platform == PlatformEnum.FACEBOOK:
+                credentials[platform_name] = {
+                    "has_credentials": bool(conn.access_token),
+                    "access_token": conn.access_token or "",
+                    "platform_user_id": conn.platform_user_id or "",
                 }
             else:
                 credentials[platform_name] = {
                     "has_credentials": bool(conn.access_token),
                     "access_token": conn.access_token or "",
+                    "platform_user_id": conn.platform_user_id or "",
                 }
         
         return {"success": True, "credentials": credentials}
