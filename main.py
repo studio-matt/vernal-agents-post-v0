@@ -8520,12 +8520,44 @@ async def linkedin_callback(
         at = r.json().get("access_token")
         if not at:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=no_access_token")
+        
+        # Fetch user profile information from LinkedIn
+        user_email = None
+        user_name = None
+        try:
+            # Use OpenID Connect userinfo endpoint to get email
+            profile_url = "https://api.linkedin.com/v2/userinfo"
+            headers = {"Authorization": f"Bearer {at}"}
+            profile_response = requests.get(profile_url, headers=headers)
+            
+            if profile_response.status_code == 200:
+                profile_data = profile_response.json()
+                user_email = profile_data.get("email")
+                user_name = profile_data.get("name")
+                logger.info(f"✅ Fetched LinkedIn profile: email={user_email}, name={user_name}")
+            else:
+                # Fallback to basic profile endpoint
+                profile_url = "https://api.linkedin.com/v2/me"
+                profile_response = requests.get(profile_url, headers=headers)
+                if profile_response.status_code == 200:
+                    profile_data = profile_response.json()
+                    user_name = f"{profile_data.get('localizedFirstName', '')} {profile_data.get('localizedLastName', '')}".strip()
+                    logger.info(f"✅ Fetched LinkedIn basic profile: name={user_name}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch LinkedIn profile: {e}")
+            # Continue without profile info - connection still works
+        
+        # Use email if available, otherwise use name, otherwise use a generic identifier
+        platform_user_identifier = user_email or user_name or "LinkedIn User"
+        
         conn = db.query(PlatformConnection).filter(PlatformConnection.user_id == uid, PlatformConnection.platform == PlatformEnum.LINKEDIN).first()
         if conn:
             conn.access_token = at
             conn.connected_at = datetime.now()
+            if platform_user_identifier:
+                conn.platform_user_id = platform_user_identifier
         else:
-            conn = PlatformConnection(user_id=uid, platform=PlatformEnum.LINKEDIN, access_token=at, connected_at=datetime.now())
+            conn = PlatformConnection(user_id=uid, platform=PlatformEnum.LINKEDIN, access_token=at, platform_user_id=platform_user_identifier, connected_at=datetime.now())
             db.add(conn)
         db.commit()
         logger.info(f"✅ LinkedIn connection successful for user {uid}")
