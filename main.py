@@ -9434,12 +9434,38 @@ async def facebook_callback(
         at = r.json().get("access_token")
         if not at:
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=no_access_token")
+        
+        # Fetch user profile information from Facebook
+        user_email = None
+        user_name = None
+        try:
+            profile_url = "https://graph.facebook.com/v18.0/me"
+            params = {
+                "access_token": at,
+                "fields": "email,name"
+            }
+            profile_response = requests.get(profile_url, params=params)
+            
+            if profile_response.status_code == 200:
+                profile_data = profile_response.json()
+                user_email = profile_data.get("email")
+                user_name = profile_data.get("name")
+                logger.info(f"✅ Fetched Facebook profile: email={user_email}, name={user_name}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch Facebook profile: {e}")
+            # Continue without profile info - connection still works
+        
+        # Use email if available, otherwise use name, otherwise use a generic identifier
+        platform_user_identifier = user_email or user_name or "Facebook User"
+        
         conn = db.query(PlatformConnection).filter(PlatformConnection.user_id == uid, PlatformConnection.platform == PlatformEnum.FACEBOOK).first()
         if conn:
             conn.access_token = at
             conn.connected_at = datetime.now()
+            if platform_user_identifier:
+                conn.platform_user_id = platform_user_identifier
         else:
-            conn = PlatformConnection(user_id=uid, platform=PlatformEnum.FACEBOOK, access_token=at, connected_at=datetime.now())
+            conn = PlatformConnection(user_id=uid, platform=PlatformEnum.FACEBOOK, access_token=at, platform_user_id=platform_user_identifier, connected_at=datetime.now())
             db.add(conn)
         db.commit()
         logger.info(f"✅ Facebook connection successful for user {uid}")
@@ -9587,6 +9613,29 @@ async def instagram_callback(
         if not access_token:
             return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_access_token")
         
+        # Fetch user profile information from Facebook (Instagram uses Facebook OAuth)
+        user_email = None
+        user_name = None
+        try:
+            profile_url = "https://graph.facebook.com/v18.0/me"
+            params = {
+                "access_token": access_token,
+                "fields": "email,name"
+            }
+            profile_response = requests.get(profile_url, params=params)
+            
+            if profile_response.status_code == 200:
+                profile_data = profile_response.json()
+                user_email = profile_data.get("email")
+                user_name = profile_data.get("name")
+                logger.info(f"✅ Fetched Instagram/Facebook profile: email={user_email}, name={user_name}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch Instagram/Facebook profile: {e}")
+            # Continue without profile info - connection still works
+        
+        # Use email if available, otherwise use name, otherwise use a generic identifier
+        platform_user_identifier = user_email or user_name or "Instagram User"
+        
         # Get user's Facebook Pages (Instagram Business Accounts are linked to Pages)
         pages_url = "https://graph.facebook.com/v18.0/me/accounts"
         pages_params = {"access_token": access_token}
@@ -9619,6 +9668,9 @@ async def instagram_callback(
                         break
         
         # Store or update connection
+        # Use user email/name for display, fallback to business account ID if no profile info
+        display_identifier = platform_user_identifier if platform_user_identifier != "Instagram User" else (instagram_business_account_id or "Instagram User")
+        
         connection = db.query(PlatformConnection).filter(
             PlatformConnection.user_id == user_id,
             PlatformConnection.platform == PlatformEnum.INSTAGRAM
@@ -9626,13 +9678,13 @@ async def instagram_callback(
         
         if connection:
             connection.access_token = access_token
-            connection.platform_user_id = instagram_business_account_id if instagram_business_account_id else connection.platform_user_id
+            connection.platform_user_id = display_identifier
             connection.connected_at = datetime.now()
         else:
             connection = PlatformConnection(
                 user_id=user_id,
                 platform=PlatformEnum.INSTAGRAM,
-                platform_user_id=instagram_business_account_id,
+                platform_user_id=display_identifier,
                 access_token=access_token,
                 connected_at=datetime.now()
             )
