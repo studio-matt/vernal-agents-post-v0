@@ -403,8 +403,92 @@ def deploy_commit(admin_user = Depends(get_admin_user)):
         return {"commit": "unknown", "status": "error", "message": str(e)}
 
 # Campaign endpoints with REAL database operations (EMERGENCY_NET: Multi-tenant scoped)
-# Demo campaign ID - locked campaign that should appear first for all users
+# Demo campaign ID - template campaign that will be copied for each user
 DEMO_CAMPAIGN_ID = "9aaa2de6-ac2c-4bd1-8cd2-44f8cbc66f2a"
+
+def create_user_demo_campaign(user_id: int, db: Session):
+    """
+    Create a user-specific copy of the demo campaign.
+    Each user gets their own independent demo campaign with unique campaign_id.
+    """
+    from models import Campaign, CampaignRawData
+    import json
+    import uuid
+    
+    logger.info(f"📋 Creating user-specific demo campaign for user {user_id}")
+    
+    # Get the template demo campaign
+    template_campaign = db.query(Campaign).filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
+    if not template_campaign:
+        logger.warning(f"⚠️ Template demo campaign {DEMO_CAMPAIGN_ID} not found - cannot create user copy")
+        return None
+    
+    # Check if user already has a demo campaign
+    # We'll use a naming convention: demo campaigns have name starting with "Demo Campaign"
+    existing_demo = db.query(Campaign).filter(
+        Campaign.user_id == user_id,
+        Campaign.campaign_name.like("Demo Campaign%")
+    ).first()
+    
+    if existing_demo:
+        logger.info(f"✅ User {user_id} already has demo campaign: {existing_demo.campaign_id}")
+        return existing_demo.campaign_id
+    
+    # Create new campaign_id for user's copy
+    user_demo_campaign_id = str(uuid.uuid4())
+    
+    # Copy campaign data
+    user_campaign = Campaign(
+        campaign_id=user_demo_campaign_id,
+        campaign_name=template_campaign.campaign_name,
+        description=template_campaign.description,
+        query=template_campaign.query,
+        type=template_campaign.type,
+        keywords=template_campaign.keywords,
+        urls=template_campaign.urls,
+        trending_topics=template_campaign.trending_topics,
+        topics=template_campaign.topics,
+        status=template_campaign.status,
+        user_id=user_id,  # Set to current user
+        extraction_settings_json=template_campaign.extraction_settings_json,
+        preprocessing_settings_json=template_campaign.preprocessing_settings_json,
+        entity_settings_json=template_campaign.entity_settings_json,
+        modeling_settings_json=template_campaign.modeling_settings_json,
+        site_base_url=_safe_getattr(template_campaign, 'site_base_url'),
+        target_keywords_json=_safe_getattr(template_campaign, 'target_keywords_json'),
+        top_ideas_count=_safe_getattr(template_campaign, 'top_ideas_count'),
+        image_settings_json=_safe_getattr(template_campaign, 'image_settings_json'),
+        content_queue_items_json=_safe_getattr(template_campaign, 'content_queue_items_json'),
+        articles_url=_safe_getattr(template_campaign, 'articles_url'),
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    db.add(user_campaign)
+    db.flush()  # Flush to get the ID
+    
+    # Copy raw_data from template to user's copy
+    template_raw_data = db.query(CampaignRawData).filter(
+        CampaignRawData.campaign_id == DEMO_CAMPAIGN_ID
+    ).all()
+    
+    copied_raw_data_count = 0
+    for template_row in template_raw_data:
+        user_raw_data = CampaignRawData(
+            campaign_id=user_demo_campaign_id,
+            source_url=template_row.source_url,
+            fetched_at=template_row.fetched_at,
+            raw_html=template_row.raw_html,
+            extracted_text=template_row.extracted_text,
+            meta_json=template_row.meta_json
+        )
+        db.add(user_raw_data)
+        copied_raw_data_count += 1
+    
+    db.commit()
+    logger.info(f"✅ Created user demo campaign {user_demo_campaign_id} for user {user_id} with {copied_raw_data_count} raw_data entries")
+    
+    return user_demo_campaign_id
 
 @app.get("/campaigns")
 def get_campaigns(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -422,21 +506,25 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
             campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
             logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
         
-        # Ensure demo campaign is included and sorted first
-        demo_campaign = db.query(Campaign).filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
-        if demo_campaign:
-            # Check if user already has the demo campaign
-            user_has_demo = any(c.campaign_id == DEMO_CAMPAIGN_ID for c in campaigns)
-            if not user_has_demo:
-                # Create a copy of the demo campaign for this user (or we could just include it)
-                # For now, we'll include it in the results but mark it as demo
-                campaigns.append(demo_campaign)
-                logger.info(f"Added demo campaign to user {current_user.id}'s campaign list")
+        # Ensure user has a demo campaign (create copy if needed)
+        user_demo_campaign_id = create_user_demo_campaign(current_user.id, db)
+        
+        # Get user's demo campaign (if it exists)
+        if user_demo_campaign_id:
+            user_demo_campaign = db.query(Campaign).filter(
+                Campaign.campaign_id == user_demo_campaign_id
+            ).first()
+            if user_demo_campaign:
+                # Check if it's already in the list
+                user_has_demo = any(c.campaign_id == user_demo_campaign_id for c in campaigns)
+                if not user_has_demo:
+                    campaigns.append(user_demo_campaign)
+                    logger.info(f"Added user demo campaign {user_demo_campaign_id} to user {current_user.id}'s campaign list")
         
         # Sort campaigns: demo campaign first, then by created_at
         from datetime import datetime as dt
         campaigns.sort(key=lambda c: (
-            0 if c.campaign_id == DEMO_CAMPAIGN_ID else 1,
+            0 if c.campaign_name and c.campaign_name.startswith("Demo Campaign") else 1,
             c.created_at or dt.min
         ))
         
@@ -647,6 +735,15 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
     try:
         from models import Campaign
         from sqlalchemy.orm import defer
+        
+        # Check if this is a request for the template demo campaign
+        # If so, create/return user's copy instead
+        if campaign_id == DEMO_CAMPAIGN_ID:
+            user_demo_campaign_id = create_user_demo_campaign(current_user.id, db)
+            if user_demo_campaign_id:
+                campaign_id = user_demo_campaign_id
+                logger.info(f"Redirected template demo request to user's copy: {user_demo_campaign_id}")
+        
         # Verify ownership
         # Exclude potentially missing columns from query to avoid SQL errors
         campaign = db.query(Campaign).filter(
@@ -761,6 +858,14 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
     try:
         from models import Campaign
         
+        # Check if this is a request for the template demo campaign
+        # If so, redirect to user's copy
+        if campaign_id == DEMO_CAMPAIGN_ID:
+            user_demo_campaign_id = create_user_demo_campaign(current_user.id, db)
+            if user_demo_campaign_id:
+                campaign_id = user_demo_campaign_id
+                logger.info(f"Redirected template demo update request to user's copy: {user_demo_campaign_id}")
+        
         # Verify ownership
         campaign = db.query(Campaign).filter(
             Campaign.campaign_id == campaign_id,
@@ -855,34 +960,26 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
         from models import Campaign, User
         import json
         
-        # Prevent deletion of demo campaign - instead, mark it as hidden for this user
+        # Prevent deletion of template demo campaign
         if campaign_id == DEMO_CAMPAIGN_ID:
-            logger.info(f"User {current_user.id} attempting to delete demo campaign - creating user exclusion instead")
-            # Get or create user's hidden campaigns list
-            user = db.query(User).filter(User.id == current_user.id).first()
-            if user:
-                # Store hidden campaign IDs in a JSON field (we'll need to add this to User model)
-                # For now, we'll use a simple approach: check if user has a hidden_campaigns field
-                # If not available, we'll just prevent deletion
-                logger.info(f"Demo campaign deletion prevented - campaign remains available for all users")
-                return {
-                    "status": "success",
-                    "message": "Demo campaign hidden for your account (remains available for other users)"
-                }
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete template demo campaign"
+            )
         
         # Verify ownership (or allow admin to delete any campaign)
         is_admin = hasattr(current_user, 'is_admin') and current_user.is_admin
         if is_admin:
-            # Admin can delete any campaign (except demo)
+            # Admin can delete any campaign (except template demo)
+            if campaign_id == DEMO_CAMPAIGN_ID:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot delete template demo campaign"
+                )
             campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
             logger.info(f"Admin user {current_user.id} deleting campaign {campaign_id} (owner: {campaign.user_id if campaign else 'not found'})")
         else:
-            # Regular users can only delete their own campaigns
+            # Regular users can only delete their own campaigns (including their demo copy)
             campaign = db.query(Campaign).filter(
                 Campaign.campaign_id == campaign_id,
                 Campaign.user_id == current_user.id
@@ -1193,6 +1290,30 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                     task["progress"] = prog
                     task["progress_message"] = msg
                     logger.info(f"📊 Task {tid}: {prog}% - {step} - {msg}")
+
+                # CRITICAL: Check if raw_data already exists for this campaign
+                # If it does, skip scraping to prevent re-scraping and data growth
+                # Raw data should only be written during initial scrape
+                existing_raw_data = session.query(CampaignRawData).filter(
+                    CampaignRawData.campaign_id == cid,
+                    ~CampaignRawData.source_url.startswith("error:"),
+                    ~CampaignRawData.source_url.startswith("placeholder:")
+                ).first()
+                
+                if existing_raw_data:
+                    logger.info(f"📋 Raw data already exists for campaign {cid} - skipping scrape phase to prevent data growth")
+                    logger.info(f"📋 Raw data was created at: {existing_raw_data.fetched_at}")
+                    set_task("raw_data_exists", 50, "Raw data already exists - using existing data")
+                    # Skip to completion - raw data is already available
+                    # Research operations will read from existing raw_data
+                    set_task("complete", 100, "Analysis complete - using existing raw data")
+                    camp = session.query(Campaign).filter(Campaign.campaign_id == cid).first()
+                    if camp:
+                        camp.status = "COMPLETE"
+                        camp.updated_at = datetime.utcnow()
+                        session.commit()
+                    logger.info(f"✅ Skipped scraping for campaign {cid} - raw data already exists")
+                    return  # Exit early - don't write any new raw_data
 
                 # CRITICAL: Set campaign status to PROCESSING at the start of analysis
                 try:
@@ -4893,6 +5014,14 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
     try:
         agent_type = request_data.agent_type
         logger.info(f"✅ Processing {agent_type} agent for campaign {campaign_id}")
+        
+        # Check if this is a request for the template demo campaign
+        # If so, redirect to user's copy
+        if campaign_id == DEMO_CAMPAIGN_ID:
+            user_demo_campaign_id = create_user_demo_campaign(current_user.id, db)
+            if user_demo_campaign_id:
+                campaign_id = user_demo_campaign_id
+                logger.info(f"Redirected template demo research request to user's copy: {user_demo_campaign_id}")
         
         # Verify campaign ownership
         from models import Campaign
