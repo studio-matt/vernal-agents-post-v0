@@ -22,6 +22,13 @@ from .planner import Planner
 from .profile_extraction import ProfileExtractor
 from .profile_store import ProfileStore, SchemaViolationError
 from .reporter import render_json, render_markdown, save_json, save_markdown
+from .similarity import (
+    compute_bh_lvt_weighted_similarity,
+    compute_feature_similarity,
+    compute_profile_similarity,
+    compute_punctuation_similarity,
+    cosine_similarity,
+)
 from .validator import StyleValidator, parse_style_header
 
 __all__ = [
@@ -46,6 +53,11 @@ __all__ = [
     "ToleranceConfig",
     "ValidationFinding",
     "ValidationReport",
+    "compute_bh_lvt_weighted_similarity",
+    "compute_feature_similarity",
+    "compute_profile_similarity",
+    "compute_punctuation_similarity",
+    "cosine_similarity",
     "parse_style_header",
     "render_json",
     "render_markdown",
