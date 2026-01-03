@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Cleanup script to remove all campaign_raw_data NOT associated with the Demo Vernal Campaign.
-This ensures only raw data for the Demo Campaign exists in the database.
+Cleanup script to remove orphaned campaign_raw_data (data for campaigns that no longer exist).
+This ensures only raw data for existing campaigns remains in the database.
 """
 
 import sys
@@ -23,10 +23,8 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-DEMO_CAMPAIGN_ID = "9aaa2de6-ac2c-4bd1-8cd2-44f8cbc66f2a"
-
-def cleanup_non_demo_raw_data():
-    """Remove all campaign_raw_data not associated with the Demo Campaign"""
+def cleanup_orphaned_raw_data():
+    """Remove all campaign_raw_data not associated with existing campaigns"""
     # Create database connection
     db_config = {
         "host": os.getenv('DB_HOST'),
@@ -43,44 +41,54 @@ def cleanup_non_demo_raw_data():
     session = Session()
     
     try:
+        # Get all existing campaign_ids from Campaign table
+        existing_campaigns = session.query(Campaign.campaign_id).all()
+        existing_campaign_ids = {c[0] for c in existing_campaigns if c[0]}
+        
+        logger.info(f"📋 Found {len(existing_campaign_ids)} existing campaigns in database")
+        
         # Get all unique campaign_ids from CampaignRawData
         raw_data_campaign_ids = session.query(CampaignRawData.campaign_id).distinct().all()
         raw_data_campaign_ids = [cid[0] for cid in raw_data_campaign_ids if cid[0]]
         
         logger.info(f"📋 Found {len(raw_data_campaign_ids)} unique campaign_ids in CampaignRawData")
         
-        # Find campaign_ids that are NOT the Demo Campaign
-        non_demo_campaign_ids = [cid for cid in raw_data_campaign_ids if cid != DEMO_CAMPAIGN_ID]
+        # Find campaign_ids in raw_data that don't exist in campaigns table (orphaned)
+        orphaned_campaign_ids = [cid for cid in raw_data_campaign_ids if cid not in existing_campaign_ids]
         
-        if not non_demo_campaign_ids:
-            logger.info("✅ No non-demo campaign raw data found. All data is for Demo Campaign.")
+        if not orphaned_campaign_ids:
+            logger.info("✅ No orphaned campaign raw data found. All data is associated with existing campaigns.")
             return
         
-        logger.info(f"🗑️ Found {len(non_demo_campaign_ids)} non-demo campaign_ids: {non_demo_campaign_ids}")
+        logger.info(f"🗑️ Found {len(orphaned_campaign_ids)} orphaned campaign_ids: {orphaned_campaign_ids}")
         
         total_deleted = 0
-        for campaign_id in non_demo_campaign_ids:
-            # Count records for this campaign
+        for campaign_id in orphaned_campaign_ids:
+            # Count records for this orphaned campaign
             count = session.query(CampaignRawData).filter(
                 CampaignRawData.campaign_id == campaign_id
             ).count()
             
-            # Delete all records for this campaign
+            # Delete all records for this orphaned campaign
             deleted = session.query(CampaignRawData).filter(
                 CampaignRawData.campaign_id == campaign_id
             ).delete(synchronize_session=False)
             
             total_deleted += deleted
-            logger.info(f"🗑️ Deleted {deleted} raw data records for campaign_id: {campaign_id}")
+            logger.info(f"🗑️ Deleted {deleted} orphaned raw data records for campaign_id: {campaign_id}")
         
         session.commit()
-        logger.info(f"✅ Cleaned up {total_deleted} raw data entries not associated with Demo Campaign.")
+        logger.info(f"✅ Cleaned up {total_deleted} orphaned raw data entries.")
         
-        # Also verify Demo Campaign data exists
-        demo_count = session.query(CampaignRawData).filter(
-            CampaignRawData.campaign_id == DEMO_CAMPAIGN_ID
-        ).count()
-        logger.info(f"📊 Demo Campaign ({DEMO_CAMPAIGN_ID}) now has {demo_count} raw data records")
+        # Report remaining data by campaign
+        remaining_campaign_ids = session.query(CampaignRawData.campaign_id).distinct().all()
+        remaining_campaign_ids = [cid[0] for cid in remaining_campaign_ids if cid[0]]
+        logger.info(f"📊 Remaining raw data for {len(remaining_campaign_ids)} campaigns:")
+        for cid in remaining_campaign_ids:
+            count = session.query(CampaignRawData).filter(
+                CampaignRawData.campaign_id == cid
+            ).count()
+            logger.info(f"   - Campaign {cid}: {count} records")
         
     except Exception as e:
         session.rollback()
@@ -93,7 +101,7 @@ def cleanup_non_demo_raw_data():
         engine.dispose()
 
 if __name__ == "__main__":
-    logger.info("🧹 Starting cleanup of non-demo campaign_raw_data...")
-    cleanup_non_demo_raw_data()
+    logger.info("🧹 Starting cleanup of orphaned campaign_raw_data...")
+    cleanup_orphaned_raw_data()
     logger.info("✅ Cleanup complete!")
 
