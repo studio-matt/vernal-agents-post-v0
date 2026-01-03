@@ -116,6 +116,31 @@ def validate_content_against_profile(
                 measured_liwc=liwc_scores
             )
             
+            # Calculate similarity metrics (BH-LVT and punctuation cosine)
+            from author_related import compute_bh_lvt_weighted_similarity, compute_punctuation_similarity
+            
+            # Extract profile features
+            profile_features = {
+                cat: score.mean 
+                for cat, score in profile.liwc_profile.categories.items()
+            }
+            
+            # Compute similarity metrics
+            similarity_metrics = {}
+            try:
+                bh_lvt_similarity = compute_bh_lvt_weighted_similarity(profile_features, liwc_scores)
+                similarity_metrics["bh_lvt_weighted_cosine"] = float(bh_lvt_similarity)
+            except Exception as e:
+                logger.warning(f"Error computing BH-LVT similarity: {e}")
+                similarity_metrics["bh_lvt_weighted_cosine"] = None
+            
+            try:
+                punctuation_similarity = compute_punctuation_similarity(profile_features, liwc_scores)
+                similarity_metrics["punctuation_cosine"] = float(punctuation_similarity)
+            except Exception as e:
+                logger.warning(f"Error computing punctuation similarity: {e}")
+                similarity_metrics["punctuation_cosine"] = None
+            
             # Calculate overall score (0-100)
             # Lower is better (fewer errors = higher score)
             total_errors = (
@@ -152,6 +177,7 @@ def validate_content_against_profile(
                 "total_errors": total_errors,
                 "total_warnings": total_warnings,
                 "validation_passed": overall_score >= 70,  # Pass if score >= 70
+                "similarity_metrics": similarity_metrics,  # BH-LVT and punctuation cosine
             }
             
             logger.info(f"Validation complete: score={overall_score}, errors={total_errors}, warnings={total_warnings}")

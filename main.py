@@ -5771,6 +5771,61 @@ def extract_author_profile(
             db=db
         )
         
+        # Compute similarity metrics by comparing profile to aggregated sample LIWC scores
+        from author_related import compute_bh_lvt_weighted_similarity, compute_punctuation_similarity
+        from liwc_analyzer import analyze_text
+        import statistics
+        
+        similarity_metrics = {}
+        try:
+            # Aggregate LIWC scores from all writing samples
+            all_liwc_scores = []
+            for sample_text in request_data.writing_samples:
+                if sample_text and sample_text.strip():
+                    sample_liwc = analyze_text(sample_text)
+                    all_liwc_scores.append(sample_liwc)
+            
+            if all_liwc_scores:
+                # Aggregate by averaging across all samples
+                aggregated_sample_liwc = {}
+                all_categories = set()
+                for liwc in all_liwc_scores:
+                    all_categories.update(liwc.keys())
+                
+                for category in all_categories:
+                    values = [liwc.get(category, 0.0) for liwc in all_liwc_scores if category in liwc]
+                    if values:
+                        aggregated_sample_liwc[category] = statistics.fmean(values)
+                
+                # Extract profile features
+                profile_features = {
+                    cat: score.mean 
+                    for cat, score in profile.liwc_profile.categories.items()
+                }
+                
+                # Compute BH-LVT weighted cosine similarity
+                try:
+                    bh_lvt_similarity = compute_bh_lvt_weighted_similarity(profile_features, aggregated_sample_liwc)
+                    similarity_metrics["bh_lvt_weighted_cosine"] = float(bh_lvt_similarity)
+                except Exception as e:
+                    logger.warning(f"Error computing BH-LVT similarity during extraction: {e}")
+                    similarity_metrics["bh_lvt_weighted_cosine"] = None
+                
+                # Compute punctuation cosine similarity
+                try:
+                    punctuation_similarity = compute_punctuation_similarity(profile_features, aggregated_sample_liwc)
+                    similarity_metrics["punctuation_cosine"] = float(punctuation_similarity)
+                except Exception as e:
+                    logger.warning(f"Error computing punctuation similarity during extraction: {e}")
+                    similarity_metrics["punctuation_cosine"] = None
+            else:
+                similarity_metrics["bh_lvt_weighted_cosine"] = None
+                similarity_metrics["punctuation_cosine"] = None
+        except Exception as e:
+            logger.warning(f"Error computing similarity metrics during profile extraction: {e}")
+            similarity_metrics["bh_lvt_weighted_cosine"] = None
+            similarity_metrics["punctuation_cosine"] = None
+        
         # Return summary (not full profile to avoid large response)
         return {
             "status": "success",
@@ -5785,7 +5840,8 @@ def extract_author_profile(
                     "core_nouns": len(profile.lexicon.core_nouns),
                     "evaluatives": len(profile.lexicon.evaluatives),
                     "metaphor_stems": len(profile.lexicon.metaphor_stems)
-                }
+                },
+                "similarity_metrics": similarity_metrics  # BH-LVT and punctuation cosine
             }
         }
         
