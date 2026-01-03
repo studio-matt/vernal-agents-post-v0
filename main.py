@@ -8120,14 +8120,47 @@ async def save_content_item(
         day = item.get("day", "Monday")
         platform = item.get("platform", "linkedin").lower()
         
-        # Check if content already exists
-        existing_content = db.query(Content).filter(
-            Content.campaign_id == campaign_id,
-            Content.week == week,
-            Content.day == day,
-            Content.platform == platform,
-            Content.user_id == current_user.id
-        ).first()
+        # Check if request includes a database ID (numeric) - if so, find that specific content item
+        existing_content = None
+        content_id = item.get("id")
+        
+        # If id is provided and is numeric (database ID), find that specific content item and update it
+        if content_id and isinstance(content_id, (int, str)):
+            try:
+                # Check if it's a numeric database ID
+                if str(content_id).isdigit():
+                    content_id_int = int(content_id)
+                    existing_content = db.query(Content).filter(
+                        Content.id == content_id_int,
+                        Content.campaign_id == campaign_id,
+                        Content.user_id == current_user.id
+                    ).first()
+                    if existing_content:
+                        logger.info(f"🔍 Found existing content by database ID: {content_id_int}")
+                else:
+                    # ID is not numeric (frontend-generated like "week-1-Monday-linkedin-0-post-1")
+                    # This means we're creating NEW content, not updating existing
+                    # Don't check for existing by week/day/platform - always create new
+                    logger.info(f"🔍 Non-numeric ID provided ({content_id}), creating new content (not updating)")
+            except (ValueError, TypeError):
+                # ID format is unexpected, treat as new content
+                logger.info(f"🔍 ID format unexpected ({content_id}), creating new content")
+        
+        # If no existing content found by ID and ID was numeric (or not provided),
+        # check by week/day/platform (for backward compatibility with existing content)
+        # This allows updating existing content that was created before the ID-based system
+        if not existing_content and (not content_id or (isinstance(content_id, (int, str)) and str(content_id).isdigit())):
+            existing_content = db.query(Content).filter(
+                Content.campaign_id == campaign_id,
+                Content.week == week,
+                Content.day == day,
+                Content.platform == platform,
+                Content.user_id == current_user.id
+            ).first()
+            if existing_content:
+                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform}")
+        
+        # If still no existing content, we'll create a new one
         
         # Parse schedule time if provided
         schedule_time = None
@@ -8163,7 +8196,14 @@ async def save_content_item(
             existing_content.is_draft = True
             existing_content.can_edit = True
             existing_content.schedule_time = schedule_time
-            logger.info(f"✅ Updated existing content: week={week}, day={day}, platform={platform}, image={image_url}")
+            # Update week/day/platform if provided (in case they changed)
+            if item.get("week"):
+                existing_content.week = week
+            if item.get("day"):
+                existing_content.day = day
+            if item.get("platform"):
+                existing_content.platform = platform
+            logger.info(f"✅ Updated existing content (ID: {existing_content.id}): week={week}, day={day}, platform={platform}, image={bool(image_url)}")
         else:
             # Validate required fields
             content_text = item.get("description") or item.get("content", "")
@@ -8256,7 +8296,8 @@ def get_campaign_content_items(
         for item in content_items:
             image_url = item.image_url or ""
             items_data.append({
-                "id": f"week-{item.week}-{item.day}-{item.platform}-{item.id}",
+                "id": f"week-{item.week}-{item.day}-{item.platform}-{item.id}",  # Composite ID for frontend
+                "database_id": item.id,  # Include database ID separately so frontend can use it for updates
                 "title": item.title or "",
                 "description": item.content or "",
                 "week": item.week,
@@ -8267,7 +8308,7 @@ def get_campaign_content_items(
                 "status": item.status or "draft",
                 "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
             })
-            logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}")
+            logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}, db_id={item.id}")
         
         logger.info(f"✅ Returning {len(items_data)} items for campaign {campaign_id}")
         return {
