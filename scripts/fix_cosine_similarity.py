@@ -11,6 +11,7 @@ Usage:
 3. Apply the fix to the identified code
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -29,15 +30,16 @@ def find_cosine_calculations(root_dir):
     
     results = []
     
-    for root, dirs, files in Path(root_dir).rwalk():
+    for root, dirs, files in os.walk(root_dir):
         # Skip common directories
-        dirs[:] = [d for d in dirs if d.name not in ['.git', '__pycache__', 'node_modules', '.venv', 'venv']]
+        dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', 'node_modules', '.venv', 'venv']]
         
         for file in files:
-            if file.suffix == '.py':
-                filepath = root / file
+            if file.endswith('.py'):
+                filepath = os.path.join(root, file)
                 try:
-                    content = filepath.read_text(encoding='utf-8')
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        content = f.read()
                     lines = content.split('\n')
                     
                     for pattern, description in patterns:
@@ -46,8 +48,11 @@ def find_cosine_calculations(root_dir):
                             line_num = content[:match.start()].count('\n') + 1
                             line_content = lines[line_num - 1] if line_num <= len(lines) else ''
                             
+                            # Get relative path
+                            rel_path = os.path.relpath(filepath, root_dir)
+                            
                             results.append({
-                                'file': str(filepath.relative_to(root_dir)),
+                                'file': rel_path,
                                 'line': line_num,
                                 'pattern': description,
                                 'content': line_content.strip(),
