@@ -8188,10 +8188,14 @@ async def save_content_item(
             content_update = item.get("description") or item.get("content", "")
             if content_update and content_update.strip():
                 existing_content.content = content_update
+                # Update content processed timestamp when content is updated
+                existing_content.content_processed_at = datetime.now().replace(tzinfo=None)
             # Update image if provided (support both field names)
             image_url = item.get("image") or item.get("image_url")
             if image_url:
                 existing_content.image_url = image_url
+                # Update image processed timestamp when image is updated
+                existing_content.image_processed_at = datetime.now().replace(tzinfo=None)
             existing_content.status = "draft"
             existing_content.is_draft = True
             existing_content.can_edit = True
@@ -8203,6 +8207,9 @@ async def save_content_item(
                 existing_content.day = day
             if item.get("platform"):
                 existing_content.platform = platform
+            # Update use_without_image if provided
+            if "use_without_image" in item:
+                existing_content.use_without_image = bool(item.get("use_without_image"))
             logger.info(f"✅ Updated existing content (ID: {existing_content.id}): week={week}, day={day}, platform={platform}, image={bool(image_url)}")
         else:
             # Validate required fields
@@ -8225,6 +8232,7 @@ async def save_content_item(
             else:
                 logger.info(f"⚠️ No image_url provided in save request for new content")
             try:
+                now = datetime.now().replace(tzinfo=None)
                 new_content = Content(
                     user_id=current_user.id,
                     campaign_id=campaign_id,
@@ -8233,7 +8241,7 @@ async def save_content_item(
                     content=content_text,
                     title=title_text,
                     status="draft",
-                    date_upload=datetime.now().replace(tzinfo=None),  # MySQL doesn't support timezone-aware datetimes
+                    date_upload=now,  # MySQL doesn't support timezone-aware datetimes
                     platform=platform,
                     file_name=f"{campaign_id}_{week}_{day}_{platform}.txt",
                     file_type="text",
@@ -8244,7 +8252,10 @@ async def save_content_item(
                     can_edit=True,
                     knowledge_graph_location=item.get("knowledge_graph_location"),
                     parent_idea=item.get("parent_idea"),
-                    landing_page_url=item.get("landing_page_url")
+                    landing_page_url=item.get("landing_page_url"),
+                    content_processed_at=now if content_text and content_text.strip() else None,  # Set timestamp if content provided
+                    image_processed_at=now if image_url else None,  # Set timestamp if image provided
+                    use_without_image=bool(item.get("use_without_image", False))
                 )
                 db.add(new_content)
                 logger.info(f"✅ Created new content: week={week}, day={day}, platform={platform}, has_image={bool(image_url)}")
@@ -8307,6 +8318,11 @@ def get_campaign_content_items(
                 "image_url": image_url,  # Also include image_url for compatibility
                 "status": item.status or "draft",
                 "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
+                "contentProcessedAt": item.content_processed_at.isoformat() if hasattr(item, 'content_processed_at') and item.content_processed_at else None,
+                "imageProcessedAt": item.image_processed_at.isoformat() if hasattr(item, 'image_processed_at') and item.image_processed_at else None,
+                "contentPublishedAt": item.content_published_at.isoformat() if hasattr(item, 'content_published_at') and item.content_published_at else None,
+                "imagePublishedAt": item.image_published_at.isoformat() if hasattr(item, 'image_published_at') and item.image_published_at else None,
+                "use_without_image": bool(hasattr(item, 'use_without_image') and item.use_without_image) if hasattr(item, 'use_without_image') else False,
             })
             logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}, db_id={item.id}")
         
