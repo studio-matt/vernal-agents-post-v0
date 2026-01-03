@@ -35,15 +35,17 @@ class TestSimilarityMetrics(unittest.TestCase):
         self.loader = AssetLoader()
         
         # Create baseline profile (average writer)
+        # Using category names that match what similarity functions expect
         self.baseline_profile = {
             "analytic": 50.0,
             "clout": 50.0,
             "authentic": 50.0,
             "tone": 50.0,
             "wps": 15.0,  # Words per sentence
-            "bigwords": 10.0,  # Big words percentage
-            "dic": 80.0,  # Dictionary match rate
-            "function": 45.0,
+            "BigWords": 10.0,  # Big words percentage (capitalized for BH-LVT)
+            "Dic": 80.0,  # Dictionary match rate (capitalized for BH-LVT)
+            "Linguistic": 70.0,  # Overall linguistic content
+            "function": 45.0,  # Function words
             "pronoun": 15.0,
             "ppron": 10.0,
             "i": 5.0,
@@ -52,15 +54,10 @@ class TestSimilarityMetrics(unittest.TestCase):
             "shehe": 1.0,
             "they": 2.0,
             "ipron": 8.0,
-            "Period": 50.0,  # Punctuation (note: LIWC uses capitalized)
+            "Period": 50.0,  # Punctuation (capitalized)
             "Comma": 30.0,
-            "QMark": 2.0,
-            "Exclam": 1.0,
-            "Colon": 3.0,
-            "SemiC": 2.0,
-            "Parenth": 1.0,
-            "Dash": 2.0,
-            "OtherP": 1.0,
+            "AllPunc": 90.0,  # All punctuation
+            "OtherPunc": 10.0,  # Other punctuation
         }
         
         # Create outlier profile 1: Extremely formal, academic writer
@@ -70,8 +67,9 @@ class TestSimilarityMetrics(unittest.TestCase):
             "authentic": 30.0,  # Low authenticity
             "tone": 40.0,
             "wps": 25.0,  # Long sentences
-            "bigwords": 25.0,  # Many big words
-            "dic": 95.0,  # High dictionary match
+            "BigWords": 25.0,  # Many big words
+            "Dic": 95.0,  # High dictionary match
+            "Linguistic": 90.0,  # High linguistic content
             "function": 50.0,
             "pronoun": 5.0,  # Very few pronouns
             "ppron": 2.0,
@@ -83,13 +81,8 @@ class TestSimilarityMetrics(unittest.TestCase):
             "ipron": 1.0,
             "Period": 80.0,  # Heavy punctuation
             "Comma": 50.0,
-            "QMark": 0.5,
-            "Exclam": 0.1,
-            "Colon": 10.0,
-            "SemiC": 5.0,
-            "Parenth": 5.0,
-            "Dash": 3.0,
-            "OtherP": 2.0,
+            "AllPunc": 150.0,  # High punctuation
+            "OtherPunc": 20.0,
         }
         
         # Create outlier profile 2: Extremely casual, conversational writer
@@ -99,8 +92,9 @@ class TestSimilarityMetrics(unittest.TestCase):
             "authentic": 90.0,  # Very authentic
             "tone": 70.0,
             "wps": 8.0,  # Short sentences
-            "bigwords": 2.0,  # Few big words
-            "dic": 60.0,  # Lower dictionary match
+            "BigWords": 2.0,  # Few big words
+            "Dic": 60.0,  # Lower dictionary match
+            "Linguistic": 50.0,  # Lower linguistic content
             "function": 40.0,
             "pronoun": 30.0,  # Many pronouns
             "ppron": 25.0,
@@ -112,13 +106,8 @@ class TestSimilarityMetrics(unittest.TestCase):
             "ipron": 20.0,
             "Period": 20.0,  # Light punctuation
             "Comma": 15.0,
-            "QMark": 5.0,
-            "Exclam": 10.0,  # Many exclamations
-            "Colon": 0.5,
-            "SemiC": 0.5,
-            "Parenth": 1.0,
-            "Dash": 1.0,
-            "OtherP": 0.5,
+            "AllPunc": 40.0,  # Lower punctuation
+            "OtherPunc": 5.0,
         }
         
         # Create outlier profile 3: Minimal punctuation, sparse writing
@@ -128,8 +117,9 @@ class TestSimilarityMetrics(unittest.TestCase):
             "authentic": 60.0,
             "tone": 50.0,
             "wps": 10.0,
-            "bigwords": 5.0,
-            "dic": 70.0,
+            "BigWords": 5.0,
+            "Dic": 70.0,
+            "Linguistic": 60.0,
             "function": 35.0,
             "pronoun": 20.0,
             "ppron": 15.0,
@@ -141,13 +131,8 @@ class TestSimilarityMetrics(unittest.TestCase):
             "ipron": 10.0,
             "Period": 10.0,  # Very minimal punctuation
             "Comma": 5.0,
-            "QMark": 0.1,
-            "Exclam": 0.1,
-            "Colon": 0.1,
-            "SemiC": 0.1,
-            "Parenth": 0.1,
-            "Dash": 0.1,
-            "OtherP": 0.1,
+            "AllPunc": 15.0,  # Very minimal punctuation
+            "OtherPunc": 1.0,
         }
 
     def test_identical_profiles(self):
