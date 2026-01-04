@@ -477,14 +477,17 @@ def scrape_campaign_data(
     if urls:
         all_urls.extend(urls)
     
-    # Search for keywords if provided
-    if keywords:
+    # Search for keywords OR query if provided
+    # CRITICAL: Query should be used even if keywords are empty
+    if keywords or query:
         logger.info(f"🔍 Searching DuckDuckGo for keywords: {keywords} (query: '{query}')")
-        search_urls = search_duckduckgo(keywords, query=query, max_results=max_pages)
+        # Use query as primary search if no keywords, otherwise combine
+        search_keywords = keywords if keywords else []
+        search_urls = search_duckduckgo(search_keywords, query=query, max_results=max_pages)
         logger.info(f"🔍 DuckDuckGo returned {len(search_urls)} URLs: {search_urls[:5]}")  # Show first 5
         all_urls.extend(search_urls)
     else:
-        logger.info(f"⚠️ No keywords provided for DuckDuckGo search")
+        logger.info(f"⚠️ No keywords or query provided for DuckDuckGo search")
     
     # Deduplicate URLs
     unique_urls = list(dict.fromkeys(all_urls))[:max_pages]
