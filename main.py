@@ -983,6 +983,10 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
             campaign.content_queue_items_json = campaign_data.content_queue_items_json
             logger.info(f"Saved content_queue_items_json for campaign {campaign_id}")
         
+        if campaign_data.research_selections_json is not None:
+            campaign.research_selections_json = campaign_data.research_selections_json
+            logger.info(f"Saved research_selections_json for campaign {campaign_id}")
+        
         campaign.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(campaign)
