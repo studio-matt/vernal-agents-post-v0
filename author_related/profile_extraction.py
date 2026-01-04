@@ -336,9 +336,14 @@ class ProfileExtractor:
             )
             for sample in samples
         ]
-        # Determine domain from samples (use mode as domain indicator)
+        # IMPORTANT: Do NOT use domain-specific baselines for profile extraction
+        # Profile baseline should always use global baselines to avoid double-applying platform deltas
+        # Domain/platform adjustments should only be applied during content generation, not profile extraction
+        # This ensures that if a user uploads Twitter samples, the baseline reflects their actual style
+        # relative to global norms, not Twitter norms. Then during generation, we apply Twitter deltas.
+        liwc_scores = self._aggregate_liwc(normalized_samples, domain=None)  # Always use global baseline
+        # Store domain for reference but don't use it for z-score calculation
         domain = normalized_samples[0].mode if normalized_samples else None
-        liwc_scores = self._aggregate_liwc(normalized_samples, domain)
         lexicon = self._lexicon_from_samples(normalized_samples)
         sources = [SourceSpec(path=s.path, mode=s.mode, audience=s.audience) for s in normalized_samples]
         liwc_profile = LIWCProfile(categories=liwc_scores, domain_mode=domain or next(iter(liwc_scores), "reform"))
