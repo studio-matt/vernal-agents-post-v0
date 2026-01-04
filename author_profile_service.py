@@ -84,6 +84,8 @@ class AuthorProfileService:
             mode = metadata.get("mode", "reform")
             audience = metadata.get("audience", "general")
             path = metadata.get("path", f"sample_{idx + 1}")
+            # Extract domain/platform from metadata (linkedin, twitter, facebook, instagram, blog, general)
+            domain = metadata.get("domain") or metadata.get("platform", "general")
 
             # Normalize text
             logger.debug(f"Normalizing text for sample {idx + 1}")
@@ -104,10 +106,14 @@ class AuthorProfileService:
                 # Use minimal defaults if analysis fails
                 liwc_counts = {"WC": float(len(normalized_text.split()))}
 
+            # Use domain as mode if provided, otherwise use mode from metadata
+            # Domain-aware mode helps with platform-specific LIWC analysis
+            final_mode = domain if domain and domain != "general" else mode
+            
             sample = Sample(
                 text=normalized_text,
                 path=path,
-                mode=mode,
+                mode=final_mode,  # Use domain-aware mode for platform-specific analysis
                 audience=audience,
                 liwc_counts=liwc_counts,
             )
