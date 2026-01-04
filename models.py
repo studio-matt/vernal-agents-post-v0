@@ -2,7 +2,8 @@
 # from sqlalchemy.ext.declarative import declarative_base
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Text
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -32,6 +33,7 @@ class ContentStatus(str, enum.Enum):  # ✅ Store as string
 
 
 from sqlalchemy import Column, Integer, String, Date, Text, ForeignKey, DateTime
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -193,7 +195,8 @@ class AuthorPersonality(Base):
     configuration_preset = Column(String(100), nullable=True)  # Selected configuration preset name
     
     # Writing samples storage (NEW - for displaying samples when editing)
-    writing_samples_json = Column(Text, nullable=True)  # Original writing samples used for extraction (JSON array)
+    # Use LONGTEXT to support large writing samples (up to 4GB)
+    writing_samples_json = Column(LONGTEXT, nullable=True)  # Original writing samples used for extraction (JSON array)
     
     def __repr__(self):
         return f"<AuthorPersonality(id={self.id}, name={self.name})>"
