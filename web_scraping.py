@@ -84,45 +84,34 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
             def expand_query(q): return q
             logger.warning("keyword_expansions module not available, using keywords as-is")
         
-        # Combine keywords and query into search string with better relevance
-        # CRITICAL: Keywords should take priority over query for search relevance
-        # Query is context, keywords are the actual search terms
+        # Use keywords/URLs as search targets, query as frame of reference/context
+        # CRITICAL: Query provides REASON/context, not search terms
+        # Keywords/URLs are the actual targets to find
         search_terms = []
         
-        # Process keywords FIRST (they're the primary search terms)
+        # Process keywords (these are the actual search targets)
         if keywords:
             expanded_keywords = []
             for keyword in keywords[:5]:  # Limit to 5 keywords
                 expanded = expand_keyword(keyword)
                 expanded_keywords.append(expanded)
             search_terms.extend(expanded_keywords)
-            logger.info(f"🔍 Keywords processed: {expanded_keywords}")
+            logger.info(f"🔍 Keywords processed (search targets): {expanded_keywords}")
         
-        # Process query SECOND (adds context but shouldn't dominate)
-        # CRITICAL: When keywords exist, use query sparingly or not at all to avoid dilution
-        if query:
-            # If we have keywords, only use key terms from query (not the full query)
-            # This prevents long queries from overwhelming keyword relevance
-            if keywords:
-                # Extract key terms from query (nouns, important words)
-                # Simple approach: take first 3-5 words that aren't common stopwords
-                query_words = query.split()
-                stopwords = {'create', 'a', 'stream', 'of', 'knowledge', 'around', 'the', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'from'}
-                key_terms = [w for w in query_words if w.lower() not in stopwords][:3]  # Take first 3 key terms
-                if key_terms:
-                    expanded_query = expand_query(" ".join(key_terms))
-                    search_terms.append(expanded_query)
-                    logger.info(f"🔍 Query key terms extracted: {key_terms} → {expanded_query}")
-            else:
-                # No keywords, use full query but limit length
-                expanded_query = expand_query(query)
-                query_words = expanded_query.split()[:10]  # Limit to 10 words
-                if query_words:
-                    search_terms.append(" ".join(query_words))
-                    logger.info(f"🔍 Full query used (no keywords): {expanded_query[:50]}...")
+        # Query is NOT included in search terms - it's context/frame of reference
+        # Only use query for search if NO keywords provided (fallback)
+        if not keywords and query:
+            # Fallback: use query as search if no keywords
+            expanded_query = expand_query(query)
+            query_words = expanded_query.split()[:10]  # Limit to 10 words
+            if query_words:
+                search_terms.append(" ".join(query_words))
+                logger.info(f"🔍 Using query as search (no keywords provided): {expanded_query[:50]}...")
+        elif query:
+            logger.info(f"📋 Query used as context/frame of reference (not in search): '{query[:100]}...'")
         
-        # Combine into search query - keywords first for better relevance
-        search_query = " ".join(search_terms[:15])  # Allow more terms since we're prioritizing
+        # Combine into search query - only keywords (or query if no keywords)
+        search_query = " ".join(search_terms[:10])  # Limit to 10 terms
         
         if not search_query.strip():
             logger.warning("Empty search query, returning empty results")
@@ -480,6 +469,26 @@ def scrape_campaign_data(
     
     Combines DuckDuckGo search (for keywords) and Playwright scraping
     
+    Query is used as frame of reference/context, not as search terms.
+    Keywords/URLs are the actual targets, query provides the REASON/context.
+    
+    Args:
+        keywords: List of keywords to search for (search targets)
+        urls: Direct URLs to scrape (optional)
+        query: Context/frame of reference - provides REASON for scraping (not used in search)
+        depth: Web scraping depth (1 = only initial URLs)
+        max_pages: Maximum pages to scrape
+        include_images: Whether to extract images
+        include_links: Whether to extract links
+        
+    Returns:
+        List of scraped data dictionaries, each with query stored in metadata
+    """
+    """
+    Main function to scrape campaign data
+    
+    Combines DuckDuckGo search (for keywords) and Playwright scraping
+    
     Args:
         keywords: List of keywords to search for
         urls: Direct URLs to scrape (optional)
@@ -537,7 +546,19 @@ def scrape_campaign_data(
         scraped_count=0
     )
     
+    # Add query as context/frame of reference to all results
+    # This provides the REASON for scraping and can be used for filtering/ranking
+    if query:
+        for result in results:
+            if "metadata" not in result:
+                result["metadata"] = {}
+            result["metadata"]["query"] = query
+            result["metadata"]["query_context"] = "Frame of reference - reason for scraping"
+        logger.info(f"📋 Added query context to {len(results)} results: '{query[:50]}...'")
+    
     logger.info(f"✅ Scraping complete: {len(results)} pages scraped")
+    if query:
+        logger.info(f"📋 Query context stored in results metadata for filtering/ranking")
     
     return results
 
