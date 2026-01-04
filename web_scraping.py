@@ -96,16 +96,30 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
                 expanded = expand_keyword(keyword)
                 expanded_keywords.append(expanded)
             search_terms.extend(expanded_keywords)
+            logger.info(f"🔍 Keywords processed: {expanded_keywords}")
         
         # Process query SECOND (adds context but shouldn't dominate)
-        # Only add query if it's not too long (to avoid diluting keyword relevance)
+        # CRITICAL: When keywords exist, use query sparingly or not at all to avoid dilution
         if query:
-            expanded_query = expand_query(query)
-            # Limit query length to prevent it from overwhelming keywords
-            # If query is very long, use first part only
-            query_words = expanded_query.split()[:10]  # Limit to 10 words
-            if query_words:
-                search_terms.append(" ".join(query_words))
+            # If we have keywords, only use key terms from query (not the full query)
+            # This prevents long queries from overwhelming keyword relevance
+            if keywords:
+                # Extract key terms from query (nouns, important words)
+                # Simple approach: take first 3-5 words that aren't common stopwords
+                query_words = query.split()
+                stopwords = {'create', 'a', 'stream', 'of', 'knowledge', 'around', 'the', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'from'}
+                key_terms = [w for w in query_words if w.lower() not in stopwords][:3]  # Take first 3 key terms
+                if key_terms:
+                    expanded_query = expand_query(" ".join(key_terms))
+                    search_terms.append(expanded_query)
+                    logger.info(f"🔍 Query key terms extracted: {key_terms} → {expanded_query}")
+            else:
+                # No keywords, use full query but limit length
+                expanded_query = expand_query(query)
+                query_words = expanded_query.split()[:10]  # Limit to 10 words
+                if query_words:
+                    search_terms.append(" ".join(query_words))
+                    logger.info(f"🔍 Full query used (no keywords): {expanded_query[:50]}...")
         
         # Combine into search query - keywords first for better relevance
         search_query = " ".join(search_terms[:15])  # Allow more terms since we're prioritizing
