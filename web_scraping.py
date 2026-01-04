@@ -85,14 +85,11 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
             logger.warning("keyword_expansions module not available, using keywords as-is")
         
         # Combine keywords and query into search string with better relevance
+        # CRITICAL: Keywords should take priority over query for search relevance
+        # Query is context, keywords are the actual search terms
         search_terms = []
         
-        # Process query first
-        if query:
-            expanded_query = expand_query(query)
-            search_terms.append(expanded_query)
-        
-        # Process keywords
+        # Process keywords FIRST (they're the primary search terms)
         if keywords:
             expanded_keywords = []
             for keyword in keywords[:5]:  # Limit to 5 keywords
@@ -100,8 +97,18 @@ def search_duckduckgo(keywords: List[str], query: str = "", max_results: int = 1
                 expanded_keywords.append(expanded)
             search_terms.extend(expanded_keywords)
         
-        # Combine into search query
-        search_query = " ".join(search_terms[:10])  # Limit total terms
+        # Process query SECOND (adds context but shouldn't dominate)
+        # Only add query if it's not too long (to avoid diluting keyword relevance)
+        if query:
+            expanded_query = expand_query(query)
+            # Limit query length to prevent it from overwhelming keywords
+            # If query is very long, use first part only
+            query_words = expanded_query.split()[:10]  # Limit to 10 words
+            if query_words:
+                search_terms.append(" ".join(query_words))
+        
+        # Combine into search query - keywords first for better relevance
+        search_query = " ".join(search_terms[:15])  # Allow more terms since we're prioritizing
         
         if not search_query.strip():
             logger.warning("Empty search query, returning empty results")
