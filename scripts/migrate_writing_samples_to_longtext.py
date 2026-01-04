@@ -14,12 +14,12 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import get_db
+from database import SessionLocal
 from sqlalchemy import text
 
 def migrate_writing_samples_column():
     """Change writing_samples_json from TEXT to LONGTEXT."""
-    db = next(get_db())
+    db = SessionLocal()
     
     try:
         print("🔄 Migrating writing_samples_json column from TEXT to LONGTEXT...")
