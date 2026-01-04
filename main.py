@@ -8544,11 +8544,11 @@ def get_campaign_content_items(
                 "image_url": image_url,  # Also include image_url for compatibility
                 "status": item.status or "draft",
                 "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
-                "contentProcessedAt": item.content_processed_at.isoformat() if hasattr(item, 'content_processed_at') and item.content_processed_at else None,
-                "imageProcessedAt": item.image_processed_at.isoformat() if hasattr(item, 'image_processed_at') and item.image_processed_at else None,
-                "contentPublishedAt": item.content_published_at.isoformat() if hasattr(item, 'content_published_at') and item.content_published_at else None,
-                "imagePublishedAt": item.image_published_at.isoformat() if hasattr(item, 'image_published_at') and item.image_published_at else None,
-                "use_without_image": bool(hasattr(item, 'use_without_image') and item.use_without_image) if hasattr(item, 'use_without_image') else False,
+                "contentProcessedAt": item.content_processed_at.isoformat() if hasattr(item, 'content_processed_at') and item.content_processed_at is not None else None,
+                "imageProcessedAt": item.image_processed_at.isoformat() if hasattr(item, 'image_processed_at') and item.image_processed_at is not None else None,
+                "contentPublishedAt": item.content_published_at.isoformat() if hasattr(item, 'content_published_at') and item.content_published_at is not None else None,
+                "imagePublishedAt": item.image_published_at.isoformat() if hasattr(item, 'image_published_at') and item.image_published_at is not None else None,
+                "use_without_image": bool(getattr(item, 'use_without_image', False)),
             })
             logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}, db_id={item.id}")
         
