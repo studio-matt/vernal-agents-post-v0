@@ -240,6 +240,7 @@ class Campaign(Base):
     scheduling_settings_json = Column(Text, nullable=True)  # JSON string for scheduling: {weeks, posts_per_day, posts_per_week, start_date, day_frequency, post_frequency_type, post_frequency_value}
     campaign_plan_json = Column(Text, nullable=True)  # JSON string for campaign plan: {weeks: [{week_num, parent_ideas: [{idea, children: [...]}], knowledge_graph_locations: [...]}]}
     content_queue_items_json = Column(Text, nullable=True)  # JSON string for checked items from content queue
+    research_selections_json = Column(Text, nullable=True)  # JSON string for Research Assistant selections (raw ingredients for content generation): [{id, type, name, source, ...}]
     custom_keywords_json = Column(Text, nullable=True)  # JSON string for custom keywords/ideas: ["keyword1", "keyword2"]
     personality_settings_json = Column(Text, nullable=True)  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
     # image_settings_json = Column(Text, nullable=True)  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}

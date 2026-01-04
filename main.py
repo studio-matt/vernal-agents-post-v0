@@ -327,6 +327,7 @@ class CampaignUpdate(BaseModel):
     image_settings_json: Optional[str] = None  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
     scheduling_settings_json: Optional[str] = None  # JSON string for scheduling settings: {activeDays, activePlatforms, post_frequency_type, post_frequency_value, start_date, day_frequency, defaultPosts}
     content_queue_items_json: Optional[str] = None  # JSON string for content queue items: [{id, type, name, source, ...}]
+    research_selections_json: Optional[str] = None  # JSON string for Research Assistant selections (raw ingredients): [{id, type, name, source, ...}]
 
 # Pydantic models for author personalities endpoints
 class AuthorPersonalityCreate(BaseModel):
