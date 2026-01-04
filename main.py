@@ -95,11 +95,24 @@ async def global_exception_handler(request: Request, exc: Exception):
         logger.error(f"❌ Failed to access request body: {body_err}")
     logger.error(f"❌ Full traceback:\n{error_trace}")
     
-    # If it's already an HTTPException, re-raise it
-    if isinstance(exc, HTTPException):
-        raise exc
+    # Get origin for CORS headers
+    origin = request.headers.get("Origin", "")
+    cors_headers = {}
+    if origin in ALLOWED_ORIGINS:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
     
-    # Otherwise, return 500 with error details
+    # If it's already an HTTPException, return with CORS headers
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers={**cors_headers, **(exc.headers or {})}
+        )
+    
+    # Otherwise, return 500 with error details and CORS headers
     return JSONResponse(
         status_code=500,
         content={
@@ -107,7 +120,8 @@ async def global_exception_handler(request: Request, exc: Exception):
             "message": f"Internal server error: {str(exc)}",
             "error_type": type(exc).__name__,
             "detail": str(exc)
-        }
+        },
+        headers=cors_headers
     )
 
 # Request logging middleware
@@ -5836,8 +5850,8 @@ async def extract_author_profile(
             similarity_metrics["bh_lvt_weighted_cosine"] = None
             similarity_metrics["punctuation_cosine"] = None
         
-        # Return summary (not full profile to avoid large response)
-        return {
+        # Return summary (not full profile to avoid large response) with CORS headers
+        response_data = {
             "status": "success",
             "message": {
                 "personality_id": personality_id,
@@ -5854,23 +5868,31 @@ async def extract_author_profile(
                 "similarity_metrics": similarity_metrics  # BH-LVT and punctuation cosine
             }
         }
+        return JSONResponse(content=response_data, headers=cors_headers)
         
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        # Re-raise with CORS headers
+        return JSONResponse(
+            status_code=e.status_code,
+            content={"detail": e.detail},
+            headers={**cors_headers, **(e.headers or {})}
+        )
     except ValueError as e:
         logger.error(f"Validation error extracting profile: {str(e)}")
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            content={"detail": str(e)},
+            headers=cors_headers
         )
     except Exception as e:
         import traceback
         logger.error(f"Error extracting author profile: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         db.rollback()
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to extract author profile: {str(e)}"
+            content={"detail": f"Failed to extract author profile: {str(e)}"},
+            headers=cors_headers
         )
 
 @app.post("/author_personalities/{personality_id}/re-extract-profile")
