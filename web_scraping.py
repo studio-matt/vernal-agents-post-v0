@@ -507,14 +507,21 @@ def scrape_campaign_data(
     if urls:
         all_urls.extend(urls)
     
-    # Search for keywords OR query if provided
-    # CRITICAL: Query should be used even if keywords are empty
-    if keywords or query:
-        logger.info(f"🔍 Searching DuckDuckGo for keywords: {keywords} (query: '{query}')")
-        # Use query as primary search if no keywords, otherwise combine
-        search_keywords = keywords if keywords else []
-        search_urls = search_duckduckgo(search_keywords, query=query, max_results=max_pages)
+    # Search for keywords (query is context, not search term)
+    # Query provides frame of reference/REASON, keywords are the actual targets
+    if keywords:
+        logger.info(f"🔍 Searching DuckDuckGo for keywords: {keywords}")
+        if query:
+            logger.info(f"📋 Query (context/frame of reference): '{query}'")
+        # Search using keywords only - query is context, not search term
+        search_urls = search_duckduckgo(keywords, query=query, max_results=max_pages)
         logger.info(f"🔍 DuckDuckGo returned {len(search_urls)} URLs: {search_urls[:5]}")  # Show first 5
+        all_urls.extend(search_urls)
+    elif query:
+        # Fallback: if no keywords, use query as search (but log it's a fallback)
+        logger.info(f"⚠️ No keywords provided, using query as search (fallback): '{query}'")
+        search_urls = search_duckduckgo([], query=query, max_results=max_pages)
+        logger.info(f"🔍 DuckDuckGo returned {len(search_urls)} URLs: {search_urls[:5]}")
         all_urls.extend(search_urls)
     else:
         logger.info(f"⚠️ No keywords or query provided for DuckDuckGo search")
