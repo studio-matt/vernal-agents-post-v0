@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -234,12 +235,70 @@ class AuthorProfileService:
 
         # Save writing samples for display when editing
         if writing_samples:
-            personality.writing_samples_json = json.dumps(writing_samples, ensure_ascii=False)
+            # Sanitize writing samples to remove invalid UTF-8 characters that MySQL can't store
+            sanitized_samples = [self._sanitize_text_for_db(sample) for sample in writing_samples]
+            personality.writing_samples_json = json.dumps(sanitized_samples, ensure_ascii=False)
             logger.info(f"Saved {len(writing_samples)} writing samples for: {personality.id}")
 
         db.commit()
         logger.info(f"Profile data saved to database for: {personality.id}")
 
+    def _sanitize_text_for_db(self, text: str) -> str:
+        """
+        Sanitize text to remove invalid UTF-8 characters that MySQL can't store.
+        
+        Removes:
+        - Invalid UTF-8 byte sequences
+        - Control characters (except newlines, tabs, carriage returns)
+        - Binary data artifacts from Word documents
+        
+        Args:
+            text: Raw text that may contain invalid characters
+            
+        Returns:
+            Cleaned text safe for MySQL storage
+        """
+        if not text:
+            return ""
+        
+        try:
+            # First, try to decode as UTF-8 and replace invalid sequences
+            # This handles most cases of invalid UTF-8
+            text = text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+            
+            # Remove null bytes and other problematic control characters
+            # Keep: \n (newline), \r (carriage return), \t (tab)
+            # Remove: \x00 (null), \x01-\x08, \x0B-\x0C, \x0E-\x1F (other control chars)
+            text = re.sub(r'[\x00\x01-\x08\x0B\x0C\x0E-\x1F]', '', text)
+            
+            # Remove common Word document artifacts (binary data that sometimes leaks through)
+            # These are often from embedded objects, images, or formatting
+            text = re.sub(r'[\xF0-\xF7][\x80-\xBF]{3}', '', text)  # 4-byte UTF-8 sequences that are invalid
+            text = re.sub(r'[\xE0-\xEF][\x80-\xBF]{2}', lambda m: m.group(0) if len(m.group(0).encode('utf-8', errors='replace')) == 3 else '', text)  # 3-byte sequences
+            text = re.sub(r'[\xC0-\xDF][\x80-\xBF]', lambda m: m.group(0) if len(m.group(0).encode('utf-8', errors='replace')) == 2 else '', text)  # 2-byte sequences
+            
+            # Remove any remaining invalid UTF-8 sequences
+            # This is a catch-all for any remaining problematic bytes
+            try:
+                text.encode('utf-8').decode('utf-8')
+            except UnicodeDecodeError:
+                # If still invalid, do a more aggressive cleanup
+                text = ''.join(char for char in text if ord(char) < 0x110000)  # Valid Unicode range
+                text = text.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+            
+            # Clean up excessive whitespace that might result from removals
+            text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Max 2 consecutive newlines
+            text = text.strip()
+            
+            return text
+        except Exception as e:
+            logger.warning(f"Error sanitizing text, using fallback: {e}")
+            # Fallback: very aggressive cleanup
+            try:
+                return text.encode('ascii', errors='ignore').decode('ascii')
+            except:
+                return ""  # Last resort: return empty string
+    
     def _placeholder_liwc_analysis(self, text: str) -> dict[str, float]:
         """
         Lightweight LIWC analysis using pattern matching.
