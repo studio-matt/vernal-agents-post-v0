@@ -5738,13 +5738,23 @@ def delete_author_personality(personality_id: str, current_user = Depends(get_cu
 
 # Author Profile endpoints (Phase 2)
 @app.post("/author_personalities/{personality_id}/extract-profile")
-def extract_author_profile(
+async def extract_author_profile(
     personality_id: str,
     request_data: ExtractProfileRequest,
+    request: Request,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Extract author profile from writing samples - REQUIRES AUTHENTICATION AND OWNERSHIP"""
+    # Get origin for CORS header
+    origin = request.headers.get("Origin", "")
+    cors_headers = {}
+    if origin in ALLOWED_ORIGINS:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    
     try:
         from models import AuthorPersonality
         from author_profile_service import AuthorProfileService
