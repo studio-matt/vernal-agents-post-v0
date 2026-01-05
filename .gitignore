@@ -28,3 +28,12 @@ models/
 checkpoints/
 artifacts/
 downloads/
+
+# --- local/server artifacts (do not commit) ---
+.env*
+*.backup
+*.backup.*
+main.py.backup*
+tools.py.backup*
+=*
+uploads/
