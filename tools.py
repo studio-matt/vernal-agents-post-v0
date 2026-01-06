@@ -20,6 +20,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from ftplib import FTP
 from urllib.parse import urlparse
+import posixpath
+from guardrails.sftp_rules import safe_filename, validate_remote_path
 import logging
 import paramiko
 
@@ -567,6 +569,7 @@ def save_image_locally(image_data: bytes, filename: str) -> str:
         os.makedirs(upload_dir, exist_ok=True)
         
         # Save file locally
+        filename = safe_filename(filename)
         file_path = os.path.join(upload_dir, filename)
         with open(file_path, 'wb') as f:
             f.write(image_data)
@@ -704,22 +707,35 @@ SFTP_PORT = int(os.getenv("SFTP_PORT", "22"))  # Default to 22 if not specified
 def delete_image_from_ftp(image_url: str):
     """Delete an image from the SFTP server given its URL."""
     try:
-        # Parse the URL to extract the filename
+        # Parse the URL to extract the filename (URL paths are POSIX)
         parsed_url = urlparse(image_url)
-        filename = os.path.basename(parsed_url.path)
-        remote_path = f"/home/{SFTP_USER}/public_html/nishant/{filename}"
+        raw_name = posixpath.basename(parsed_url.path)
+        filename = safe_filename(raw_name)
+
+        if not filename:
+            raise Exception("Invalid filename")
+
+        remote_dir = os.getenv("SFTP_REMOTE_DIR") or f"/home/{SFTP_USER}/public_html/nishant"
+        remote_dir = validate_remote_path(remote_dir)
+        remote_path = remote_dir.rstrip("/") + "/" + filename
 
         # Connect to SFTP and delete the file
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.connect(hostname=SFTP_HOST, port=SFTP_PORT, username=SFTP_USER, password=SFTP_PASS)
+        ssh_client.connect(
+            hostname=SFTP_HOST,
+            port=SFTP_PORT,
+            username=SFTP_USER,
+            password=SFTP_PASS,
+        )
         sftp = ssh_client.open_sftp()
 
-        # Delete the file
         sftp.remove(remote_path)
+
         sftp.close()
         ssh_client.close()
-        logger.info(f"Deleted image {filename} from SFTP at {remote_path}")
+
+        logger.info(f"Deleted image {filename} from SFTP")
 
     except paramiko.AuthenticationException:
         logger.error("SFTP authentication failed. Check credentials.")
@@ -728,8 +744,9 @@ def delete_image_from_ftp(image_url: str):
         logger.error(f"SFTP error: {str(ssh_e)}")
         raise Exception(f"SFTP error: {str(ssh_e)}")
     except FileNotFoundError:
-        logger.error(f"Image not found on SFTP server: {remote_path}")
+        logger.error(f"Image not found on SFTP server: {filename}")
         raise Exception(f"Image not found on SFTP server: {filename}")
     except Exception as e:
         logger.error(f"Failed to delete image from SFTP: {str(e)}")
         raise Exception(f"Failed to delete image from SFTP: {str(e)}")
+

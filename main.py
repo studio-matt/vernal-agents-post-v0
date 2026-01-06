@@ -20,6 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
+from guardrails.redaction import redact_headers, redact_text, try_parse_json, redact_jsonish
+from guardrails.sanitize import sanitize_user_text, detect_prompt_injection
 import re
 import sys
 from pathlib import Path
@@ -131,7 +133,7 @@ async def log_requests(request: Request, call_next):
     import time
     start_time = time.time()
     logger.info(f"📥 INCOMING REQUEST: {request.method} {request.url}")
-    logger.info(f"📥 Headers: {dict(request.headers)}")
+    logger.info(f"📥 Headers: {redact_headers(dict(request.headers))}")
     
     # Read and log body, then restore it
     try:
@@ -139,7 +141,13 @@ async def log_requests(request: Request, call_next):
         if body_bytes:
             try:
                 body_str = body_bytes.decode('utf-8')
-                logger.info(f"📥 Body (first 500 chars): {body_str[:500]}")
+                parsed = try_parse_json(body_str)
+                if parsed is not None:
+                    safe_obj = redact_jsonish(parsed)
+                    safe_str = redact_text(str(safe_obj))
+                else:
+                    safe_str = redact_text(body_str)
+                logger.info(f"📥 Body (first 500 chars): {safe_str[:500]}")
             except Exception as decode_err:
                 logger.error(f"❌ Failed to decode body: {decode_err}")
                 logger.info(f"📥 Body (binary, {len(body_bytes)} bytes)")
@@ -5232,7 +5240,7 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         api_key = api_key.strip()
         
         # Log first few chars for debugging (without exposing full key)
-        logger.info(f"✅ Using OpenAI API key: {api_key[:10]}... (length: {len(api_key)})")
+        logger.info(f"✅ OpenAI API key present (length: {len(api_key)})")
         
         # Check key length (OpenAI keys are typically 200+ characters)
         if len(api_key) < 50:
@@ -5245,6 +5253,17 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         try:
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key, temperature=0.4, max_tokens=1000)
+
+            # Guardrails: sanitize prompt + basic prompt-injection heuristics
+            prompt = sanitize_user_text(prompt, max_len=12000)
+            is_injection, matched = detect_prompt_injection(prompt)
+            block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
+            if is_injection:
+                msg = f"Potential prompt injection detected: {matched}"
+                if block_inj:
+                    raise ValueError(msg)
+                logger.warning(msg)
+
             response = llm.invoke(prompt)
             recommendations_text = response.content if hasattr(response, 'content') else str(response)
             logger.info(f"✅ Successfully generated {agent_type} recommendations ({len(recommendations_text)} chars)")
@@ -6912,6 +6931,16 @@ Generate a parent idea that:
 
 Return only the parent idea, no additional text."""
                 
+                # Guardrails: sanitize parent_prompt + basic prompt-injection heuristics
+                parent_prompt = sanitize_user_text(parent_prompt, max_len=12000)
+                is_injection, matched = detect_prompt_injection(parent_prompt)
+                block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
+                if is_injection:
+                    msg = f"Potential prompt injection detected: {matched}"
+                    if block_inj:
+                        raise HTTPException(status_code=400, detail=msg)
+                    logger.warning(msg)
+
                 parent_response = llm.invoke(parent_prompt)
                 parent_idea = parent_response.content.strip()
                 
@@ -6925,6 +6954,16 @@ Generate 3-5 children concepts that support this parent idea. Each child should:
 
 Return as a numbered list."""
                 
+                # Guardrails: sanitize children_prompt + basic prompt-injection heuristics
+                children_prompt = sanitize_user_text(children_prompt, max_len=12000)
+                is_injection, matched = detect_prompt_injection(children_prompt)
+                block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
+                if is_injection:
+                    msg = f"Potential prompt injection detected: {matched}"
+                    if block_inj:
+                        raise HTTPException(status_code=400, detail=msg)
+                    logger.warning(msg)
+
                 children_response = llm.invoke(children_prompt)
                 children_text = children_response.content.strip()
                 children = [line.strip() for line in children_text.split("\n") if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith("-"))]
@@ -6940,6 +6979,16 @@ Existing Locations Used: {', '.join(week_plan['knowledge_graph_locations']) if w
 
 Select a knowledge graph location for this parent idea."""
                 
+                # Guardrails: sanitize kg_location_prompt_full + basic prompt-injection heuristics
+                kg_location_prompt_full = sanitize_user_text(kg_location_prompt_full, max_len=12000)
+                is_injection, matched = detect_prompt_injection(kg_location_prompt_full)
+                block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
+                if is_injection:
+                    msg = f"Potential prompt injection detected: {matched}"
+                    if block_inj:
+                        raise HTTPException(status_code=400, detail=msg)
+                    logger.warning(msg)
+
                 kg_response = llm.invoke(kg_location_prompt_full)
                 kg_location = kg_response.content.strip()
                 
