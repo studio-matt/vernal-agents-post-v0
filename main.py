@@ -3075,6 +3075,73 @@ def revoke_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: 
             detail=f"Failed to revoke admin access: {str(e)}"
         )
 
+# Code Health Scanner endpoints
+@app.get("/admin/code-health")
+def get_code_health(admin_user = Depends(get_admin_user)):
+    """Get latest code health scan results - ADMIN ONLY"""
+    try:
+        import json
+        from pathlib import Path
+        
+        reports_dir = Path("reports")
+        json_path = reports_dir / "code_health.json"
+        
+        if not json_path.exists():
+            return {
+                "status": "no_scan",
+                "message": "No scan results found. Run a scan first.",
+                "violations": [],
+                "violation_count": 0,
+            }
+        
+        with open(json_path, 'r', encoding='utf-8') as f:
+            scan_data = json.load(f)
+        
+        return {
+            "status": "success",
+            **scan_data
+        }
+    except Exception as e:
+        logger.error(f"Error fetching code health: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch code health: {str(e)}"
+        )
+
+@app.post("/admin/code-health/scan")
+def trigger_code_health_scan(admin_user = Depends(get_admin_user)):
+    """Trigger a new code health scan - ADMIN ONLY"""
+    try:
+        from code_health.scanner import scan_codebase, generate_reports
+        import os
+        
+        # Get root directory (backend repo root)
+        root_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Run scan
+        logger.info(f"🔍 Starting code health scan in {root_dir}")
+        scan_results = scan_codebase(root_dir=root_dir)
+        
+        # Generate reports
+        report_paths = generate_reports(scan_results)
+        
+        logger.info(f"✅ Code health scan complete: {scan_results['violation_count']} violations found")
+        
+        return {
+            "status": "success",
+            "message": "Scan completed successfully",
+            "scan_results": scan_results,
+            "reports": report_paths,
+        }
+    except Exception as e:
+        logger.error(f"Error running code health scan: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to run code health scan: {str(e)}"
+        )
+
 @app.put("/admin/settings/{setting_key}")
 def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Update or create a system setting - ADMIN ONLY"""
