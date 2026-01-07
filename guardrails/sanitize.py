@@ -128,7 +128,9 @@ def guard_or_raise(text: str, max_len: int = 12000) -> Tuple[str, dict]:
     logger = logging.getLogger(__name__)
     
     # Always sanitize first
+    original_len = len(text) if text else 0
     sanitized = sanitize_user_text(text, max_len=max_len)
+    truncated = len(sanitized) < original_len
     
     # Run detection
     is_inj, matched = detect_prompt_injection(sanitized)
@@ -136,12 +138,16 @@ def guard_or_raise(text: str, max_len: int = 12000) -> Tuple[str, dict]:
     # Read blocking flag
     block = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
     
-    # Build audit dict
+    # Build audit dict (safe - no prompt content, only metadata)
     audit_dict = {
         "sanitized": True,
         "prompt_injection_detected": is_inj,
         "matched": matched,
         "blocked": False,
+        "truncated": truncated,
+        "original_len": original_len,
+        "sanitized_len": len(sanitized),
+        "max_len": max_len,
     }
     
     if is_inj:

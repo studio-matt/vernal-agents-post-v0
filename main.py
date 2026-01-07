@@ -128,6 +128,10 @@ async def global_exception_handler(request: Request, exc: Exception):
             "Access-Control-Allow-Credentials": "true",
         }
     
+    # Re-raise GuardrailsBlocked so the specific handler catches it (not a 500)
+    if isinstance(exc, GuardrailsBlocked):
+        raise exc
+    
     # If it's already an HTTPException, return with CORS headers
     if isinstance(exc, HTTPException):
         return JSONResponse(
