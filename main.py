@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
 from guardrails.redaction import redact_headers, redact_text, try_parse_json, redact_jsonish
-from guardrails.sanitize import sanitize_user_text, detect_prompt_injection
+from guardrails.sanitize import guard_or_raise, GuardrailsBlocked
 import re
 import sys
 from pathlib import Path
@@ -72,6 +72,28 @@ logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI()
+
+# Guardrails blocking exception handler - returns clean HTTP 400
+@app.exception_handler(GuardrailsBlocked)
+async def guardrails_blocked_handler(request: Request, exc: GuardrailsBlocked):
+    """Handle GuardrailsBlocked exceptions with clean HTTP 400 response"""
+    origin = request.headers.get("Origin", "")
+    cors_headers = {}
+    if origin in ALLOWED_ORIGINS:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": "guardrails_blocked",
+            "message": str(exc),
+            "matched": getattr(exc, "matched", None),
+        },
+        headers=cors_headers,
+    )
 
 # Global exception handler to catch ALL exceptions, including those in dependency injection
 @app.exception_handler(Exception)
@@ -5321,15 +5343,8 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key, temperature=0.4, max_tokens=1000)
 
-            # Guardrails: sanitize prompt + basic prompt-injection heuristics
-            prompt = sanitize_user_text(prompt, max_len=12000)
-            is_injection, matched = detect_prompt_injection(prompt)
-            block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
-            if is_injection:
-                msg = f"Potential prompt injection detected: {matched}"
-                if block_inj:
-                    raise ValueError(msg)
-                logger.warning(msg)
+            # Guardrails: sanitize prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
+            prompt, audit = guard_or_raise(prompt, max_len=12000)
 
             response = llm.invoke(prompt)
             recommendations_text = response.content if hasattr(response, 'content') else str(response)
@@ -6998,15 +7013,8 @@ Generate a parent idea that:
 
 Return only the parent idea, no additional text."""
                 
-                # Guardrails: sanitize parent_prompt + basic prompt-injection heuristics
-                parent_prompt = sanitize_user_text(parent_prompt, max_len=12000)
-                is_injection, matched = detect_prompt_injection(parent_prompt)
-                block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
-                if is_injection:
-                    msg = f"Potential prompt injection detected: {matched}"
-                    if block_inj:
-                        raise HTTPException(status_code=400, detail=msg)
-                    logger.warning(msg)
+                # Guardrails: sanitize parent_prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
+                parent_prompt, audit = guard_or_raise(parent_prompt, max_len=12000)
 
                 parent_response = llm.invoke(parent_prompt)
                 parent_idea = parent_response.content.strip()
@@ -7021,15 +7029,8 @@ Generate 3-5 children concepts that support this parent idea. Each child should:
 
 Return as a numbered list."""
                 
-                # Guardrails: sanitize children_prompt + basic prompt-injection heuristics
-                children_prompt = sanitize_user_text(children_prompt, max_len=12000)
-                is_injection, matched = detect_prompt_injection(children_prompt)
-                block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
-                if is_injection:
-                    msg = f"Potential prompt injection detected: {matched}"
-                    if block_inj:
-                        raise HTTPException(status_code=400, detail=msg)
-                    logger.warning(msg)
+                # Guardrails: sanitize children_prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
+                children_prompt, audit = guard_or_raise(children_prompt, max_len=12000)
 
                 children_response = llm.invoke(children_prompt)
                 children_text = children_response.content.strip()
@@ -7046,15 +7047,8 @@ Existing Locations Used: {', '.join(week_plan['knowledge_graph_locations']) if w
 
 Select a knowledge graph location for this parent idea."""
                 
-                # Guardrails: sanitize kg_location_prompt_full + basic prompt-injection heuristics
-                kg_location_prompt_full = sanitize_user_text(kg_location_prompt_full, max_len=12000)
-                is_injection, matched = detect_prompt_injection(kg_location_prompt_full)
-                block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
-                if is_injection:
-                    msg = f"Potential prompt injection detected: {matched}"
-                    if block_inj:
-                        raise HTTPException(status_code=400, detail=msg)
-                    logger.warning(msg)
+                # Guardrails: sanitize kg_location_prompt_full + check for injection (raises GuardrailsBlocked if blocking enabled)
+                kg_location_prompt_full, audit = guard_or_raise(kg_location_prompt_full, max_len=12000)
 
                 kg_response = llm.invoke(kg_location_prompt_full)
                 kg_location = kg_response.content.strip()

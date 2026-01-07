@@ -1,61 +1,129 @@
+"""
+Safe logging redaction utilities.
+
+Prevents leaking secrets, PII, and sensitive data in logs.
+"""
+
 import json
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-# Patterns: API keys, bearer tokens, common secret env names, emails, long tokens
-_SECRET_KEYWORDS = [
-    "authorization", "x-api-key", "api-key", "apikey",
-    "openai", "anthropic", "claude",
-    "cookie", "set-cookie",
-    "secret", "token", "password", "passwd", "key",
-]
 
-_EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[A-Za-z]{2,}\b")
-# Rough token detector (base64-ish / JWT-ish / long alnum)
-_LONG_TOKEN_RE = re.compile(r"([A-Za-z0-9_\-]{24,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|[A-Za-z0-9_\-]{40,})")
-_BEARER_RE = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9_\-\.=]+\b")
-
-def _looks_sensitive_key(k: str) -> bool:
-    lk = k.lower()
-    return any(word in lk for word in _SECRET_KEYWORDS)
-
-def redact_headers(headers: Dict[str, Any]) -> Dict[str, Any]:
-    out = {}
-    for k, v in headers.items():
-        if _looks_sensitive_key(k):
-            out[k] = "***REDACTED***"
+def redact_headers(headers: dict) -> dict:
+    """
+    Redact sensitive headers from request logging.
+    
+    Args:
+        headers: Dictionary of HTTP headers
+        
+    Returns:
+        Dictionary with sensitive headers redacted
+    """
+    sensitive_keys = [
+        "authorization",
+        "cookie",
+        "x-api-key",
+        "api-key",
+        "x-auth-token",
+        "x-access-token",
+    ]
+    
+    redacted = {}
+    for key, value in headers.items():
+        key_lower = key.lower()
+        if any(sensitive in key_lower for sensitive in sensitive_keys):
+            redacted[key] = "[REDACTED]"
         else:
-            out[k] = v
-    return out
+            redacted[key] = value
+    
+    return redacted
 
-def redact_text(s: str) -> str:
-    if not s:
-        return s
-    s = _BEARER_RE.sub("Bearer ***REDACTED***", s)
-    s = _LONG_TOKEN_RE.sub("***REDACTED_TOKEN***", s)
-    s = _EMAIL_RE.sub("***REDACTED_EMAIL***", s)
-    return s
+
+def redact_text(text: str) -> str:
+    """
+    Redact sensitive patterns from text.
+    
+    Args:
+        text: Raw text to redact
+        
+    Returns:
+        Text with sensitive patterns redacted
+    """
+    if not text:
+        return text
+    
+    # Email addresses
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL_REDACTED]', text)
+    
+    # API keys (common patterns)
+    text = re.sub(r'(?i)(api[_-]?key|apikey)[\s:=]+([A-Za-z0-9_-]{20,})', r'\1=[REDACTED]', text)
+    
+    # Tokens (JWT-like patterns)
+    text = re.sub(r'\b(eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b', '[TOKEN_REDACTED]', text)
+    
+    # Bearer tokens
+    text = re.sub(r'(?i)bearer\s+[A-Za-z0-9_-]{20,}', 'Bearer [REDACTED]', text)
+    
+    return text
+
+
+def try_parse_json(text: str) -> Optional[Any]:
+    """
+    Attempt to parse text as JSON.
+    
+    Args:
+        text: Text to parse
+        
+    Returns:
+        Parsed JSON object or None if not valid JSON
+    """
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
 
 def redact_jsonish(obj: Any) -> Any:
     """
-    Redact secrets recursively in dict/list structures.
+    Recursively redact sensitive fields from JSON-like structures.
+    
+    Args:
+        obj: JSON-serializable object (dict, list, etc.)
+        
+    Returns:
+        Object with sensitive fields redacted
     """
     if isinstance(obj, dict):
-        new = {}
-        for k, v in obj.items():
-            if _looks_sensitive_key(str(k)):
-                new[k] = "***REDACTED***"
+        redacted = {}
+        sensitive_keys = [
+            "password", "passwd", "pwd",
+            "token", "access_token", "refresh_token",
+            "api_key", "apikey", "apiKey",
+            "secret", "secret_key", "secretKey",
+            "authorization", "auth",
+            "email", "email_address",
+            "cookie", "cookies",
+        ]
+        
+        for key, value in obj.items():
+            key_lower = str(key).lower()
+            if any(sensitive in key_lower for sensitive in sensitive_keys):
+                redacted[key] = "[REDACTED]"
+            elif isinstance(value, (dict, list)):
+                redacted[key] = redact_jsonish(value)
+            elif isinstance(value, str):
+                redacted[key] = redact_text(value)
             else:
-                new[k] = redact_jsonish(v)
-        return new
-    if isinstance(obj, list):
-        return [redact_jsonish(x) for x in obj]
-    if isinstance(obj, str):
+                redacted[key] = value
+        
+        return redacted
+    
+    elif isinstance(obj, list):
+        return [redact_jsonish(item) for item in obj]
+    
+    elif isinstance(obj, str):
         return redact_text(obj)
-    return obj
+    
+    else:
+        return obj
 
-def try_parse_json(body_str: str):
-    try:
-        return json.loads(body_str)
-    except Exception:
-        return None

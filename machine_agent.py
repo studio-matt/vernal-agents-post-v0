@@ -3,7 +3,7 @@ import os
 import logging
 from typing import Optional, Tuple, List
 import json
-from guardrails.sanitize import sanitize_user_text, detect_prompt_injection
+from guardrails.sanitize import guard_or_raise
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -121,15 +121,8 @@ Generate the content following the instructions above.
 
         try:
             # Use the chat completion API
-            # Guardrails: sanitize user message + basic prompt-injection heuristics
-            user_message = sanitize_user_text(user_message, max_len=12000)
-            is_injection, matched = detect_prompt_injection(user_message)
-            block_inj = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
-            if is_injection:
-                msg = f"Potential prompt injection detected: {matched}"
-                if block_inj:
-                    raise ValueError(msg)
-                logger.warning(msg)
+            # Guardrails: sanitize user message + check for injection (raises GuardrailsBlocked if blocking enabled)
+            user_message, audit = guard_or_raise(user_message, max_len=12000)
 
             response = self.client.chat.completions.create(
                 model="gpt-4",

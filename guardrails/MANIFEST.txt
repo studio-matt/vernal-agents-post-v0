@@ -1,0 +1,5 @@
+# List of repo-relative paths to mirror into backend-repo-git/
+# Keep this list small, intentional, and reviewed.
+
+guardrails/README.md
+guardrails/MANIFEST.txt

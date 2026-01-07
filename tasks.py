@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 import json
 import re
-from guardrails.sanitize import sanitize_user_text, detect_prompt_injection
+from guardrails.sanitize import guard_or_raise
 import logging
 
 
@@ -162,15 +162,8 @@ def create_prompt(text, week, days_list):
 def analyze_text(prompt):
     """Send the prompt to the OpenAI model and return the parsed JSON response."""
     try:
-        # Guardrails: sanitize prompt + basic prompt-injection heuristics
-        prompt = sanitize_user_text(prompt, max_len=12000)
-        is_injection, matched = detect_prompt_injection(prompt)
-        block = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
-        if is_injection:
-            msg = f"Potential prompt injection detected: {matched}"
-            if block:
-                raise ValueError(msg)
-            logger.warning(msg)
+        # Guardrails: sanitize prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
+        prompt, audit = guard_or_raise(prompt, max_len=12000)
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
