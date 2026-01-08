@@ -627,37 +627,49 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
             logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
         
         # Ensure user has a demo campaign (create copy if needed)
+        # Ensure every user has their own demo campaign copy
         # Wrap in try-except to prevent errors from breaking the endpoint
         try:
-            # Check if user already has a demo campaign in their list
-            user_has_demo_in_list = any(
-                c.campaign_name and c.campaign_name.startswith("Demo Campaign") 
-                for c in campaigns
-            )
+            # Check if user already has a demo campaign (by name pattern)
+            user_has_demo = db.query(Campaign).filter(
+                Campaign.user_id == current_user.id,
+                Campaign.campaign_name.like("Demo Campaign%")
+            ).first()
             
-            if not user_has_demo_in_list:
-                logger.info(f"📋 User {current_user.id} does not have demo campaign in list, attempting to create/find one")
+            if not user_has_demo:
+                logger.info(f"📋 User {current_user.id} does not have demo campaign, creating one now")
                 user_demo_campaign_id = create_user_demo_campaign(current_user.id, db)
                 
-                # Get user's demo campaign (if it exists)
                 if user_demo_campaign_id:
+                    # Refresh campaigns list to include the newly created demo campaign
                     user_demo_campaign = db.query(Campaign).filter(
-                        Campaign.campaign_id == user_demo_campaign_id
+                        Campaign.campaign_id == user_demo_campaign_id,
+                        Campaign.user_id == current_user.id
                     ).first()
+                    
                     if user_demo_campaign:
-                        # Check if it's already in the list (double-check)
-                        user_has_demo = any(c.campaign_id == user_demo_campaign_id for c in campaigns)
-                        if not user_has_demo:
+                        # Check if it's already in the campaigns list
+                        if not any(c.campaign_id == user_demo_campaign_id for c in campaigns):
                             campaigns.append(user_demo_campaign)
                             logger.info(f"✅ Added user demo campaign {user_demo_campaign_id} to user {current_user.id}'s campaign list")
                         else:
                             logger.info(f"ℹ️ User demo campaign {user_demo_campaign_id} already in list")
                     else:
                         logger.warning(f"⚠️ Created demo campaign ID {user_demo_campaign_id} but could not retrieve it from database")
+                        # Try to query all campaigns again to include it
+                        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
                 else:
-                    logger.warning(f"⚠️ Could not create/find demo campaign for user {current_user.id}")
+                    logger.warning(f"⚠️ Could not create demo campaign for user {current_user.id}")
+                    # Check if template exists
+                    template_exists = db.query(Campaign).filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
+                    if not template_exists:
+                        logger.error(f"❌ Template demo campaign {DEMO_CAMPAIGN_ID} does not exist in database!")
             else:
-                logger.info(f"✅ User {current_user.id} already has demo campaign in their list")
+                logger.info(f"✅ User {current_user.id} already has demo campaign: {user_has_demo.campaign_id}")
+                # Ensure it's in the campaigns list
+                if not any(c.campaign_id == user_has_demo.campaign_id for c in campaigns):
+                    campaigns.append(user_has_demo)
+                    logger.info(f"✅ Added existing demo campaign {user_has_demo.campaign_id} to user {current_user.id}'s campaign list")
         except Exception as demo_error:
             logger.error(f"❌ Error handling demo campaign for user {current_user.id}: {demo_error}")
             import traceback
