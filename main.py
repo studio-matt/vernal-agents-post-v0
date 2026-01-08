@@ -70,6 +70,58 @@ if _author_related_path.exists() and not _author_related_underscore.exists():
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Helper function to get OpenAI API key with priority: user > global > env
+def get_openai_api_key(current_user=None, db: Session = None) -> Optional[str]:
+    """
+    Get OpenAI API key with priority:
+    1. User's personal API key (if provided and available)
+    2. Global API key from system_settings table (openai_api_key)
+    3. Environment variable (OPENAI_API_KEY)
+    
+    Args:
+        current_user: Current user object (optional, for user-specific key)
+        db: Database session (optional, for global key lookup)
+    
+    Returns:
+        API key string or None if not found
+    """
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # Priority 1: User's personal API key
+    if current_user and hasattr(current_user, 'openai_key') and current_user.openai_key:
+        user_key = current_user.openai_key.strip()
+        if user_key and len(user_key) > 50:
+            logger.info(f"✅ Using user's personal OpenAI API key (user_id: {current_user.id})")
+            return user_key
+    
+    # Priority 2: Global API key from system_settings
+    if db:
+        try:
+            from models import SystemSettings
+            global_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "openai_api_key"
+            ).first()
+            if global_setting and global_setting.setting_value:
+                global_key = global_setting.setting_value.strip()
+                if global_key and len(global_key) > 50:
+                    logger.info("✅ Using global OpenAI API key from system_settings")
+                    return global_key
+        except Exception as e:
+            logger.warning(f"⚠️ Could not retrieve global API key from system_settings: {e}")
+    
+    # Priority 3: Environment variable
+    env_key = os.getenv("OPENAI_API_KEY")
+    if env_key:
+        env_key = env_key.strip()
+        if env_key and len(env_key) > 50:
+            logger.info("✅ Using OpenAI API key from environment variable")
+            return env_key
+    
+    logger.error("❌ No valid OpenAI API key found (checked: user key, global key, env var)")
+    return None
+
 # Create FastAPI app
 app = FastAPI()
 
@@ -3404,14 +3456,13 @@ def get_campaign_research(campaign_id: str, limit: int = 20, current_user = Depe
                 # Determine topic_tool based on method
                 if topic_extraction_method == "llm":
                     # Check if OpenAI API key is available for LLM model
-                    import os
-                    openai_key = os.getenv("OPENAI_API_KEY")
-                    if openai_key and len(openai_key.strip()) > 0:
+                    openai_key = get_openai_api_key(current_user=None, db=db)
+                    if openai_key:
                         topic_tool = "llm"  # Use LLM for phrase generation
                         logger.info("✅ Using LLM model for topics (from system settings)")
                     else:
                         topic_tool = "system"  # Fallback to system model if no API key
-                        logger.warning("⚠️ LLM selected but OPENAI_API_KEY not found, using system model")
+                        logger.warning("⚠️ LLM selected but OpenAI API key not found, using system model")
                 else:
                     topic_tool = "system"  # Use system model (NMF-based)
                     logger.info("✅ Using system model for topics (from system settings)")
@@ -3843,12 +3894,11 @@ def compare_topics(campaign_id: str, method: str = "system", current_user = Depe
         # Determine topic_tool based on method parameter
         if method == "llm":
             # Check if OpenAI API key is available
-            import os
-            openai_key = os.getenv("OPENAI_API_KEY")
-            if not openai_key or len(openai_key.strip()) == 0:
+            openai_key = get_openai_api_key(current_user=current_user, db=db)
+            if not openai_key:
                 return {
                     "status": "error",
-                    "message": "LLM method requires OPENAI_API_KEY"
+                    "message": "LLM method requires OpenAI API key. Please set a global key in Admin Settings > System > Platform Keys, or add your personal key in Account Settings."
                 }
             topic_tool = "llm"
         else:
@@ -5260,14 +5310,13 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         # Determine topic_tool based on method
         if topic_extraction_method == "llm":
             # Check if OpenAI API key is available for LLM model
-            import os
-            openai_key = os.getenv("OPENAI_API_KEY")
-            if openai_key and len(openai_key.strip()) > 0:
+            openai_key = get_openai_api_key(current_user=current_user, db=db)
+            if openai_key:
                 topic_tool = "llm"  # Use LLM for phrase generation
                 logger.info("✅ Using LLM model for topics (from system settings)")
             else:
                 topic_tool = "system"  # Fallback to system model if no API key
-                logger.warning("⚠️ LLM selected but OPENAI_API_KEY not found, using system model")
+                logger.warning("⚠️ LLM selected but OpenAI API key not found, using system model")
         else:
             topic_tool = "system"  # Use system model (NMF-based)
             logger.info("✅ Using system model for topics (from system settings)")
@@ -5318,27 +5367,19 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         prompt = prompt_template.format(context=context)
         logger.info(f"📝 Formatted prompt (first 500 chars): {prompt[:500]}")
         
-        # Call LLM
-        import os
-        from dotenv import load_dotenv
-        # Ensure .env is loaded (in case systemd didn't load it properly)
-        load_dotenv()
-        
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Get API key with priority: user > global > env
+        api_key = get_openai_api_key(current_user=current_user, db=db)
         if not api_key:
-            logger.error("❌ OPENAI_API_KEY not found in environment")
-            return {"status": "error", "message": "OPENAI_API_KEY not configured"}
-        
-        # Strip whitespace from API key (common issue)
-        api_key = api_key.strip()
+            logger.error("❌ OpenAI API key not found (checked: user key, global key, env var)")
+            return {"status": "error", "message": "OpenAI API key not configured. Please set a global key in Admin Settings > System > Platform Keys, or add your personal key in Account Settings."}
         
         # Log first few chars for debugging (without exposing full key)
         logger.info(f"✅ OpenAI API key present (length: {len(api_key)})")
         
         # Check key length (OpenAI keys are typically 200+ characters)
         if len(api_key) < 50:
-            logger.error(f"❌ API key is too short ({len(api_key)} chars). OpenAI keys should be 200+ characters. Check .env file for line breaks or truncation.")
-            return {"status": "error", "message": f"API key is too short ({len(api_key)} characters). OpenAI keys should be 200+ characters. Please check your .env file - the key might have line breaks or be truncated. Ensure the entire key is on a single line."}
+            logger.error(f"❌ API key is too short ({len(api_key)} chars). OpenAI keys should be 200+ characters.")
+            return {"status": "error", "message": f"API key is too short ({len(api_key)} characters). OpenAI keys should be 200+ characters. Please check your API key configuration."}
         
         if not api_key.startswith("sk-"):
             logger.warning(f"⚠️ API key doesn't start with 'sk-' - might be invalid format")
@@ -5425,13 +5466,10 @@ async def generate_ideas_endpoint(
         from machine_agent import IdeaGeneratorAgent
         from langchain_openai import ChatOpenAI
         from fastapi import Form
-        import os
-        from dotenv import load_dotenv
         
-        load_dotenv()
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = get_openai_api_key(current_user=current_user, db=db)
         if not api_key:
-            return {"status": "error", "message": "OPENAI_API_KEY not configured"}
+            return {"status": "error", "message": "OpenAI API key not configured. Please set a global key in Admin Settings > System > Platform Keys, or add your personal key in Account Settings."}
         
         # Parse form data from request
         form_data = await request.form()
@@ -6971,9 +7009,9 @@ async def create_campaign_plan(
 Return the knowledge graph location (node name or entity) that should be used for the next post."""
         
         # Initialize LLM for planning
-        api_key = os.getenv("OPENAI_API_KEY") or (current_user.openai_key if hasattr(current_user, 'openai_key') else None)
+        api_key = get_openai_api_key(current_user=current_user, db=db)
         if not api_key:
-            raise HTTPException(status_code=400, detail="OPENAI_API_KEY not configured")
+            raise HTTPException(status_code=400, detail="OpenAI API key not configured. Please set a global key in Admin Settings > System > Platform Keys, or add your personal key in Account Settings.")
         
         llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
         
