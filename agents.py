@@ -20,16 +20,60 @@ def get_env_var(key: str, default: Optional[str] = None, required: bool = False)
         logger.warning(f"Environment variable {key} not set, using default: {default}")
     return value
 
+# Set OpenAI API key with validation - check global settings first, then env var
+def get_openai_api_key_for_agents():
+    """Get OpenAI API key using priority: global settings > environment variable"""
+    try:
+        # Try to get from global system_settings (no circular import - we import models directly)
+        try:
+            from database import SessionLocal
+            from models import SystemSettings
+            db = SessionLocal()
+            try:
+                global_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == "openai_api_key"
+                ).first()
+                if global_setting and global_setting.setting_value:
+                    global_key = global_setting.setting_value.strip()
+                    if global_key and len(global_key) > 50:
+                        logger.info("✅ Using global OpenAI API key from system_settings")
+                        return global_key
+            except Exception as e:
+                logger.debug(f"Could not retrieve global API key from system_settings: {e}")
+            finally:
+                db.close()
+        except (ImportError, Exception) as e:
+            logger.debug(f"Could not check global settings: {e}")
+        
+        # Fallback to environment variable
+        api_key = get_env_var("OPENAI_API_KEY", required=False)
+        if api_key:
+            logger.info("✅ Using OpenAI API key from environment variable")
+            return api_key
+        
+        logger.warning("⚠️ No OpenAI API key found in global settings or environment variables")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get OpenAI API key: {e}")
+        traceback.print_exc()
+        return None
+
 # Set OpenAI API key with validation
 try:
-    OPENAI_API_KEY = get_env_var("OPENAI_API_KEY", required=True)
-    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-    os.environ["OPENAI_MODEL_NAME"] = "gpt-4o-mini"
-    logger.info("OpenAI API key configured successfully")
+    OPENAI_API_KEY = get_openai_api_key_for_agents()
+    if not OPENAI_API_KEY:
+        # Try one more time with direct env var (for backward compatibility)
+        OPENAI_API_KEY = get_env_var("OPENAI_API_KEY", required=False)
+        if not OPENAI_API_KEY:
+            logger.warning("⚠️ OpenAI API key not found - agents may fail. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys.")
+    else:
+        os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+        os.environ["OPENAI_MODEL_NAME"] = "gpt-4o-mini"
+        logger.info("OpenAI API key configured successfully")
 except Exception as e:
     logger.error(f"Failed to configure OpenAI API key: {e}")
     traceback.print_exc()
-    raise
+    # Don't raise - let it fail gracefully so the app can still start
 
 # Import database manager with error handling
 try:
