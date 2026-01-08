@@ -3370,6 +3370,58 @@ def check_environment_variables(admin_user = Depends(get_admin_user)):
         ],
     }
 
+@app.post("/admin/campaigns/{campaign_id}/transfer")
+def transfer_campaign(campaign_id: str, target_user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """Transfer a campaign to another user - ADMIN ONLY"""
+    try:
+        from models import Campaign, User
+        
+        # Verify target user exists
+        target_user = db.query(User).filter(User.id == target_user_id).first()
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Target user {target_user_id} not found"
+            )
+        
+        # Get campaign (admin can see all campaigns)
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == campaign_id).first()
+        if not campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Campaign {campaign_id} not found"
+            )
+        
+        # Store original user for logging
+        original_user_id = campaign.user_id
+        
+        # Transfer campaign
+        campaign.user_id = target_user_id
+        campaign.updated_at = datetime.now()
+        db.commit()
+        db.refresh(campaign)
+        
+        logger.info(f"✅ Admin {admin_user.id} transferred campaign {campaign_id} from user {original_user_id} to user {target_user_id}")
+        
+        return {
+            "status": "success",
+            "message": f"Campaign transferred to {target_user.username} ({target_user.email})",
+            "campaign": {
+                "campaign_id": campaign.campaign_id,
+                "campaign_name": campaign.campaign_name,
+                "user_id": campaign.user_id,
+                "original_user_id": original_user_id,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error transferring campaign: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to transfer campaign: {str(e)}"
+        )
+
 @app.post("/admin/users/{user_id}/admin")
 def grant_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Grant admin access to a user - ADMIN ONLY"""

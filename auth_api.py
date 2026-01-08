@@ -203,6 +203,18 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         
         logger.info(f"User created successfully: {new_user.id}")
         
+        # Create demo campaign for new user
+        try:
+            from main import create_user_demo_campaign
+            demo_campaign_id = create_user_demo_campaign(new_user.id, db)
+            if demo_campaign_id:
+                logger.info(f"✅ Created demo campaign {demo_campaign_id} for new user {new_user.id}")
+            else:
+                logger.warning(f"⚠️ Could not create demo campaign for user {new_user.id}")
+        except Exception as demo_err:
+            logger.error(f"❌ Error creating demo campaign for user {new_user.id}: {demo_err}")
+            # Don't fail signup if demo campaign creation fails
+        
         # Generate and send OTP
         otp_code = str(secrets.randbelow(900000) + 100000) # 6-digit OTP
         expires_at = datetime.utcnow() + timedelta(minutes=10)
