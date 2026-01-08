@@ -3451,11 +3451,16 @@ def update_environment_variable(key: str, value: str, admin_user = Depends(get_a
             detail=f"Failed to update environment variable: {str(e)}"
         )
 
+class TransferCampaignRequest(BaseModel):
+    target_user_id: int
+
 @app.post("/admin/campaigns/{campaign_id}/transfer")
-def transfer_campaign(campaign_id: str, target_user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+def transfer_campaign(campaign_id: str, request: TransferCampaignRequest, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Transfer a campaign to another user - ADMIN ONLY"""
     try:
         from models import Campaign, User
+        
+        target_user_id = request.target_user_id
         
         # Verify target user exists
         target_user = db.query(User).filter(User.id == target_user_id).first()
