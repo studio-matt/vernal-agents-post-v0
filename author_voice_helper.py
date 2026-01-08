@@ -188,9 +188,21 @@ Additional Platform-Specific Instructions:
             
             def invoke_llm(prompt: str) -> str:
                 """Invoke LLM using existing ChatOpenAI setup"""
-                api_key = os.getenv("OPENAI_API_KEY")
+                # Try to get API key from helper function (supports user/global/env priority)
+                api_key = None
+                try:
+                    import sys
+                    from pathlib import Path
+                    backend_dir = Path(__file__).parent
+                    sys.path.insert(0, str(backend_dir))
+                    from main import get_openai_api_key
+                    api_key = get_openai_api_key()
+                except (ImportError, Exception) as e:
+                    # Fallback to environment variable if helper not available
+                    api_key = os.getenv("OPENAI_API_KEY")
+                
                 if not api_key:
-                    raise ValueError("OPENAI_API_KEY not set")
+                    raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys.")
                 
                 llm = ChatOpenAI(
                     model="gpt-4o-mini",

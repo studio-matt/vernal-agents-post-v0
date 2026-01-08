@@ -10,8 +10,29 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class ContentGeneratorAgent:
-    def __init__(self):
-        self.client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    def __init__(self, api_key=None):
+        """Initialize ContentGeneratorAgent with OpenAI API key.
+        
+        Args:
+            api_key: OpenAI API key (optional, will use get_openai_api_key if not provided)
+        """
+        if not api_key:
+            # Import here to avoid circular imports
+            import sys
+            from pathlib import Path
+            backend_dir = Path(__file__).parent
+            sys.path.insert(0, str(backend_dir))
+            try:
+                from main import get_openai_api_key
+                api_key = get_openai_api_key()
+                if not api_key:
+                    raise Exception("No OpenAI API key available. Please set OPENAI_API_KEY environment variable or configure in Admin Settings.")
+            except ImportError:
+                # Fallback to environment variable if helper not available
+                api_key = os.getenv('OPENAI_API_KEY')
+                if not api_key:
+                    raise Exception("No OpenAI API key available. Please set OPENAI_API_KEY environment variable.")
+        self.client = OpenAI(api_key=api_key)
 
     def generate_content(
         self,

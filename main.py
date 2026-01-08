@@ -6397,10 +6397,18 @@ async def extract_author_profile(
         similarity_metrics = {}
         try:
             # Aggregate LIWC scores from all writing samples
+            # Get API key for analyze_text
+            api_key = get_openai_api_key(current_user=current_user, db=db)
+            if not api_key:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys."
+                )
+            
             all_liwc_scores = []
             for sample_text in request_data.writing_samples:
                 if sample_text and sample_text.strip():
-                    sample_liwc = analyze_text(sample_text)
+                    sample_liwc = analyze_text(sample_text, api_key=api_key)
                     all_liwc_scores.append(sample_liwc)
             
             if all_liwc_scores:
@@ -7062,7 +7070,14 @@ def test_full_chain(
             )
         
         # Step 5: Measure LIWC scores from generated content
-        measured_liwc = analyze_text(generated_text)
+        # Get API key for analyze_text
+        api_key = get_openai_api_key(current_user=current_user, db=db)
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys."
+            )
+        measured_liwc = analyze_text(generated_text, api_key=api_key)
         
         # Step 6: Calculate z-scores for measured LIWC (using validator's method)
         from author_related.validator import StyleValidator
@@ -8578,12 +8593,21 @@ async def generate_image_machine_content_endpoint(
         
         logger.info(f"🖼️ Generating image with prompt: {final_prompt[:200]}...")
         
+        # Get API key for image generation
+        api_key = get_openai_api_key(current_user=current_user, db=db)
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys."
+            )
+        
         # Generate image using the combined prompt
-        # The generate_image function takes (query, content) where:
+        # The generate_image function takes (query, content, api_key) where:
         # - query: used for style matching in Airtable
         # - content: the actual prompt for DALL·E
+        # - api_key: OpenAI API key for authentication
         try:
-            image_url = generate_image(query=article_content, content=final_prompt)
+            image_url = generate_image(query=article_content, content=final_prompt, api_key=api_key)
             
             return {
                 "status": "success",

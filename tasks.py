@@ -107,7 +107,8 @@ wordpress_task = Task(
 
 
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# OpenAI client will be created per-request with proper API key from get_openai_api_key helper
+# Global client removed - functions will create client with API key from helper
 
 def create_prompt(text, week, days_list):
     """Create a prompt for the OpenAI model with description and JSON expected output."""
@@ -159,9 +160,35 @@ def create_prompt(text, week, days_list):
 
     return prompt
 
-def analyze_text(prompt):
-    """Send the prompt to the OpenAI model and return the parsed JSON response."""
+def analyze_text(prompt, api_key=None):
+    """Send the prompt to the OpenAI model and return the parsed JSON response.
+    
+    Args:
+        prompt: The prompt to send to OpenAI
+        api_key: OpenAI API key (optional, will use get_openai_api_key if not provided)
+    """
     try:
+        # Get API key if not provided
+        if not api_key:
+            # Import here to avoid circular imports
+            import sys
+            from pathlib import Path
+            backend_dir = Path(__file__).parent
+            sys.path.insert(0, str(backend_dir))
+            try:
+                from main import get_openai_api_key
+                api_key = get_openai_api_key()
+                if not api_key:
+                    raise Exception("No OpenAI API key available. Please set OPENAI_API_KEY environment variable or configure in Admin Settings.")
+            except ImportError:
+                # Fallback to environment variable if helper not available
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise Exception("No OpenAI API key available. Please set OPENAI_API_KEY environment variable.")
+        
+        # Create OpenAI client with the API key
+        client = OpenAI(api_key=api_key)
+        
         # Guardrails: sanitize prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
         prompt, audit = guard_or_raise(prompt, max_len=12000)
 

@@ -36,8 +36,8 @@ AIRTABLE_API_TOKEN = os.getenv("AIRTABLE_API_TOKEN")
 BASE_ID = os.getenv("BASE_ID")
 TABLE_NAME = os.getenv("TABLE_NAME")
 AIRTABLE_URL = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}"
-# OpenAI API Key
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY")) # Replace with environment variable in production
+# OpenAI API Key - will be initialized per-request using get_openai_api_key helper
+# Global client removed - each function that needs it will create one with the proper API key
 
 PLATFORM_LIMITS = {
     "twitter": {"chars": 280, "words": None},
@@ -616,8 +616,35 @@ def save_image_locally(image_data: bytes, filename: str) -> str:
         logger.error(f"Failed to upload image to SFTP: {str(e)}")
         return None
 
-def generate_image(query, content):
-    """Generate an image using OpenAI's DALL·E, download it, and upload to permanent storage."""
+def generate_image(query, content, api_key=None):
+    """Generate an image using OpenAI's DALL·E, download it, and upload to permanent storage.
+    
+    Args:
+        query: Query string for style matching
+        content: Image prompt content
+        api_key: OpenAI API key (optional, will use get_openai_api_key if not provided)
+    """
+    # Get API key if not provided
+    if not api_key:
+        # Import here to avoid circular imports
+        import sys
+        from pathlib import Path
+        backend_dir = Path(__file__).parent
+        sys.path.insert(0, str(backend_dir))
+        try:
+            from main import get_openai_api_key
+            api_key = get_openai_api_key()
+            if not api_key:
+                raise Exception("No OpenAI API key available. Please set OPENAI_API_KEY environment variable or configure in Admin Settings.")
+        except ImportError:
+            # Fallback to environment variable if helper not available
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise Exception("No OpenAI API key available. Please set OPENAI_API_KEY environment variable.")
+    
+    # Create OpenAI client with the API key
+    client = OpenAI(api_key=api_key)
+    
     records = fetch_airtable_records()
     style_prompt = find_matching_prompt(query, records)
     
