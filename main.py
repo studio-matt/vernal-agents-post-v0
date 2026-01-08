@@ -3065,6 +3065,311 @@ def get_all_users(admin_user = Depends(get_admin_user), db: Session = Depends(ge
             detail=f"Failed to fetch users: {str(e)}"
         )
 
+@app.get("/admin/env-check")
+def check_environment_variables(admin_user = Depends(get_admin_user)):
+    """
+    Check which environment variables are set and which are missing - ADMIN ONLY
+    Returns a comprehensive report of all environment variables used by the system.
+    """
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # Define all environment variables used by the system
+    env_vars = {
+        # Critical - Required for app to function
+        "critical": {
+            "DB_HOST": {
+                "description": "Database host address",
+                "required": True,
+                "example": "50.6.198.220"
+            },
+            "DB_USER": {
+                "description": "Database username",
+                "required": True,
+                "example": "vernalcontentum_vernaluse"
+            },
+            "DB_PASSWORD": {
+                "description": "Database password",
+                "required": True,
+                "example": "your_password"
+            },
+            "DB_NAME": {
+                "description": "Database name",
+                "required": True,
+                "example": "vernalcontentum_contentMachine"
+            },
+            "JWT_SECRET_KEY": {
+                "description": "JWT secret key for authentication",
+                "required": True,
+                "example": "your-secret-key-please-change-in-production"
+            },
+            "JWT_ALGORITHM": {
+                "description": "JWT algorithm (usually HS256)",
+                "required": False,
+                "default": "HS256"
+            },
+        },
+        # API Keys - Some may be optional depending on features used
+        "api_keys": {
+            "OPENAI_API_KEY": {
+                "description": "OpenAI API key (can also be set in Admin Settings as global key)",
+                "required": False,
+                "note": "Can be set globally in Admin Settings > System > Platform Keys"
+            },
+            "AIRTABLE_API_TOKEN": {
+                "description": "Airtable API token",
+                "required": False,
+                "note": "Only needed if using Airtable integration"
+            },
+            "BASE_ID": {
+                "description": "Airtable base ID",
+                "required": False,
+                "note": "Only needed if using Airtable integration"
+            },
+            "TABLE_NAME": {
+                "description": "Airtable table name",
+                "required": False,
+                "note": "Only needed if using Airtable integration"
+            },
+        },
+        # SFTP Configuration
+        "sftp": {
+            "SFTP_HOST": {
+                "description": "SFTP server hostname",
+                "required": False,
+                "note": "Only needed if using SFTP file uploads"
+            },
+            "SFTP_USER": {
+                "description": "SFTP username",
+                "required": False,
+                "note": "Only needed if using SFTP file uploads"
+            },
+            "SFTP_PASS": {
+                "description": "SFTP password",
+                "required": False,
+                "note": "Only needed if using SFTP file uploads"
+            },
+            "SFTP_PORT": {
+                "description": "SFTP port (default: 22)",
+                "required": False,
+                "default": "22"
+            },
+            "SFTP_REMOTE_DIR": {
+                "description": "SFTP remote directory path",
+                "required": False,
+                "default": "/home/{SFTP_USER}/public_html"
+            },
+        },
+        # Email Configuration
+        "email": {
+            "MAIL_USERNAME": {
+                "description": "Email username for SMTP",
+                "required": False,
+                "note": "Only needed if using email features"
+            },
+            "MAIL_PASSWORD": {
+                "description": "Email password for SMTP",
+                "required": False,
+                "note": "Only needed if using email features"
+            },
+            "MAIL_FROM": {
+                "description": "From email address",
+                "required": False,
+                "note": "Only needed if using email features"
+            },
+            "MAIL_SERVER": {
+                "description": "SMTP server address",
+                "required": False,
+                "default": "smtp.gmail.com"
+            },
+            "MAIL_PORT": {
+                "description": "SMTP port",
+                "required": False,
+                "default": "465"
+            },
+        },
+        # Social Platform OAuth (can also be set in Admin Settings)
+        "oauth": {
+            "LINKEDIN_CLIENT_ID": {
+                "description": "LinkedIn OAuth client ID",
+                "required": False,
+                "note": "Can be set in Admin Settings > System > Platform Keys"
+            },
+            "LINKEDIN_CLIENT_SECRET": {
+                "description": "LinkedIn OAuth client secret",
+                "required": False,
+                "note": "Can be set in Admin Settings > System > Platform Keys"
+            },
+            "LINKEDIN_REDIRECT_URI": {
+                "description": "LinkedIn OAuth redirect URI",
+                "required": False,
+                "default": "https://themachine.vernalcontentum.com/linkedin/callback"
+            },
+            "TWITTER_API_KEY": {
+                "description": "Twitter OAuth API key",
+                "required": False,
+                "note": "Can be set in Admin Settings > System > Platform Keys"
+            },
+            "TWITTER_API_SECRET": {
+                "description": "Twitter OAuth API secret",
+                "required": False,
+                "note": "Can be set in Admin Settings > System > Platform Keys"
+            },
+            "TWITTER_CALLBACK_URL": {
+                "description": "Twitter OAuth callback URL",
+                "required": False,
+                "default": "https://machine.vernalcontentum.com/twitter/callback"
+            },
+            "FACEBOOK_APP_ID": {
+                "description": "Facebook OAuth app ID",
+                "required": False,
+                "note": "Can be set in Admin Settings > System > Platform Keys"
+            },
+            "FACEBOOK_APP_SECRET": {
+                "description": "Facebook OAuth app secret",
+                "required": False,
+                "note": "Can be set in Admin Settings > System > Platform Keys"
+            },
+            "FACEBOOK_REDIRECT_URI": {
+                "description": "Facebook OAuth redirect URI",
+                "required": False,
+                "default": "https://machine.vernalcontentum.com/facebook/callback"
+            },
+            "INSTAGRAM_REDIRECT_URI": {
+                "description": "Instagram OAuth redirect URI",
+                "required": False,
+                "default": "https://machine.vernalcontentum.com/instagram/callback"
+            },
+        },
+        # Guardrails Configuration
+        "guardrails": {
+            "GUARDRAILS_BLOCK_INJECTION": {
+                "description": "Enable prompt injection blocking (0=warn only, 1=block)",
+                "required": False,
+                "default": "0"
+            },
+        },
+        # Code Health Configuration
+        "code_health": {
+            "CODE_HEALTH_LOC_THRESHOLD": {
+                "description": "Maximum lines of code per file threshold",
+                "required": False,
+                "default": "3000"
+            },
+            "CODE_HEALTH_ENABLE_PYLINT": {
+                "description": "Enable pylint analysis (0=disabled, 1=enabled)",
+                "required": False,
+                "default": "0"
+            },
+            "CODE_HEALTH_PYLINT_TARGETS": {
+                "description": "Comma-separated list of files/dirs for pylint",
+                "required": False,
+                "default": ""
+            },
+        },
+        # Gas Meter Configuration (Future)
+        "gas_meter": {
+            "EC2_INSTANCE_TYPE": {
+                "description": "EC2 instance type for display",
+                "required": False,
+                "default": ""
+            },
+            "EC2_HOURLY_RATE_USD": {
+                "description": "EC2 hourly cost in USD",
+                "required": False,
+                "default": ""
+            },
+            "EC2_UTILIZATION_FACTOR": {
+                "description": "EC2 utilization factor (0.0-1.0)",
+                "required": False,
+                "default": "1.0"
+            },
+        },
+        # Optional/Misc
+        "optional": {
+            "GITHUB_SHA": {
+                "description": "Git commit SHA for version display",
+                "required": False,
+                "note": "Automatically set by CI/CD"
+            },
+        },
+    }
+    
+    # Check each variable
+    results = {
+        "critical": [],
+        "api_keys": [],
+        "sftp": [],
+        "email": [],
+        "oauth": [],
+        "guardrails": [],
+        "code_health": [],
+        "gas_meter": [],
+        "optional": [],
+    }
+    
+    missing_critical = []
+    
+    for category, vars_dict in env_vars.items():
+        for var_name, var_info in vars_dict.items():
+            value = os.getenv(var_name)
+            is_set = value is not None and value.strip() != ""
+            
+            result = {
+                "name": var_name,
+                "description": var_info.get("description", ""),
+                "is_set": is_set,
+                "has_value": is_set and len(value) > 0,
+                "required": var_info.get("required", False),
+                "default": var_info.get("default", None),
+                "note": var_info.get("note", None),
+            }
+            
+            # Mask sensitive values
+            if is_set and var_info.get("required", False):
+                if "PASSWORD" in var_name or "SECRET" in var_name or "KEY" in var_name or "TOKEN" in var_name:
+                    result["value_preview"] = f"{value[:4]}...{value[-4:]}" if len(value) > 8 else "***"
+                else:
+                    result["value_preview"] = value[:50] if len(value) > 50 else value
+            elif is_set:
+                result["value_preview"] = "Set (hidden)" if "PASSWORD" in var_name or "SECRET" in var_name or "KEY" in var_name or "TOKEN" in var_name else value[:50]
+            else:
+                result["value_preview"] = None
+            
+            results[category].append(result)
+            
+            if var_info.get("required", False) and not is_set:
+                missing_critical.append(var_name)
+    
+    # Summary
+    total_vars = sum(len(vars_dict) for vars_dict in env_vars.values())
+    set_vars = sum(1 for category_results in results.values() for r in category_results if r["is_set"])
+    missing_required = len(missing_critical)
+    
+    return {
+        "status": "success",
+        "summary": {
+            "total_variables": total_vars,
+            "set_variables": set_vars,
+            "missing_variables": total_vars - set_vars,
+            "missing_critical": missing_required,
+            "all_critical_set": missing_required == 0,
+        },
+        "missing_critical": missing_critical,
+        "variables": results,
+        "recommendations": [
+            "Set all critical variables for the app to function properly",
+            "Set OPENAI_API_KEY or configure global key in Admin Settings > System > Platform Keys",
+            "Set OAuth credentials in Admin Settings if using social platform integrations",
+            "Set SFTP credentials if using file upload features",
+            "Set email credentials if using email features",
+        ] if missing_required > 0 else [
+            "All critical variables are set! ✅",
+            "Optional variables can be configured as needed for additional features",
+        ],
+    }
+
 @app.post("/admin/users/{user_id}/admin")
 def grant_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Grant admin access to a user - ADMIN ONLY"""
