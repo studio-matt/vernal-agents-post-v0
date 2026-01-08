@@ -25,3 +25,9 @@ MODIFY COLUMN writing_samples_json LONGTEXT NULL;
 -- AND TABLE_NAME = 'author_personalities' 
 -- AND COLUMN_NAME = 'writing_samples_json';
 
+
+
+
+
+
+

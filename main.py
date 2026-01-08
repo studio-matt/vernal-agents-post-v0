@@ -641,35 +641,38 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                 user_demo_campaign_id = create_user_demo_campaign(current_user.id, db)
                 
                 if user_demo_campaign_id:
-                    # Refresh campaigns list to include the newly created demo campaign
-                    user_demo_campaign = db.query(Campaign).filter(
-                        Campaign.campaign_id == user_demo_campaign_id,
-                        Campaign.user_id == current_user.id
-                    ).first()
-                    
-                    if user_demo_campaign:
-                        # Check if it's already in the campaigns list
-                        if not any(c.campaign_id == user_demo_campaign_id for c in campaigns):
-                            campaigns.append(user_demo_campaign)
-                            logger.info(f"✅ Added user demo campaign {user_demo_campaign_id} to user {current_user.id}'s campaign list")
-                        else:
-                            logger.info(f"ℹ️ User demo campaign {user_demo_campaign_id} already in list")
-                    else:
-                        logger.warning(f"⚠️ Created demo campaign ID {user_demo_campaign_id} but could not retrieve it from database")
-                        # Try to query all campaigns again to include it
+                    # For non-admin users, refresh the entire campaigns list to include the newly created demo campaign
+                    # This ensures the demo campaign is included even if it was created after the initial query
+                    if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
                         campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+                        logger.info(f"✅ Refreshed campaigns list for user {current_user.id} after creating demo campaign")
+                    else:
+                        # For admin users, just add it to the list if not already present
+                        user_demo_campaign = db.query(Campaign).filter(
+                            Campaign.campaign_id == user_demo_campaign_id,
+                            Campaign.user_id == current_user.id
+                        ).first()
+                        if user_demo_campaign and not any(c.campaign_id == user_demo_campaign_id for c in campaigns):
+                            campaigns.append(user_demo_campaign)
+                            logger.info(f"✅ Added user demo campaign {user_demo_campaign_id} to admin user {current_user.id}'s campaign list")
                 else:
                     logger.warning(f"⚠️ Could not create demo campaign for user {current_user.id}")
                     # Check if template exists
                     template_exists = db.query(Campaign).filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
                     if not template_exists:
                         logger.error(f"❌ Template demo campaign {DEMO_CAMPAIGN_ID} does not exist in database!")
+                        logger.error(f"❌ This is a critical error - template campaign must exist for demo campaign creation to work")
             else:
                 logger.info(f"✅ User {current_user.id} already has demo campaign: {user_has_demo.campaign_id}")
-                # Ensure it's in the campaigns list
+                # Ensure it's in the campaigns list (refresh for non-admin if needed)
                 if not any(c.campaign_id == user_has_demo.campaign_id for c in campaigns):
-                    campaigns.append(user_has_demo)
-                    logger.info(f"✅ Added existing demo campaign {user_has_demo.campaign_id} to user {current_user.id}'s campaign list")
+                    if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
+                        # For non-admin, refresh the list to ensure we have the latest data
+                        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+                        logger.info(f"✅ Refreshed campaigns list for user {current_user.id} to include existing demo campaign")
+                    else:
+                        campaigns.append(user_has_demo)
+                        logger.info(f"✅ Added existing demo campaign {user_has_demo.campaign_id} to admin user {current_user.id}'s campaign list")
         except Exception as demo_error:
             logger.error(f"❌ Error handling demo campaign for user {current_user.id}: {demo_error}")
             import traceback
@@ -3381,6 +3384,72 @@ def check_environment_variables(admin_user = Depends(get_admin_user)):
             "Optional variables can be configured as needed for additional features",
         ],
     }
+
+@app.post("/admin/env-update")
+def update_environment_variable(key: str, value: str, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
+    """
+    Update an environment variable value in system_settings - ADMIN ONLY
+    Note: This stores the value in system_settings. For production, you may also need to update systemd environment variables.
+    """
+    try:
+        from models import SystemSettings
+        
+        # List of editable environment variables (for safety - only allow specific vars)
+        editable_vars = [
+            "GUARDRAILS_BLOCK_INJECTION",
+            "CODE_HEALTH_LOC_THRESHOLD",
+            "CODE_HEALTH_ENABLE_PYLINT",
+            "CODE_HEALTH_PYLINT_TARGETS",
+            "EC2_INSTANCE_TYPE",
+            "EC2_HOURLY_RATE_USD",
+            "EC2_UTILIZATION_FACTOR",
+            "MAIL_USERNAME",
+            "MAIL_PASSWORD",
+            "MAIL_FROM",
+            "MAIL_SERVER",
+            "MAIL_PORT",
+        ]
+        
+        if key not in editable_vars:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Variable {key} is not editable via this endpoint"
+            )
+        
+        # Store in system_settings with prefix "env_" to distinguish from other settings
+        setting_key = f"env_{key}"
+        existing = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()
+        
+        if existing:
+            existing.setting_value = value
+            existing.updated_at = datetime.now()
+        else:
+            new_setting = SystemSettings(
+                setting_key=setting_key,
+                setting_value=value,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            db.add(new_setting)
+        
+        db.commit()
+        
+        logger.info(f"✅ Admin {admin_user.id} updated environment variable {key} in system_settings")
+        
+        return {
+            "status": "success",
+            "message": f"Environment variable {key} updated successfully",
+            "key": key,
+            "value": value if "PASSWORD" not in key and "SECRET" not in key and "KEY" not in key else "***"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating environment variable: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update environment variable: {str(e)}"
+        )
 
 @app.post("/admin/campaigns/{campaign_id}/transfer")
 def transfer_campaign(campaign_id: str, target_user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
