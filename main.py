@@ -1183,6 +1183,7 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
 # Analyze endpoint models
 class ResearchAgentRequest(BaseModel):
     agent_type: str
+    force_refresh: Optional[bool] = False  # Admin-only: force re-run even if cached
 
 class AnalyzeRequest(BaseModel):
     campaign_id: Optional[str] = None
@@ -5694,29 +5695,51 @@ def get_research_agent_recommendations(campaign_id: str, request_data: ResearchA
         logger.info(f"✅ Campaign {campaign_id} verified, proceeding with {agent_type} agent")
         from models import CampaignRawData, SystemSettings, CampaignResearchInsights
         
-        # Check if insights already exist in database (cache)
-        existing_insights = db.query(CampaignResearchInsights).filter(
-            CampaignResearchInsights.campaign_id == campaign_id,
-            CampaignResearchInsights.agent_type == agent_type
-        ).first()
-        
-        if existing_insights and existing_insights.insights_text:
-            # Validate cached data is not empty or error message
-            cached_text = existing_insights.insights_text.strip()
-            if cached_text and not cached_text.startswith("ERROR:") and len(cached_text) > 10:
-                logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id} ({len(cached_text)} chars)")
-                return {
-                    "status": "success",
-                    "recommendations": cached_text,
-                    "agent_type": agent_type,
-                    "cached": True
-                }
-            else:
-                # Cached data is invalid (empty or error) - delete it and regenerate
-                logger.warning(f"⚠️ Cached {agent_type} insights for campaign {campaign_id} are invalid (empty or error), regenerating...")
+        # Check if force_refresh is requested (admin-only feature)
+        force_refresh = getattr(request_data, 'force_refresh', False)
+        if force_refresh:
+            # Verify user is admin before allowing force refresh
+            if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
+                logger.warning(f"⚠️ Non-admin user {current_user.id} attempted force refresh - denied")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Force refresh is only available to admin users"
+                )
+            logger.info(f"🔄 Admin user {current_user.id} requested force refresh for {agent_type} insights - clearing cache")
+            # Delete existing cached insights
+            existing_insights = db.query(CampaignResearchInsights).filter(
+                CampaignResearchInsights.campaign_id == campaign_id,
+                CampaignResearchInsights.agent_type == agent_type
+            ).first()
+            if existing_insights:
                 db.delete(existing_insights)
                 db.commit()
-                # Continue to generation below
+                logger.info(f"✅ Cleared cached {agent_type} insights for campaign {campaign_id}")
+        
+        # Check if insights already exist in database (cache) - skip if force_refresh was used
+        if not force_refresh:
+            existing_insights = db.query(CampaignResearchInsights).filter(
+                CampaignResearchInsights.campaign_id == campaign_id,
+                CampaignResearchInsights.agent_type == agent_type
+            ).first()
+            
+            if existing_insights and existing_insights.insights_text:
+                # Validate cached data is not empty or error message
+                cached_text = existing_insights.insights_text.strip()
+                if cached_text and not cached_text.startswith("ERROR:") and len(cached_text) > 10:
+                    logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id} ({len(cached_text)} chars)")
+                    return {
+                        "status": "success",
+                        "recommendations": cached_text,
+                        "agent_type": agent_type,
+                        "cached": True
+                    }
+                else:
+                    # Cached data is invalid (empty or error) - delete it and regenerate
+                    logger.warning(f"⚠️ Cached {agent_type} insights for campaign {campaign_id} are invalid (empty or error), regenerating...")
+                    db.delete(existing_insights)
+                    db.commit()
+                    # Continue to generation below
         
         # Get raw data for context
         rows = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).all()
