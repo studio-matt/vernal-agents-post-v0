@@ -6053,13 +6053,29 @@ IMPORTANT: Format your response as plain text recommendations without titles, nu
 
 {context}
 
-Based on this data, provide:
-- A summary of the main topics identified
-- Topic relationships and coverage analysis
-- Gaps or underrepresented topics
-- Recommendations for expanding topic coverage
+Based on this data, provide topic insights and recommendations.
 
-IMPORTANT: Format your response as plain text recommendations without titles, numbering, or markdown headers. Each recommendation should be a clear, actionable insight. Do not include "Recommendations:" or numbered lists (1., 2., etc.). Just provide the insights directly.""",
+OUTPUT FORMAT (CRITICAL):
+- Output one item per line
+- Each line must start with "REC: " (no quotes, include the colon and space)
+- No headings like "Main Topics Identified" or "Recommendations:"
+- One idea per line
+- Each recommendation should be a clear, actionable insight
+
+Example format:
+REC: Psilocybin for treatment-resistant depression
+REC: Clinical trial content emphasizes short-term outcomes more than long-term effects
+REC: Long-term psychological effects of repeated psilocybin therapy
+REC: Write an article focused on long-term effects of psilocybin therapy
+
+Do not include:
+- Numbered lists (1., 2., etc.)
+- Bullet points (-, •, *)
+- Markdown headers (###, ##, #)
+- Category headers
+- Explanatory text between items
+
+Just provide the REC: lines directly.""",
             
             "research_agent_knowledge-graph_prompt": """Analyze the knowledge graph data from a content campaign scrape:
 
