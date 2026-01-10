@@ -9330,24 +9330,21 @@ async def save_content_item(
                 platform_str = platform.value if hasattr(platform, 'value') else str(platform)
                 file_name = f"{campaign_id}_{week}_{day}_{platform_str}.txt"
                 
-                # Build INSERT statement excluding non-existent columns
-                # Excluded: content_processed_at, image_processed_at, content_published_at, image_published_at, use_without_image
-                # These are in the model but don't exist in the database table yet
-                insert_stmt = text("""
-                    INSERT INTO content (
-                        user_id, campaign_id, week, day, content, title, status, 
-                        date_upload, platform, file_name, file_type, platform_post_no, 
-                        schedule_time, image_url, is_draft, can_edit, 
-                        knowledge_graph_location, parent_idea, landing_page_url
-                    ) VALUES (
-                        :user_id, :campaign_id, :week, :day, :content, :title, :status,
-                        :date_upload, :platform, :file_name, :file_type, :platform_post_no,
-                        :schedule_time, :image_url, :is_draft, :can_edit,
-                        :knowledge_graph_location, :parent_idea, :landing_page_url
-                    )
-                """)
+                # Query database to get actual column names - only insert columns that exist
+                # This prevents recursive failures from missing columns
+                from sqlalchemy import inspect
                 
-                result = db.execute(insert_stmt, {
+                # Get actual columns from database
+                inspector = inspect(db.bind)
+                content_columns = [col['name'] for col in inspector.get_columns('content')]
+                logger.info(f"📋 Database content table has {len(content_columns)} columns")
+                
+                # Build column list and values dict - only include columns that exist
+                columns_to_insert = []
+                values_dict = {}
+                
+                # Required fields (must exist)
+                required_fields = {
                     "user_id": current_user.id,
                     "campaign_id": campaign_id,
                     "week": week,
@@ -9361,13 +9358,45 @@ async def save_content_item(
                     "file_type": "text",
                     "platform_post_no": item.get("platform_post_no", "1"),
                     "schedule_time": schedule_time,
+                }
+                
+                # Optional fields (only if column exists)
+                optional_fields = {
                     "image_url": image_url if image_url else None,
                     "is_draft": 1,
                     "can_edit": 1,
                     "knowledge_graph_location": item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
                     "parent_idea": item.get("parent_idea") if item.get("parent_idea") else None,
-                    "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None
-                })
+                    "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None,
+                }
+                
+                # Add required fields
+                for col, val in required_fields.items():
+                    if col in content_columns:
+                        columns_to_insert.append(col)
+                        values_dict[col] = val
+                    else:
+                        logger.error(f"❌ Required column '{col}' not found in database table!")
+                        raise HTTPException(status_code=500, detail=f"Database schema error: required column '{col}' missing")
+                
+                # Add optional fields only if column exists
+                for col, val in optional_fields.items():
+                    if col in content_columns:
+                        columns_to_insert.append(col)
+                        values_dict[col] = val
+                    else:
+                        logger.debug(f"⚠️ Optional column '{col}' not in database, skipping")
+                
+                # Build dynamic INSERT statement with only existing columns
+                columns_str = ", ".join(columns_to_insert)
+                placeholders_str = ", ".join([f":{col}" for col in columns_to_insert])
+                
+                insert_stmt = text(f"""
+                    INSERT INTO content ({columns_str})
+                    VALUES ({placeholders_str})
+                """)
+                
+                result = db.execute(insert_stmt, values_dict)
                 
                 # Get the inserted ID
                 content_id = result.lastrowid
