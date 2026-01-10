@@ -9321,53 +9321,72 @@ async def save_content_item(
                 week = week or 1
                 day = day or "Monday"
                 
-                # Check which optional columns exist in the database to avoid setting non-existent columns
+                # Use hybrid approach: ORM table definition but controlled INSERT
+                # This prevents SQLAlchemy from trying to insert columns that don't exist
                 from sqlalchemy import inspect
+                from sqlalchemy.dialects.mysql import insert
+                
+                # Get actual columns from database
                 inspector = inspect(db.bind)
                 content_columns = [col['name'] for col in inspector.get_columns('content')]
+                logger.info(f"📋 Database content table has {len(content_columns)} columns")
                 
-                # Create Content object with required fields
                 # Convert PlatformEnum to string for database storage
                 platform_str = platform.value if hasattr(platform, 'value') else str(platform)
-                new_content = Content(
-                    user_id=current_user.id,
-                    campaign_id=campaign_id,
-                    week=week,
-                    day=day,
-                    content=content_text,
-                    title=title_text,
-                    status="draft",
-                    date_upload=now,
-                    platform=platform_str,  # Store as string (database column is String, not Enum)
-                    file_name=f"{campaign_id}_{week}_{day}_{platform_str}.txt",
-                    file_type="text",
-                    platform_post_no=item.get("platform_post_no", "1"),
-                    schedule_time=schedule_time,
-                    image_url=image_url if image_url else None,
-                    is_draft=True,
-                    can_edit=True,
-                )
+                file_name = f"{campaign_id}_{week}_{day}_{platform_str}.txt"
                 
-                # Only set optional columns if they exist in the database
+                # Build values dict with only columns that exist in database
+                values = {
+                    "user_id": current_user.id,
+                    "campaign_id": campaign_id,
+                    "week": week,
+                    "day": day,
+                    "content": content_text,
+                    "title": title_text,
+                    "status": "draft",
+                    "date_upload": now,
+                    "platform": platform_str,
+                    "file_name": file_name,
+                    "file_type": "text",
+                    "platform_post_no": item.get("platform_post_no", "1"),
+                    "schedule_time": schedule_time,
+                    "image_url": image_url if image_url else None,
+                    "is_draft": 1,
+                    "can_edit": 1,
+                }
+                
+                # Add optional columns only if they exist in database
                 if "knowledge_graph_location" in content_columns and item.get("knowledge_graph_location"):
-                    new_content.knowledge_graph_location = item.get("knowledge_graph_location")
+                    values["knowledge_graph_location"] = item.get("knowledge_graph_location")
                 
                 if "parent_idea" in content_columns and item.get("parent_idea"):
-                    new_content.parent_idea = item.get("parent_idea")
+                    values["parent_idea"] = item.get("parent_idea")
                 
                 if "landing_page_url" in content_columns and item.get("landing_page_url"):
-                    new_content.landing_page_url = item.get("landing_page_url")
+                    values["landing_page_url"] = item.get("landing_page_url")
                 
                 if "use_without_image" in content_columns:
-                    new_content.use_without_image = bool(item.get("use_without_image", False))
+                    values["use_without_image"] = 1 if item.get("use_without_image", False) else 0
                 
-                # Don't set timestamp columns if they don't exist - they'll be None by default
-                # These are set when content/image is actually processed, not on initial save
+                # Use Content.__table__ to get the table definition, but control which columns are inserted
+                # This gives us ORM benefits (type safety, table definition) but full control over INSERT
+                from sqlalchemy import text
+                columns_str = ", ".join([col for col in values.keys() if col in content_columns])
+                placeholders_str = ", ".join([f":{col}" for col in values.keys() if col in content_columns])
                 
-                db.add(new_content)
-                db.flush()  # Flush to get the ID and catch any errors early (original working pattern)
-                content_id = new_content.id
-                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform.value if hasattr(platform, 'value') else platform}, has_image={bool(image_url)}")
+                insert_stmt = text(f"""
+                    INSERT INTO content ({columns_str})
+                    VALUES ({placeholders_str})
+                """)
+                
+                # Filter values to only include columns that exist
+                filtered_values = {k: v for k, v in values.items() if k in content_columns}
+                
+                result = db.execute(insert_stmt, filtered_values)
+                content_id = result.lastrowid
+                
+                db.flush()  # Flush to ensure data is visible (original working pattern)
+                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform_str}, has_image={bool(image_url)}")
             except Exception as create_error:
                 logger.error(f"❌ Error creating Content object: {create_error}")
                 import traceback
