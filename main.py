@@ -9201,7 +9201,8 @@ async def save_content_item(
         }
         platform_enum = platform_map.get(platform_str, PlatformEnum.LINKEDIN)
         # Convert to string for database storage (database column is String, not Enum)
-        platform_db_value = platform_enum.value if hasattr(platform_enum, 'value') else str(platform_enum).lower()
+        # CRITICAL: Always use lowercase for database storage to ensure consistency
+        platform_db_value = (platform_enum.value if hasattr(platform_enum, 'value') else str(platform_enum)).lower()
         
         logger.info(f"🔍 Platform enum: {platform_enum}, DB value: '{platform_db_value}' (type: {type(platform_db_value)})")
         
@@ -9217,13 +9218,26 @@ async def save_content_item(
                 if str(content_id).isdigit():
                     content_id_int = int(content_id)
                     database_id = content_id_int
-                    existing_content = db.query(Content).filter(
-                        Content.id == content_id_int,
-                        Content.campaign_id == campaign_id,
-                        Content.user_id == current_user.id
-                    ).first()
-                    if existing_content:
-                        logger.info(f"🔍 Found existing content by database ID: {content_id_int}")
+                    # Use raw SQL to avoid ORM trying to SELECT non-existent columns
+                    from sqlalchemy import text
+                    id_check_query = text("""
+                        SELECT id FROM content 
+                        WHERE id = :id 
+                        AND campaign_id = :campaign_id 
+                        AND user_id = :user_id
+                        LIMIT 1
+                    """)
+                    id_check_result = db.execute(id_check_query, {
+                        "id": content_id_int,
+                        "campaign_id": campaign_id,
+                        "user_id": current_user.id
+                    }).first()
+                    
+                    if id_check_result:
+                        # Now query with ORM using the ID (which will work since we know it exists)
+                        existing_content = db.query(Content).filter(Content.id == content_id_int).first()
+                        if existing_content:
+                            logger.info(f"🔍 Found existing content by database ID: {content_id_int}")
                 else:
                     # ID is not numeric (frontend-generated like "week-1-Monday-linkedin-0-post-1")
                     # Still check for existing content by week/day/platform to avoid duplicates
@@ -9234,19 +9248,35 @@ async def save_content_item(
         
         # ALWAYS check by week/day/platform if no existing content found by database ID
         # This prevents duplicate content creation when frontend uses composite IDs
-        # CRITICAL: Compare using string value, not PlatformEnum object
+        # CRITICAL: Use raw SQL to avoid ORM trying to SELECT non-existent columns
         if not existing_content:
-            existing_content = db.query(Content).filter(
-                Content.campaign_id == campaign_id,
-                Content.week == week,
-                Content.day == day,
-                Content.platform == platform_db_value,  # Use string value, not PlatformEnum
-                Content.user_id == current_user.id
-            ).first()
-            if existing_content:
-                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}, db_id={existing_content.id}")
+            from sqlalchemy import text
+            # Use raw SQL to check for existing content - avoids ORM column issues
+            check_query = text("""
+                SELECT id FROM content 
+                WHERE campaign_id = :campaign_id 
+                AND week = :week 
+                AND day = :day 
+                AND platform = :platform 
+                AND user_id = :user_id
+                LIMIT 1
+            """)
+            check_result = db.execute(check_query, {
+                "campaign_id": campaign_id,
+                "week": week,
+                "day": day,
+                "platform": platform_db_value.lower(),  # Ensure lowercase for comparison
+                "user_id": current_user.id
+            }).first()
+            
+            if check_result:
+                existing_id = dict(check_result._mapping)['id']
+                # Now query with ORM using the ID (which will work since we know it exists)
+                existing_content = db.query(Content).filter(Content.id == existing_id).first()
+                if existing_content:
+                    logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}, db_id={existing_content.id}")
             else:
-                logger.info(f"🔍 No existing content found for week={week}, day={day}, platform={platform_db_value}, will create new")
+                logger.info(f"🔍 No existing content found for week={week}, day={day}, platform={platform_db_value.lower()}, will create new")
         
         # If still no existing content, we'll create a new one
         
