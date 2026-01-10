@@ -9506,18 +9506,18 @@ def get_campaign_content_items(
                     Content.week.asc().nulls_last(),
                     Content.day.asc().nulls_last()
                 ).all()
-        except Exception as order_error:
-            # Fallback: if nulls_last() doesn't work, use a simpler query
-            logger.warning(f"Order by with nulls_last failed, using simpler query: {order_error}")
-            content_items = db.query(Content).filter(
-                Content.campaign_id == campaign_id,
-                Content.user_id == current_user.id
-            ).all()
-            # Sort in Python instead
-            content_items = sorted(content_items, key=lambda x: (
-                x.week if x.week is not None else 999,
-                x.day if x.day is not None else ""
-            ))
+            except Exception as order_error:
+                # Fallback: if nulls_last() doesn't work, use a simpler query
+                logger.warning(f"Order by with nulls_last failed, using simpler query: {order_error}")
+                content_items = db.query(Content).filter(
+                    Content.campaign_id == campaign_id,
+                    Content.user_id == current_user.id
+                ).all()
+                # Sort in Python instead
+                content_items = sorted(content_items, key=lambda x: (
+                    x.week if x.week is not None else 999,
+                    x.day if x.day is not None else ""
+                ))
         
         logger.info(f"📋 Found {len(content_items)} content items for campaign {campaign_id}")
         
