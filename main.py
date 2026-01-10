@@ -9233,11 +9233,11 @@ async def save_content_item(
                 Content.campaign_id == campaign_id,
                 Content.week == week,
                 Content.day == day,
-                Content.platform == platform,
+                Content.platform == platform,  # platform is now PlatformEnum
                 Content.user_id == current_user.id
             ).first()
             if existing_content:
-                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform}")
+                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform.value if hasattr(platform, 'value') else platform}")
         
         # If still no existing content, we'll create a new one
         
