@@ -9434,6 +9434,7 @@ def get_campaign_content_items(
                     "image_url": image_url,  # Also include image_url for compatibility
                     "status": item.status or "draft",
                     "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
+                    "created_at": item.date_upload.isoformat() if item.date_upload else None,  # Creation timestamp - IMPORTANT data point
                     "contentProcessedAt": item.content_processed_at.isoformat() if hasattr(item, 'content_processed_at') and item.content_processed_at is not None else None,
                     "imageProcessedAt": item.image_processed_at.isoformat() if hasattr(item, 'image_processed_at') and item.image_processed_at is not None else None,
                     "contentPublishedAt": item.content_published_at.isoformat() if hasattr(item, 'content_published_at') and item.content_published_at is not None else None,
