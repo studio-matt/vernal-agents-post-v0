@@ -329,7 +329,7 @@ include_routers()
 
 # Import authentication helpers after routers are included
 try:
-    from auth_api import get_current_user, verify_campaign_ownership, get_admin_user
+    from auth_api import get_current_user, verify_campaign_ownership, get_admin_user, get_plugin_user
     logger.info("✅ Authentication helpers imported successfully")
 except Exception as e:
     logger.error(f"❌ Failed to import authentication helpers: {e}")
@@ -3663,6 +3663,148 @@ def trigger_code_health_scan(admin_user = Depends(get_admin_user)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to run code health scan: {str(e)}"
         )
+
+@app.post("/admin/plugins/api-keys")
+def create_plugin_api_key(
+    name: Optional[str] = None,
+    admin_user = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Generate a new API key for WordPress plugin authentication - ADMIN ONLY"""
+    try:
+        from models import PluginAPIKey
+        import secrets
+        from datetime import datetime, timedelta
+        
+        # Generate secure API key (64 character hex string)
+        api_key = f"vcb_{secrets.token_hex(32)}"  # vcb = vernal contentum backend
+        
+        # Create API key record
+        plugin_key = PluginAPIKey(
+            user_id=admin_user.id,
+            api_key=api_key,
+            name=name or f"Plugin API Key {datetime.utcnow().strftime('%Y-%m-%d')}",
+            is_active=True,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(plugin_key)
+        db.commit()
+        db.refresh(plugin_key)
+        
+        logger.info(f"✅ Created plugin API key for user {admin_user.id}: {plugin_key.id}")
+        
+        return {
+            "status": "success",
+            "message": "API key created successfully",
+            "data": {
+                "id": plugin_key.id,
+                "api_key": api_key,  # Only returned once - user must save it
+                "name": plugin_key.name,
+                "created_at": plugin_key.created_at.isoformat(),
+                "user_id": plugin_key.user_id
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating plugin API key: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create API key: {str(e)}"
+        )
+
+@app.get("/admin/plugins/api-keys")
+def list_plugin_api_keys(
+    admin_user = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """List all plugin API keys for the admin user - ADMIN ONLY"""
+    try:
+        from models import PluginAPIKey
+        
+        # Get all API keys for this user
+        api_keys = db.query(PluginAPIKey).filter(
+            PluginAPIKey.user_id == admin_user.id
+        ).order_by(PluginAPIKey.created_at.desc()).all()
+        
+        return {
+            "status": "success",
+            "data": [
+                {
+                    "id": key.id,
+                    "name": key.name,
+                    "is_active": key.is_active,
+                    "created_at": key.created_at.isoformat() if key.created_at else None,
+                    "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+                    "expires_at": key.expires_at.isoformat() if key.expires_at else None,
+                    # Don't return full API key for security - only show first/last few chars
+                    "api_key_preview": f"{key.api_key[:8]}...{key.api_key[-4:]}" if len(key.api_key) > 12 else "***"
+                }
+                for key in api_keys
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error listing plugin API keys: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list API keys: {str(e)}"
+        )
+
+@app.delete("/admin/plugins/api-keys/{key_id}")
+def delete_plugin_api_key(
+    key_id: int,
+    admin_user = Depends(get_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Delete or deactivate a plugin API key - ADMIN ONLY"""
+    try:
+        from models import PluginAPIKey
+        
+        api_key = db.query(PluginAPIKey).filter(
+            PluginAPIKey.id == key_id,
+            PluginAPIKey.user_id == admin_user.id  # Only allow deleting own keys
+        ).first()
+        
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="API key not found"
+            )
+        
+        # Soft delete - mark as inactive
+        api_key.is_active = False
+        db.commit()
+        
+        logger.info(f"✅ Deactivated plugin API key {key_id} for user {admin_user.id}")
+        
+        return {
+            "status": "success",
+            "message": "API key deactivated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting plugin API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete API key: {str(e)}"
+        )
+
+@app.get("/plugin/test")
+def plugin_test_endpoint(plugin_user = Depends(get_plugin_user)):
+    """Test endpoint for WordPress plugin authentication - Requires API key"""
+    return {
+        "status": "success",
+        "message": "Plugin authentication successful",
+        "user": {
+            "id": plugin_user.id,
+            "username": plugin_user.username,
+            "email": plugin_user.email
+        }
+    }
 
 @app.put("/admin/settings/{setting_key}")
 def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):

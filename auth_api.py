@@ -132,6 +132,76 @@ def get_admin_user(current_user = Depends(get_current_user)):
         )
     return current_user
 
+def get_plugin_user(request: Request, db: Session = Depends(get_db)):
+    """
+    Get user from plugin API key (for WordPress plugin → Backend authentication).
+    Checks X-API-Key header or Authorization: Bearer <api_key> header.
+    """
+    try:
+        # Check for API key in X-API-Key header
+        api_key = request.headers.get("X-API-Key")
+        
+        # Also check Authorization header (Bearer <api_key>)
+        if not api_key:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                api_key = auth_header.replace("Bearer ", "")
+        
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="API key required. Provide X-API-Key header or Authorization: Bearer <key>",
+                headers={"WWW-Authenticate": "ApiKey"},
+            )
+        
+        from models import PluginAPIKey, User
+        from datetime import datetime
+        
+        # Find API key in database
+        plugin_key = db.query(PluginAPIKey).filter(
+            PluginAPIKey.api_key == api_key,
+            PluginAPIKey.is_active == True
+        ).first()
+        
+        if not plugin_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key",
+                headers={"WWW-Authenticate": "ApiKey"},
+            )
+        
+        # Check expiration if set
+        if plugin_key.expires_at and plugin_key.expires_at < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="API key has expired",
+                headers={"WWW-Authenticate": "ApiKey"},
+            )
+        
+        # Update last used timestamp
+        plugin_key.last_used_at = datetime.utcnow()
+        db.commit()
+        
+        # Get associated user
+        user = db.query(User).filter(User.id == plugin_key.user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User associated with API key not found",
+                headers={"WWW-Authenticate": "ApiKey"},
+            )
+        
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Plugin API key authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
 def verify_campaign_ownership(
     campaign_id: str,
     current_user = Depends(get_current_user),

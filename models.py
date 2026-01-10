@@ -320,3 +320,19 @@ class SystemSettings(Base):
 
     def __repr__(self):
         return f"<SystemSettings(id={self.id}, key={self.setting_key})>"
+
+# Plugin API Keys for WordPress plugin → Backend authentication
+class PluginAPIKey(Base):
+    __tablename__ = "plugin_api_key"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    api_key = Column(String(255), unique=True, nullable=False, index=True)  # Generated API key
+    name = Column(String(255), nullable=True)  # Optional name/description for the key
+    is_active = Column(Boolean, default=True, nullable=False)  # Can be deactivated without deletion
+    created_at = Column(DateTime, default=datetime.now)
+    last_used_at = Column(DateTime, nullable=True)  # Track last usage
+    expires_at = Column(DateTime, nullable=True)  # Optional expiration
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<PluginAPIKey(id={self.id}, user_id={self.user_id}, name={self.name})>"
