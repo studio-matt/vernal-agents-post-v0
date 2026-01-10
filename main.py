@@ -9471,13 +9471,17 @@ def get_campaign_content_items(
             logger.info(f"📋 Raw SQL query found {len(raw_results)} content items for campaign {campaign_id}")
             
             # Convert raw results to Content objects efficiently (avoid N+1 queries)
-            if raw_results:
-                content_ids = [dict(row._mapping)['id'] for row in raw_results]
-                # Query all Content objects at once
-                content_items = db.query(Content).filter(Content.id.in_(content_ids)).all()
-                # Sort by week/day to match raw SQL order
-                content_items.sort(key=lambda x: (x.week or 999, x.day or ""))
-                logger.info(f"📋 Converted {len(content_items)} raw SQL results to ORM objects")
+            if raw_results and len(raw_results) > 0:
+                content_ids = [dict(row._mapping)['id'] for row in raw_results if 'id' in dict(row._mapping)]
+                if content_ids:
+                    # Query all Content objects at once
+                    content_items = db.query(Content).filter(Content.id.in_(content_ids)).all()
+                    # Sort by week/day to match raw SQL order
+                    content_items.sort(key=lambda x: (x.week or 999, x.day or ""))
+                    logger.info(f"📋 Converted {len(content_items)} raw SQL results to ORM objects")
+                else:
+                    logger.warning("⚠️ Raw SQL returned results but no valid IDs found")
+                    content_items = []
             else:
                 content_items = []
             
