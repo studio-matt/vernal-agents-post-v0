@@ -9186,7 +9186,7 @@ async def save_content_item(
         day = item.get("day", "Monday")
         platform_str = item.get("platform", "linkedin").lower()
         
-        # Map platform string to PlatformEnum
+        # Map platform string to PlatformEnum for validation, but store as string in database
         from models import PlatformEnum
         platform_map = {
             "linkedin": PlatformEnum.LINKEDIN,
@@ -9197,7 +9197,9 @@ async def save_content_item(
             "wordpress": PlatformEnum.WORDPRESS,
             "tiktok": PlatformEnum.TIKTOK,
         }
-        platform = platform_map.get(platform_str, PlatformEnum.LINKEDIN)
+        platform_enum = platform_map.get(platform_str, PlatformEnum.LINKEDIN)
+        # Convert to string for database storage (database column is String, not Enum)
+        platform_db_value = platform_enum.value if hasattr(platform_enum, 'value') else str(platform_enum).lower()
         
         # Check if request includes a database ID (numeric) - if so, find that specific content item
         existing_content = None
@@ -9228,16 +9230,17 @@ async def save_content_item(
         # If no existing content found by ID and ID was numeric (or not provided),
         # check by week/day/platform (for backward compatibility with existing content)
         # This allows updating existing content that was created before the ID-based system
+        # CRITICAL: Compare using string value, not PlatformEnum object
         if not existing_content and (not content_id or (isinstance(content_id, (int, str)) and str(content_id).isdigit())):
             existing_content = db.query(Content).filter(
                 Content.campaign_id == campaign_id,
                 Content.week == week,
                 Content.day == day,
-                Content.platform == platform,  # platform is now PlatformEnum
+                Content.platform == platform_db_value,  # Use string value, not PlatformEnum
                 Content.user_id == current_user.id
             ).first()
             if existing_content:
-                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform.value if hasattr(platform, 'value') else platform}")
+                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}")
         
         # If still no existing content, we'll create a new one
         
@@ -9287,7 +9290,7 @@ async def save_content_item(
             if item.get("day"):
                 existing_content.day = day
             if item.get("platform"):
-                existing_content.platform = platform
+                existing_content.platform = platform_db_value  # Store string value, not PlatformEnum
             # Update use_without_image if provided (only if column exists in database)
             if "use_without_image" in item and hasattr(existing_content, 'use_without_image'):
                 existing_content.use_without_image = bool(item.get("use_without_image"))
@@ -9299,12 +9302,12 @@ async def save_content_item(
             
             # If content is empty, use a placeholder (for image-only saves)
             if not content_text or not content_text.strip():
-                platform_name = platform.value.title() if hasattr(platform, 'value') else str(platform).title()
+                platform_name = platform_db_value.title()
                 content_text = f"Content for {platform_name} - {day}"
             
             # If title is empty, generate a default
             if not title_text or not title_text.strip():
-                platform_name = platform.value.title() if hasattr(platform, 'value') else str(platform).title()
+                platform_name = platform_db_value.title()
                 title_text = f"{platform_name} Post - {day}"
             
             # Create new content using ORM (more robust than raw SQL)
@@ -9330,9 +9333,8 @@ async def save_content_item(
                 content_columns = [col['name'] for col in inspector.get_columns('content')]
                 logger.info(f"📋 Database content table has {len(content_columns)} columns")
                 
-                # Convert PlatformEnum to string for database storage
-                platform_str = platform.value if hasattr(platform, 'value') else str(platform)
-                file_name = f"{campaign_id}_{week}_{day}_{platform_str}.txt"
+                # Use platform_db_value (already converted to string)
+                file_name = f"{campaign_id}_{week}_{day}_{platform_db_value}.txt"
                 
                 # Build values dict with only columns that exist in database
                 values = {
@@ -9344,7 +9346,7 @@ async def save_content_item(
                     "title": title_text,
                     "status": "draft",
                     "date_upload": now,
-                    "platform": platform_str,
+                    "platform": platform_db_value,  # Use string value, not PlatformEnum
                     "file_name": file_name,
                     "file_type": "text",
                     "platform_post_no": item.get("platform_post_no", "1"),
@@ -9387,7 +9389,7 @@ async def save_content_item(
                 # CRITICAL: For raw SQL, we need to explicitly commit the statement
                 # SQLAlchemy doesn't auto-track raw SQL in the session like ORM does
                 db.flush()  # Flush to ensure data is sent to database
-                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform_str}, has_image={bool(image_url)}")
+                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform_db_value}, has_image={bool(image_url)}")
                 
                 # Verify the insert worked by immediately querying
                 verify_content = db.execute(text("SELECT id FROM content WHERE id = :id"), {"id": content_id}).first()
