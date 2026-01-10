@@ -9267,8 +9267,9 @@ async def save_content_item(
             content_update = item.get("description") or item.get("content", "")
             if content_update and content_update.strip():
                 existing_content.content = content_update
-                # Update content processed timestamp when content is updated
-                existing_content.content_processed_at = datetime.now().replace(tzinfo=None)
+                # Update content processed timestamp when content is updated (if column exists)
+                if hasattr(existing_content, 'content_processed_at'):
+                    existing_content.content_processed_at = datetime.now().replace(tzinfo=None)
             # Update image if provided (support both field names)
             image_url = item.get("image") or item.get("image_url")
             if image_url:
