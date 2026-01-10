@@ -9184,7 +9184,20 @@ async def save_content_item(
         item = request_data
         week = item.get("week", 1)
         day = item.get("day", "Monday")
-        platform = item.get("platform", "linkedin").lower()
+        platform_str = item.get("platform", "linkedin").lower()
+        
+        # Map platform string to PlatformEnum
+        from models import PlatformEnum
+        platform_map = {
+            "linkedin": PlatformEnum.LINKEDIN,
+            "instagram": PlatformEnum.INSTAGRAM,
+            "facebook": PlatformEnum.FACEBOOK,
+            "twitter": PlatformEnum.TWITTER,
+            "youtube": PlatformEnum.YOUTUBE,
+            "wordpress": PlatformEnum.WORDPRESS,
+            "tiktok": PlatformEnum.TIKTOK,
+        }
+        platform = platform_map.get(platform_str, PlatformEnum.LINKEDIN)
         
         # Check if request includes a database ID (numeric) - if so, find that specific content item
         existing_content = None
