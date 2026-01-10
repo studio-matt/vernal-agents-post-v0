@@ -9368,6 +9368,7 @@ async def save_content_item(
                     "knowledge_graph_location": item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
                     "parent_idea": item.get("parent_idea") if item.get("parent_idea") else None,
                     "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None,
+                    "use_without_image": 1 if item.get("use_without_image", False) else 0,
                 }
                 
                 # Add required fields
