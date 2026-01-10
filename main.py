@@ -9327,6 +9327,8 @@ async def save_content_item(
                 content_columns = [col['name'] for col in inspector.get_columns('content')]
                 
                 # Create Content object with required fields
+                # Convert PlatformEnum to string for database storage
+                platform_str = platform.value if hasattr(platform, 'value') else str(platform)
                 new_content = Content(
                     user_id=current_user.id,
                     campaign_id=campaign_id,
@@ -9336,8 +9338,8 @@ async def save_content_item(
                     title=title_text,
                     status="draft",
                     date_upload=now,
-                    platform=platform,  # Use PlatformEnum directly
-                    file_name=f"{campaign_id}_{week}_{day}_{platform.value if hasattr(platform, 'value') else platform}.txt",
+                    platform=platform_str,  # Store as string (database column is String, not Enum)
+                    file_name=f"{campaign_id}_{week}_{day}_{platform_str}.txt",
                     file_type="text",
                     platform_post_no=item.get("platform_post_no", "1"),
                     schedule_time=schedule_time,
