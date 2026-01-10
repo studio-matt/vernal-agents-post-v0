@@ -9321,37 +9321,56 @@ async def save_content_item(
                 day = day or "Monday"
                 platform = platform or "linkedin"
                 
-                # Create new content - only set fields that exist in database
+                # Create new content using direct INSERT to exclude non-existent columns
                 # Note: content_processed_at, image_processed_at, content_published_at, image_published_at
-                # are defined in model but may not exist in database table yet
-                new_content = Content(
-                    user_id=current_user.id,
-                    campaign_id=campaign_id,
-                    week=week,
-                    day=day,
-                    content=content_text,
-                    title=title_text,
-                    status="draft",
-                    date_upload=now,  # MySQL doesn't support timezone-aware datetimes
-                    platform=platform,
-                    file_name=f"{campaign_id}_{week}_{day}_{platform.value if hasattr(platform, 'value') else platform}.txt",
-                    file_type="text",
-                    platform_post_no=item.get("platform_post_no", "1"),
-                    schedule_time=schedule_time,
-                    image_url=image_url if image_url else None,  # Explicitly set to None if empty
-                    is_draft=True,
-                    can_edit=True,
-                    knowledge_graph_location=item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
-                    parent_idea=item.get("parent_idea") if item.get("parent_idea") else None,
-                    landing_page_url=item.get("landing_page_url") if item.get("landing_page_url") else None,
-                    use_without_image=bool(item.get("use_without_image", False))
-                )
-                # Only set timestamp fields if they exist in the database (check via hasattr after creation)
-                # For now, skip these fields to avoid schema mismatch errors
-                # TODO: Add database migration to add these columns
-                db.add(new_content)
-                db.flush()  # Flush to get the ID and catch any errors early
-                logger.info(f"✅ Created new content (ID: {new_content.id}): week={week}, day={day}, platform={platform}, has_image={bool(image_url)}")
+                # are defined in model but don't exist in database table yet
+                # Use direct SQL INSERT to avoid SQLAlchemy trying to include these columns
+                from sqlalchemy import text
+                
+                platform_str = platform.value if hasattr(platform, 'value') else str(platform)
+                file_name = f"{campaign_id}_{week}_{day}_{platform_str}.txt"
+                
+                # Build INSERT statement excluding the non-existent timestamp columns
+                insert_stmt = text("""
+                    INSERT INTO content (
+                        user_id, campaign_id, week, day, content, title, status, 
+                        date_upload, platform, file_name, file_type, platform_post_no, 
+                        schedule_time, image_url, is_draft, can_edit, 
+                        knowledge_graph_location, parent_idea, landing_page_url, use_without_image
+                    ) VALUES (
+                        :user_id, :campaign_id, :week, :day, :content, :title, :status,
+                        :date_upload, :platform, :file_name, :file_type, :platform_post_no,
+                        :schedule_time, :image_url, :is_draft, :can_edit,
+                        :knowledge_graph_location, :parent_idea, :landing_page_url, :use_without_image
+                    )
+                """)
+                
+                result = db.execute(insert_stmt, {
+                    "user_id": current_user.id,
+                    "campaign_id": campaign_id,
+                    "week": week,
+                    "day": day,
+                    "content": content_text,
+                    "title": title_text,
+                    "status": "draft",
+                    "date_upload": now,
+                    "platform": platform_str,
+                    "file_name": file_name,
+                    "file_type": "text",
+                    "platform_post_no": item.get("platform_post_no", "1"),
+                    "schedule_time": schedule_time,
+                    "image_url": image_url if image_url else None,
+                    "is_draft": 1,
+                    "can_edit": 1,
+                    "knowledge_graph_location": item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
+                    "parent_idea": item.get("parent_idea") if item.get("parent_idea") else None,
+                    "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None,
+                    "use_without_image": 1 if item.get("use_without_image", False) else 0
+                })
+                
+                # Get the inserted ID
+                content_id = result.lastrowid
+                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform_str}, has_image={bool(image_url)}")
             except Exception as create_error:
                 logger.error(f"❌ Error creating Content object: {create_error}")
                 import traceback
