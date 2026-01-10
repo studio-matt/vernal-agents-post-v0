@@ -9234,9 +9234,11 @@ async def save_content_item(
                     }).first()
                     
                     if id_check_result:
-                        # Now query with ORM using the ID (which will work since we know it exists)
-                        existing_content = db.query(Content).filter(Content.id == content_id_int).first()
-                        if existing_content:
+                        # Use raw SQL to get content data (avoid ORM column issues)
+                        existing_data_query = text("SELECT * FROM content WHERE id = :id LIMIT 1")
+                        existing_data = db.execute(existing_data_query, {"id": content_id_int}).first()
+                        if existing_data:
+                            existing_content = dict(existing_data._mapping)
                             logger.info(f"🔍 Found existing content by database ID: {content_id_int}")
                 else:
                     # ID is not numeric (frontend-generated like "week-1-Monday-linkedin-0-post-1")
@@ -9271,10 +9273,12 @@ async def save_content_item(
             
             if check_result:
                 existing_id = dict(check_result._mapping)['id']
-                # Now query with ORM using the ID (which will work since we know it exists)
-                existing_content = db.query(Content).filter(Content.id == existing_id).first()
-                if existing_content:
-                    logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}, db_id={existing_content.id}")
+                # Use raw SQL to get content data (avoid ORM column issues)
+                existing_data_query = text("SELECT * FROM content WHERE id = :id LIMIT 1")
+                existing_data = db.execute(existing_data_query, {"id": existing_id}).first()
+                if existing_data:
+                    existing_content = dict(existing_data._mapping)
+                    logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}, db_id={existing_id}")
             else:
                 logger.info(f"🔍 No existing content found for week={week}, day={day}, platform={platform_db_value.lower()}, will create new")
         
@@ -9300,37 +9304,63 @@ async def save_content_item(
             schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
         
         if existing_content:
-            # Update existing content
-            if item.get("title"):
-                existing_content.title = item.get("title")
+            # Update existing content using raw SQL (avoid ORM column issues)
+            existing_id = existing_content['id']
             content_update = item.get("description") or item.get("content", "")
-            if content_update and content_update.strip():
-                existing_content.content = content_update
-                # Update content processed timestamp when content is updated (if column exists)
-                if hasattr(existing_content, 'content_processed_at'):
-                    existing_content.content_processed_at = datetime.now().replace(tzinfo=None)
-            # Update image if provided (support both field names)
             image_url = item.get("image") or item.get("image_url")
+            
+            # Get actual columns from database
+            from sqlalchemy import inspect
+            inspector = inspect(db.bind)
+            content_columns = [col['name'] for col in inspector.get_columns('content')]
+            
+            # Build UPDATE statement with only existing columns
+            update_fields = []
+            update_values = {"id": existing_id}
+            
+            if item.get("title"):
+                update_fields.append("title = :title")
+                update_values["title"] = item.get("title")
+            
+            if content_update and content_update.strip():
+                update_fields.append("content = :content")
+                update_values["content"] = content_update
+            
             if image_url:
-                existing_content.image_url = image_url
-                # Update image processed timestamp when image is updated (if column exists)
-                if hasattr(existing_content, 'image_processed_at'):
-                    existing_content.image_processed_at = datetime.now().replace(tzinfo=None)
-            existing_content.status = "draft"
-            existing_content.is_draft = True
-            existing_content.can_edit = True
-            existing_content.schedule_time = schedule_time
-            # Update week/day/platform if provided (in case they changed)
+                update_fields.append("image_url = :image_url")
+                update_values["image_url"] = image_url
+            
+            update_fields.append("status = :status")
+            update_values["status"] = "draft"
+            
+            update_fields.append("is_draft = :is_draft")
+            update_values["is_draft"] = 1
+            
+            update_fields.append("can_edit = :can_edit")
+            update_values["can_edit"] = 1
+            
+            update_fields.append("schedule_time = :schedule_time")
+            update_values["schedule_time"] = schedule_time
+            
             if item.get("week"):
-                existing_content.week = week
+                update_fields.append("week = :week")
+                update_values["week"] = week
+            
             if item.get("day"):
-                existing_content.day = day
+                update_fields.append("day = :day")
+                update_values["day"] = day
+            
             if item.get("platform"):
-                existing_content.platform = platform_db_value  # Store string value, not PlatformEnum
-            # Update use_without_image if provided (only if column exists in database)
-            if "use_without_image" in item and hasattr(existing_content, 'use_without_image'):
-                existing_content.use_without_image = bool(item.get("use_without_image"))
-            logger.info(f"✅ Updated existing content (ID: {existing_content.id}): week={week}, day={day}, platform={platform}, image={bool(image_url)}")
+                update_fields.append("platform = :platform")
+                update_values["platform"] = platform_db_value
+            
+            if update_fields:
+                update_stmt = text(f"UPDATE content SET {', '.join(update_fields)} WHERE id = :id")
+                db.execute(update_stmt, update_values)
+                logger.info(f"✅ Updated existing content (ID: {existing_id}): week={week}, day={day}, platform={platform_db_value}, image={bool(image_url)}")
+            
+            # Set final_content_id for return
+            final_content_id = existing_id
         else:
             # Validate required fields
             content_text = item.get("description") or item.get("content", "")
@@ -9443,11 +9473,12 @@ async def save_content_item(
                     detail=f"Failed to create content item: {str(create_error)}"
                 )
         
-        # Commit the transaction (flush already happened above for new content)
+        # Commit the transaction
         db.commit()
         
         # Get the final content_id for return value
-        final_content_id = existing_content.id if existing_content else (content_id if 'content_id' in locals() else None)
+        if not existing_content:
+            final_content_id = content_id if 'content_id' in locals() else None
         
         logger.info(f"✅ Committed content save for campaign {campaign_id}, user {current_user.id}, content_id={final_content_id}")
         
@@ -9522,54 +9553,21 @@ def get_campaign_content_items(
                 if all_user_content:
                     logger.info(f"🔍 User {current_user.id} has {all_user_content.count} total content items across campaigns: {all_user_content.campaigns}")
             
-            # Convert raw results to Content objects efficiently (avoid N+1 queries)
+            # Use raw SQL results directly (avoid ORM column issues)
+            content_items = []
             if raw_results and len(raw_results) > 0:
-                content_ids = [dict(row._mapping)['id'] for row in raw_results if 'id' in dict(row._mapping)]
-                if content_ids:
-                    # Query all Content objects at once
-                    content_items = db.query(Content).filter(Content.id.in_(content_ids)).all()
-                    # Sort by week/day to match raw SQL order
-                    content_items.sort(key=lambda x: (x.week or 999, x.day or ""))
-                    logger.info(f"📋 Converted {len(content_items)} raw SQL results to ORM objects")
-                else:
-                    logger.warning("⚠️ Raw SQL returned results but no valid IDs found")
-                    content_items = []
+                # Convert raw SQL results to dictionaries
+                content_items = [dict(row._mapping) for row in raw_results]
+                logger.info(f"📋 Converted {len(content_items)} raw SQL results to dictionaries")
             else:
                 content_items = []
             
-            # Fallback to ORM if raw SQL fails
-            if not content_items:
-                logger.info("📋 Raw SQL returned no results, trying ORM query...")
-                content_items = db.query(Content).filter(
-                    Content.campaign_id == campaign_id,
-                    Content.user_id == current_user.id
-                ).order_by(
-                    Content.week.asc().nulls_last(),
-                    Content.day.asc().nulls_last()
-                ).all()
+            # No fallback needed - raw SQL is the source of truth
         except Exception as query_error:
-            logger.error(f"❌ Error with raw SQL query, falling back to ORM: {query_error}")
-            # Fallback to ORM query
-            try:
-                content_items = db.query(Content).filter(
-                    Content.campaign_id == campaign_id,
-                    Content.user_id == current_user.id
-                ).order_by(
-                    Content.week.asc().nulls_last(),
-                    Content.day.asc().nulls_last()
-                ).all()
-            except Exception as order_error:
-                # Fallback: if nulls_last() doesn't work, use a simpler query
-                logger.warning(f"Order by with nulls_last failed, using simpler query: {order_error}")
-                content_items = db.query(Content).filter(
-                    Content.campaign_id == campaign_id,
-                    Content.user_id == current_user.id
-                ).all()
-                # Sort in Python instead
-                content_items = sorted(content_items, key=lambda x: (
-                    x.week if x.week is not None else 999,
-                    x.day if x.day is not None else ""
-                ))
+            logger.error(f"❌ Error with raw SQL query: {query_error}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            content_items = []  # Return empty on error
         
         logger.info(f"📋 Found {len(content_items)} content items for campaign {campaign_id}")
         
