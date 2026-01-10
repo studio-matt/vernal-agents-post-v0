@@ -9330,18 +9330,20 @@ async def save_content_item(
                 platform_str = platform.value if hasattr(platform, 'value') else str(platform)
                 file_name = f"{campaign_id}_{week}_{day}_{platform_str}.txt"
                 
-                # Build INSERT statement excluding the non-existent timestamp columns
+                # Build INSERT statement excluding non-existent columns
+                # Excluded: content_processed_at, image_processed_at, content_published_at, image_published_at, use_without_image
+                # These are in the model but don't exist in the database table yet
                 insert_stmt = text("""
                     INSERT INTO content (
                         user_id, campaign_id, week, day, content, title, status, 
                         date_upload, platform, file_name, file_type, platform_post_no, 
                         schedule_time, image_url, is_draft, can_edit, 
-                        knowledge_graph_location, parent_idea, landing_page_url, use_without_image
+                        knowledge_graph_location, parent_idea, landing_page_url
                     ) VALUES (
                         :user_id, :campaign_id, :week, :day, :content, :title, :status,
                         :date_upload, :platform, :file_name, :file_type, :platform_post_no,
                         :schedule_time, :image_url, :is_draft, :can_edit,
-                        :knowledge_graph_location, :parent_idea, :landing_page_url, :use_without_image
+                        :knowledge_graph_location, :parent_idea, :landing_page_url
                     )
                 """)
                 
@@ -9364,8 +9366,7 @@ async def save_content_item(
                     "can_edit": 1,
                     "knowledge_graph_location": item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
                     "parent_idea": item.get("parent_idea") if item.get("parent_idea") else None,
-                    "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None,
-                    "use_without_image": 1 if item.get("use_without_image", False) else 0
+                    "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None
                 })
                 
                 # Get the inserted ID
