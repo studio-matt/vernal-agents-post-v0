@@ -9307,101 +9307,65 @@ async def save_content_item(
                 platform_name = platform.value.title() if hasattr(platform, 'value') else str(platform).title()
                 title_text = f"{platform_name} Post - {day}"
             
-            # Create new content
+            # Create new content using ORM (more robust than raw SQL)
             # Support both "image" and "image_url" field names
             image_url = item.get("image") or item.get("image_url")
             if image_url:
                 logger.info(f"💾 Saving image_url for new content: {image_url[:100]}...")
             else:
                 logger.info(f"⚠️ No image_url provided in save request for new content")
+            
             try:
                 now = datetime.now().replace(tzinfo=None)
                 # Ensure all required fields have defaults
                 week = week or 1
                 day = day or "Monday"
-                platform = platform or "linkedin"
                 
-                # Create new content using direct INSERT to exclude non-existent columns
-                # Note: content_processed_at, image_processed_at, content_published_at, image_published_at
-                # are defined in model but don't exist in database table yet
-                # Use direct SQL INSERT to avoid SQLAlchemy trying to include these columns
-                from sqlalchemy import text
-                
-                platform_str = platform.value if hasattr(platform, 'value') else str(platform)
-                file_name = f"{campaign_id}_{week}_{day}_{platform_str}.txt"
-                
-                # Query database to get actual column names - only insert columns that exist
-                # This prevents recursive failures from missing columns
+                # Check which optional columns exist in the database to avoid setting non-existent columns
                 from sqlalchemy import inspect
-                
-                # Get actual columns from database
                 inspector = inspect(db.bind)
                 content_columns = [col['name'] for col in inspector.get_columns('content')]
-                logger.info(f"📋 Database content table has {len(content_columns)} columns")
                 
-                # Build column list and values dict - only include columns that exist
-                columns_to_insert = []
-                values_dict = {}
+                # Create Content object with required fields
+                new_content = Content(
+                    user_id=current_user.id,
+                    campaign_id=campaign_id,
+                    week=week,
+                    day=day,
+                    content=content_text,
+                    title=title_text,
+                    status="draft",
+                    date_upload=now,
+                    platform=platform,  # Use PlatformEnum directly
+                    file_name=f"{campaign_id}_{week}_{day}_{platform.value if hasattr(platform, 'value') else platform}.txt",
+                    file_type="text",
+                    platform_post_no=item.get("platform_post_no", "1"),
+                    schedule_time=schedule_time,
+                    image_url=image_url if image_url else None,
+                    is_draft=True,
+                    can_edit=True,
+                )
                 
-                # Required fields (must exist)
-                required_fields = {
-                    "user_id": current_user.id,
-                    "campaign_id": campaign_id,
-                    "week": week,
-                    "day": day,
-                    "content": content_text,
-                    "title": title_text,
-                    "status": "draft",
-                    "date_upload": now,
-                    "platform": platform_str,
-                    "file_name": file_name,
-                    "file_type": "text",
-                    "platform_post_no": item.get("platform_post_no", "1"),
-                    "schedule_time": schedule_time,
-                }
+                # Only set optional columns if they exist in the database
+                if "knowledge_graph_location" in content_columns and item.get("knowledge_graph_location"):
+                    new_content.knowledge_graph_location = item.get("knowledge_graph_location")
                 
-                # Optional fields (only if column exists)
-                optional_fields = {
-                    "image_url": image_url if image_url else None,
-                    "is_draft": 1,
-                    "can_edit": 1,
-                    "knowledge_graph_location": item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
-                    "parent_idea": item.get("parent_idea") if item.get("parent_idea") else None,
-                    "landing_page_url": item.get("landing_page_url") if item.get("landing_page_url") else None,
-                    "use_without_image": 1 if item.get("use_without_image", False) else 0,
-                }
+                if "parent_idea" in content_columns and item.get("parent_idea"):
+                    new_content.parent_idea = item.get("parent_idea")
                 
-                # Add required fields
-                for col, val in required_fields.items():
-                    if col in content_columns:
-                        columns_to_insert.append(col)
-                        values_dict[col] = val
-                    else:
-                        logger.error(f"❌ Required column '{col}' not found in database table!")
-                        raise HTTPException(status_code=500, detail=f"Database schema error: required column '{col}' missing")
+                if "landing_page_url" in content_columns and item.get("landing_page_url"):
+                    new_content.landing_page_url = item.get("landing_page_url")
                 
-                # Add optional fields only if column exists
-                for col, val in optional_fields.items():
-                    if col in content_columns:
-                        columns_to_insert.append(col)
-                        values_dict[col] = val
-                    else:
-                        logger.debug(f"⚠️ Optional column '{col}' not in database, skipping")
+                if "use_without_image" in content_columns:
+                    new_content.use_without_image = bool(item.get("use_without_image", False))
                 
-                # Build dynamic INSERT statement with only existing columns
-                columns_str = ", ".join(columns_to_insert)
-                placeholders_str = ", ".join([f":{col}" for col in columns_to_insert])
+                # Don't set timestamp columns if they don't exist - they'll be None by default
+                # These are set when content/image is actually processed, not on initial save
                 
-                insert_stmt = text(f"""
-                    INSERT INTO content ({columns_str})
-                    VALUES ({placeholders_str})
-                """)
-                
-                result = db.execute(insert_stmt, values_dict)
-                
-                # Get the inserted ID
-                content_id = result.lastrowid
-                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform_str}, has_image={bool(image_url)}")
+                db.add(new_content)
+                db.flush()  # Flush to get the ID and catch any errors early (original working pattern)
+                content_id = new_content.id
+                logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform.value if hasattr(platform, 'value') else platform}, has_image={bool(image_url)}")
             except Exception as create_error:
                 logger.error(f"❌ Error creating Content object: {create_error}")
                 import traceback
@@ -9412,26 +9376,13 @@ async def save_content_item(
                     detail=f"Failed to create content item: {str(create_error)}"
                 )
         
-        # CRITICAL: Flush before commit to ensure data is visible to subsequent queries
-        # This fixes the race condition where GET requests return empty arrays
-        db.flush()
+        # Commit the transaction (flush already happened above for new content)
         db.commit()
         
         # Get the final content_id for return value
         final_content_id = existing_content.id if existing_content else (content_id if 'content_id' in locals() else None)
         
         logger.info(f"✅ Committed content save for campaign {campaign_id}, user {current_user.id}, content_id={final_content_id}")
-        
-        # Verify the commit worked by immediately querying the database
-        # This helps catch transaction isolation issues
-        try:
-            verify_query = db.query(Content).filter(
-                Content.campaign_id == campaign_id,
-                Content.user_id == current_user.id
-            ).count()
-            logger.info(f"🔍 Verification: Database now has {verify_query} content items for campaign {campaign_id}")
-        except Exception as verify_error:
-            logger.warning(f"⚠️ Could not verify commit: {verify_error}")
         
         return {
             "status": "success",
