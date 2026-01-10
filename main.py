@@ -9186,6 +9186,8 @@ async def save_content_item(
         day = item.get("day", "Monday")
         platform_str = item.get("platform", "linkedin").lower()
         
+        logger.info(f"🔍 Platform from request: '{platform_str}' (type: {type(platform_str)})")
+        
         # Map platform string to PlatformEnum for validation, but store as string in database
         from models import PlatformEnum
         platform_map = {
@@ -9200,6 +9202,8 @@ async def save_content_item(
         platform_enum = platform_map.get(platform_str, PlatformEnum.LINKEDIN)
         # Convert to string for database storage (database column is String, not Enum)
         platform_db_value = platform_enum.value if hasattr(platform_enum, 'value') else str(platform_enum).lower()
+        
+        logger.info(f"🔍 Platform enum: {platform_enum}, DB value: '{platform_db_value}' (type: {type(platform_db_value)})")
         
         # Check if request includes a database ID (numeric) - if so, find that specific content item
         existing_content = None
@@ -9471,6 +9475,20 @@ def get_campaign_content_items(
             """)
             raw_results = db.execute(raw_query, {"campaign_id": campaign_id, "user_id": current_user.id}).fetchall()
             logger.info(f"📋 Raw SQL query found {len(raw_results)} content items for campaign {campaign_id}")
+            
+            # Log sample of what we found for debugging
+            if raw_results:
+                sample = dict(raw_results[0]._mapping)
+                logger.info(f"📋 Sample content item: id={sample.get('id')}, campaign_id={sample.get('campaign_id')}, user_id={sample.get('user_id')}, platform='{sample.get('platform')}', week={sample.get('week')}, day='{sample.get('day')}'")
+            else:
+                logger.warning(f"⚠️ Raw SQL returned 0 results for campaign_id='{campaign_id}', user_id={current_user.id}")
+                # Double-check: query all content for this user to see if campaign_id is wrong
+                all_user_content = db.execute(
+                    text("SELECT COUNT(*) as count, GROUP_CONCAT(DISTINCT campaign_id) as campaigns FROM content WHERE user_id = :user_id"),
+                    {"user_id": current_user.id}
+                ).first()
+                if all_user_content:
+                    logger.info(f"🔍 User {current_user.id} has {all_user_content.count} total content items across campaigns: {all_user_content.campaigns}")
             
             # Convert raw results to Content objects efficiently (avoid N+1 queries)
             if raw_results and len(raw_results) > 0:
