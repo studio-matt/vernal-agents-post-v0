@@ -9324,7 +9324,6 @@ async def save_content_item(
                 # Use hybrid approach: ORM table definition but controlled INSERT
                 # This prevents SQLAlchemy from trying to insert columns that don't exist
                 from sqlalchemy import inspect
-                from sqlalchemy.dialects.mysql import insert
                 
                 # Get actual columns from database
                 inspector = inspect(db.bind)
