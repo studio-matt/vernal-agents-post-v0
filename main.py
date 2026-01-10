@@ -9299,6 +9299,11 @@ async def save_content_item(
                 logger.info(f"⚠️ No image_url provided in save request for new content")
             try:
                 now = datetime.now().replace(tzinfo=None)
+                # Ensure all required fields have defaults
+                week = week or 1
+                day = day or "Monday"
+                platform = platform or "linkedin"
+                
                 new_content = Content(
                     user_id=current_user.id,
                     campaign_id=campaign_id,
@@ -9313,23 +9318,28 @@ async def save_content_item(
                     file_type="text",
                     platform_post_no=item.get("platform_post_no", "1"),
                     schedule_time=schedule_time,
-                    image_url=image_url,
+                    image_url=image_url if image_url else None,  # Explicitly set to None if empty
                     is_draft=True,
                     can_edit=True,
-                    knowledge_graph_location=item.get("knowledge_graph_location"),
-                    parent_idea=item.get("parent_idea"),
-                    landing_page_url=item.get("landing_page_url"),
+                    knowledge_graph_location=item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
+                    parent_idea=item.get("parent_idea") if item.get("parent_idea") else None,
+                    landing_page_url=item.get("landing_page_url") if item.get("landing_page_url") else None,
                     content_processed_at=now if content_text and content_text.strip() else None,  # Set timestamp if content provided
                     image_processed_at=now if image_url else None,  # Set timestamp if image provided
                     use_without_image=bool(item.get("use_without_image", False))
                 )
                 db.add(new_content)
-                logger.info(f"✅ Created new content: week={week}, day={day}, platform={platform}, has_image={bool(image_url)}")
+                db.flush()  # Flush to get the ID and catch any errors early
+                logger.info(f"✅ Created new content (ID: {new_content.id}): week={week}, day={day}, platform={platform}, has_image={bool(image_url)}")
             except Exception as create_error:
                 logger.error(f"❌ Error creating Content object: {create_error}")
                 import traceback
                 logger.error(f"Traceback: {traceback.format_exc()}")
-                raise
+                db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to create content item: {str(create_error)}"
+                )
         
         db.commit()
         
