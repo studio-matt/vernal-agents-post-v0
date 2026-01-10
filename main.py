@@ -8925,24 +8925,33 @@ def delete_post(
 ):
     """Delete a scheduled post by ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
     try:
-        from models import Content
+        from sqlalchemy import text
         
         logger.info(f"🗑️ Deleting post {post_id} for user {current_user.id}")
         
-        # Find the post and verify ownership
-        post = db.query(Content).filter(
-            Content.id == post_id,
-            Content.user_id == current_user.id
-        ).first()
+        # Use raw SQL to verify ownership and delete (avoid ORM column issues)
+        check_query = text("""
+            SELECT id FROM content 
+            WHERE id = :post_id AND user_id = :user_id
+            LIMIT 1
+        """)
+        check_result = db.execute(check_query, {
+            "post_id": post_id,
+            "user_id": current_user.id
+        }).first()
         
-        if not post:
+        if not check_result:
             raise HTTPException(
                 status_code=404,
                 detail="Post not found or access denied"
             )
         
-        # Delete the post
-        db.delete(post)
+        # Delete the post using raw SQL
+        delete_query = text("DELETE FROM content WHERE id = :post_id AND user_id = :user_id")
+        db.execute(delete_query, {
+            "post_id": post_id,
+            "user_id": current_user.id
+        })
         db.commit()
         
         logger.info(f"✅ Post {post_id} deleted successfully")
