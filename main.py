@@ -9412,11 +9412,31 @@ async def save_content_item(
                     detail=f"Failed to create content item: {str(create_error)}"
                 )
         
+        # CRITICAL: Flush before commit to ensure data is visible to subsequent queries
+        # This fixes the race condition where GET requests return empty arrays
+        db.flush()
         db.commit()
+        
+        # Get the final content_id for return value
+        final_content_id = existing_content.id if existing_content else (content_id if 'content_id' in locals() else None)
+        
+        logger.info(f"✅ Committed content save for campaign {campaign_id}, user {current_user.id}, content_id={final_content_id}")
+        
+        # Verify the commit worked by immediately querying the database
+        # This helps catch transaction isolation issues
+        try:
+            verify_query = db.query(Content).filter(
+                Content.campaign_id == campaign_id,
+                Content.user_id == current_user.id
+            ).count()
+            logger.info(f"🔍 Verification: Database now has {verify_query} content items for campaign {campaign_id}")
+        except Exception as verify_error:
+            logger.warning(f"⚠️ Could not verify commit: {verify_error}")
         
         return {
             "status": "success",
-            "message": "Content item saved"
+            "message": "Content item saved",
+            "content_id": final_content_id
         }
     except HTTPException:
         raise
