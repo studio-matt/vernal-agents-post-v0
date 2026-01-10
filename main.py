@@ -9458,16 +9458,53 @@ def get_campaign_content_items(
         
         logger.info(f"📋 Fetching content items for campaign {campaign_id}, user {current_user.id}")
         
-        # Get all content items regardless of status - we want to show all existing content
-        # Handle None values in order_by to prevent errors
+        # CRITICAL: Use raw SQL query to ensure we see data inserted via raw SQL
+        # ORM queries might not see raw SQL inserts due to session caching
+        from sqlalchemy import text
         try:
-            content_items = db.query(Content).filter(
-                Content.campaign_id == campaign_id,
-                Content.user_id == current_user.id
-            ).order_by(
-                Content.week.asc().nulls_last(),
-                Content.day.asc().nulls_last()
-            ).all()
+            # First try with raw SQL to ensure we see all data
+            raw_query = text("""
+                SELECT * FROM content 
+                WHERE campaign_id = :campaign_id AND user_id = :user_id
+                ORDER BY week ASC, day ASC
+            """)
+            raw_results = db.execute(raw_query, {"campaign_id": campaign_id, "user_id": current_user.id}).fetchall()
+            logger.info(f"📋 Raw SQL query found {len(raw_results)} content items for campaign {campaign_id}")
+            
+            # Convert raw results to Content objects for compatibility
+            content_items = []
+            for row in raw_results:
+                # Create a Content-like object from the row
+                content_dict = dict(row._mapping)
+                # Use ORM query to get the actual Content object (for relationships, etc.)
+                content_obj = db.query(Content).filter(Content.id == content_dict['id']).first()
+                if content_obj:
+                    content_items.append(content_obj)
+                else:
+                    # If ORM can't find it, create a minimal object from the raw data
+                    logger.warning(f"⚠️ ORM couldn't find content {content_dict['id']} after raw SQL found it")
+            
+            # Fallback to ORM if raw SQL fails
+            if not content_items:
+                logger.info("📋 Raw SQL returned no results, trying ORM query...")
+                content_items = db.query(Content).filter(
+                    Content.campaign_id == campaign_id,
+                    Content.user_id == current_user.id
+                ).order_by(
+                    Content.week.asc().nulls_last(),
+                    Content.day.asc().nulls_last()
+                ).all()
+        except Exception as query_error:
+            logger.error(f"❌ Error with raw SQL query, falling back to ORM: {query_error}")
+            # Fallback to ORM query
+            try:
+                content_items = db.query(Content).filter(
+                    Content.campaign_id == campaign_id,
+                    Content.user_id == current_user.id
+                ).order_by(
+                    Content.week.asc().nulls_last(),
+                    Content.day.asc().nulls_last()
+                ).all()
         except Exception as order_error:
             # Fallback: if nulls_last() doesn't work, use a simpler query
             logger.warning(f"Order by with nulls_last failed, using simpler query: {order_error}")
