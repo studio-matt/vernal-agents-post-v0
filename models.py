@@ -128,11 +128,9 @@ class Content(Base):
     knowledge_graph_location = Column(Text, nullable=True)  # Knowledge graph node/location this content is based on
     parent_idea = Column(Text, nullable=True)  # Parent idea this content supports
     landing_page_url = Column(String(500), nullable=True)  # Landing page URL this content drives traffic to
-    content_processed_at = Column(DateTime, nullable=True)  # Timestamp when content was last generated/regenerated
-    image_processed_at = Column(DateTime, nullable=True)  # Timestamp when image was last generated/regenerated
-    content_published_at = Column(DateTime, nullable=True)  # Timestamp when content was last published
-    image_published_at = Column(DateTime, nullable=True)  # Timestamp when image was last published
-    use_without_image = Column(Boolean, default=False)  # Flag to use content without image
+    # NOTE: The following columns are NOT in the database schema:
+    # content_processed_at, image_processed_at, content_published_at, image_published_at, use_without_image
+    # If these are needed, add them via database migration first, then uncomment here
     user = relationship("User", back_populates="contents")    
     
     def __repr__(self):
