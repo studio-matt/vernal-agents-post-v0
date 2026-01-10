@@ -9876,7 +9876,21 @@ async def wordpress_auth_v2(
         wp_api_url = f"{site_url}/wp-json/wp/v2/users/me"
         
         try:
+            # Try with HTTPBasicAuth first (for application passwords)
             response = requests.get(wp_api_url, auth=HTTPBasicAuth(username, password), timeout=10)
+            
+            # If that fails with 401, try with X-API-Key header (for plugin API key)
+            if response.status_code == 401:
+                logger.info(f"⚠️ HTTPBasicAuth failed, trying API key authentication for user {current_user.id}")
+                # Try plugin API endpoint with API key
+                plugin_api_url = f"{site_url}/wp-json/vernal-contentum/v1/categories"
+                api_response = requests.get(plugin_api_url, headers={"X-API-Key": password}, timeout=10)
+                if api_response.status_code == 200:
+                    logger.info(f"✅ WordPress connection verified via API key for user {current_user.id}")
+                    response = api_response  # Use successful response
+                else:
+                    raise HTTPException(status_code=400, detail=f"WordPress authentication failed: Both HTTPBasicAuth and API key authentication returned {api_response.status_code}. Please verify your credentials.")
+            
             if response.status_code != 200:
                 raise HTTPException(status_code=400, detail=f"WordPress authentication failed: {response.status_code}")
             logger.info(f"✅ WordPress connection verified for user {current_user.id}")
