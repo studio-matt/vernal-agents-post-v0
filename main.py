@@ -9385,8 +9385,17 @@ async def save_content_item(
                 result = db.execute(insert_stmt, filtered_values)
                 content_id = result.lastrowid
                 
-                db.flush()  # Flush to ensure data is visible (original working pattern)
+                # CRITICAL: For raw SQL, we need to explicitly commit the statement
+                # SQLAlchemy doesn't auto-track raw SQL in the session like ORM does
+                db.flush()  # Flush to ensure data is sent to database
                 logger.info(f"✅ Created new content (ID: {content_id}): week={week}, day={day}, platform={platform_str}, has_image={bool(image_url)}")
+                
+                # Verify the insert worked by immediately querying
+                verify_content = db.execute(text("SELECT id FROM content WHERE id = :id"), {"id": content_id}).first()
+                if verify_content:
+                    logger.info(f"🔍 Verification: Content {content_id} is visible in database immediately after insert")
+                else:
+                    logger.warning(f"⚠️ Warning: Content {content_id} not visible immediately after insert (may be transaction isolation)")
             except Exception as create_error:
                 logger.error(f"❌ Error creating Content object: {create_error}")
                 import traceback
@@ -9404,6 +9413,20 @@ async def save_content_item(
         final_content_id = existing_content.id if existing_content else (content_id if 'content_id' in locals() else None)
         
         logger.info(f"✅ Committed content save for campaign {campaign_id}, user {current_user.id}, content_id={final_content_id}")
+        
+        # CRITICAL: Verify the commit worked by querying the database immediately after commit
+        # This helps catch transaction isolation issues where data isn't visible to subsequent queries
+        try:
+            verify_count = db.execute(
+                text("SELECT COUNT(*) as count FROM content WHERE campaign_id = :campaign_id AND user_id = :user_id"),
+                {"campaign_id": campaign_id, "user_id": current_user.id}
+            ).first()
+            if verify_count:
+                logger.info(f"🔍 Post-commit verification: Database now has {verify_count.count} content items for campaign {campaign_id}")
+            else:
+                logger.warning(f"⚠️ Post-commit verification: Could not verify content count")
+        except Exception as verify_error:
+            logger.warning(f"⚠️ Post-commit verification failed: {verify_error}")
         
         return {
             "status": "success",
