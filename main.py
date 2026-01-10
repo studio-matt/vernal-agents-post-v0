@@ -9470,18 +9470,16 @@ def get_campaign_content_items(
             raw_results = db.execute(raw_query, {"campaign_id": campaign_id, "user_id": current_user.id}).fetchall()
             logger.info(f"📋 Raw SQL query found {len(raw_results)} content items for campaign {campaign_id}")
             
-            # Convert raw results to Content objects for compatibility
-            content_items = []
-            for row in raw_results:
-                # Create a Content-like object from the row
-                content_dict = dict(row._mapping)
-                # Use ORM query to get the actual Content object (for relationships, etc.)
-                content_obj = db.query(Content).filter(Content.id == content_dict['id']).first()
-                if content_obj:
-                    content_items.append(content_obj)
-                else:
-                    # If ORM can't find it, create a minimal object from the raw data
-                    logger.warning(f"⚠️ ORM couldn't find content {content_dict['id']} after raw SQL found it")
+            # Convert raw results to Content objects efficiently (avoid N+1 queries)
+            if raw_results:
+                content_ids = [dict(row._mapping)['id'] for row in raw_results]
+                # Query all Content objects at once
+                content_items = db.query(Content).filter(Content.id.in_(content_ids)).all()
+                # Sort by week/day to match raw SQL order
+                content_items.sort(key=lambda x: (x.week or 999, x.day or ""))
+                logger.info(f"📋 Converted {len(content_items)} raw SQL results to ORM objects")
+            else:
+                content_items = []
             
             # Fallback to ORM if raw SQL fails
             if not content_items:
