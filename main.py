@@ -9297,11 +9297,13 @@ async def save_content_item(
             
             # If content is empty, use a placeholder (for image-only saves)
             if not content_text or not content_text.strip():
-                content_text = f"Content for {platform.title()} - {day}"
+                platform_name = platform.value.title() if hasattr(platform, 'value') else str(platform).title()
+                content_text = f"Content for {platform_name} - {day}"
             
             # If title is empty, generate a default
             if not title_text or not title_text.strip():
-                title_text = f"{platform.title()} Post - {day}"
+                platform_name = platform.value.title() if hasattr(platform, 'value') else str(platform).title()
+                title_text = f"{platform_name} Post - {day}"
             
             # Create new content
             # Support both "image" and "image_url" field names
