@@ -9574,29 +9574,61 @@ def get_campaign_content_items(
         items_data = []
         for item in content_items:
             try:
-                image_url = item.image_url or ""
+                # item is now a dict from raw SQL, not an ORM object
+                item_id = item.get('id')
+                image_url = item.get('image_url') or ""
+                week = item.get('week') or 1
+                day = item.get('day') or "Monday"
+                platform = item.get('platform') or "linkedin"
+                status = item.get('status') or "draft"
+                title = item.get('title') or ""
+                content_text = item.get('content') or ""
+                schedule_time = item.get('schedule_time')
+                date_upload = item.get('date_upload')
+                
+                # Handle datetime objects from raw SQL
+                schedule_time_str = None
+                if schedule_time:
+                    if hasattr(schedule_time, 'isoformat'):
+                        schedule_time_str = schedule_time.isoformat()
+                    elif hasattr(schedule_time, 'strftime'):
+                        schedule_time_str = schedule_time.strftime('%Y-%m-%dT%H:%M:%S')
+                    else:
+                        schedule_time_str = str(schedule_time)
+                
+                created_at_str = None
+                if date_upload:
+                    if hasattr(date_upload, 'isoformat'):
+                        created_at_str = date_upload.isoformat()
+                    elif hasattr(date_upload, 'strftime'):
+                        created_at_str = date_upload.strftime('%Y-%m-%dT%H:%M:%S')
+                    else:
+                        created_at_str = str(date_upload)
+                
                 items_data.append({
-                    "id": f"week-{item.week or 1}-{item.day or 'Monday'}-{item.platform or 'linkedin'}-{item.id}",  # Composite ID for frontend
-                    "database_id": item.id,  # Include database ID separately so frontend can use it for updates
-                    "title": item.title or "",
-                    "description": item.content or "",
-                    "week": item.week or 1,
-                    "day": item.day or "Monday",
-                    "platform": item.platform or "linkedin",
+                    "id": f"week-{week}-{day}-{platform}-{item_id}",  # Composite ID for frontend
+                    "database_id": item_id,  # Include database ID separately so frontend can use it for updates
+                    "title": title,
+                    "description": content_text,
+                    "week": week,
+                    "day": day,
+                    "platform": platform.lower() if platform else "linkedin",  # Ensure lowercase
                     "image": image_url,  # Ensure image_url is returned as "image" for frontend
                     "image_url": image_url,  # Also include image_url for compatibility
-                    "status": item.status or "draft",
-                    "schedule_time": item.schedule_time.isoformat() if item.schedule_time else None,
-                    "created_at": item.date_upload.isoformat() if item.date_upload else None,  # Creation timestamp - IMPORTANT data point
-                    "contentProcessedAt": item.content_processed_at.isoformat() if hasattr(item, 'content_processed_at') and item.content_processed_at is not None else None,
-                    "imageProcessedAt": item.image_processed_at.isoformat() if hasattr(item, 'image_processed_at') and item.image_processed_at is not None else None,
-                    "contentPublishedAt": item.content_published_at.isoformat() if hasattr(item, 'content_published_at') and item.content_published_at is not None else None,
-                    "imagePublishedAt": item.image_published_at.isoformat() if hasattr(item, 'image_published_at') and item.image_published_at is not None else None,
-                    "use_without_image": bool(getattr(item, 'use_without_image', False)) if hasattr(item, 'use_without_image') else False,
+                    "status": status,
+                    "schedule_time": schedule_time_str,
+                    "created_at": created_at_str,  # Creation timestamp - IMPORTANT data point
+                    "contentProcessedAt": None,  # Column doesn't exist in DB
+                    "imageProcessedAt": None,  # Column doesn't exist in DB
+                    "contentPublishedAt": None,  # Column doesn't exist in DB
+                    "imagePublishedAt": None,  # Column doesn't exist in DB
+                    "use_without_image": False,  # Column doesn't exist in DB
                 })
-                logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}, db_id={item.id}")
+                logger.info(f"📋 Item: week={week}, day={day}, platform={platform}, status={status}, has_image={bool(image_url)}, db_id={item_id}")
             except Exception as item_error:
-                logger.error(f"Error processing content item {item.id}: {item_error}")
+                logger.error(f"Error processing content item {item.get('id', 'unknown')}: {item_error}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 continue  # Skip this item but continue with others
         
         logger.info(f"✅ Returning {len(items_data)} items for campaign {campaign_id}")
