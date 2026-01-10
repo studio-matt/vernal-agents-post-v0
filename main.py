@@ -9888,6 +9888,33 @@ async def wordpress_auth_v2(
             PlatformConnection.platform == PlatformEnum.WORDPRESS
         ).first()
         
+        # Auto-generate a backend API key for this user (for WP → Backend calls)
+        from models import PluginAPIKey
+        import secrets
+        
+        # Check if user already has an active API key
+        existing_api_key = db.query(PluginAPIKey).filter(
+            PluginAPIKey.user_id == current_user.id,
+            PluginAPIKey.is_active == True
+        ).first()
+        
+        backend_api_key = None
+        if not existing_api_key:
+            # Generate new API key for this user
+            backend_api_key = f"vcb_{secrets.token_hex(32)}"
+            plugin_key = PluginAPIKey(
+                user_id=current_user.id,
+                api_key=backend_api_key,
+                name=f"WordPress Plugin - {site_url}",
+                is_active=True,
+                created_at=datetime.now()
+            )
+            db.add(plugin_key)
+            logger.info(f"✅ Generated backend API key for user {current_user.id}")
+        else:
+            backend_api_key = existing_api_key.api_key
+            logger.info(f"✅ Using existing backend API key for user {current_user.id}")
+        
         if existing_connection:
             existing_connection.platform_user_id = site_url
             existing_connection.refresh_token = username
@@ -9906,7 +9933,17 @@ async def wordpress_auth_v2(
         
         db.commit()
         
-        return {"status": "success", "message": "WordPress connected successfully"}
+        # Get backend URL from environment or use default
+        backend_url = os.getenv("BACKEND_URL") or os.getenv("API_BASE_URL") or "https://themachine.vernalcontentum.com"
+        # Ensure no trailing slash for consistency
+        backend_url = backend_url.rstrip('/')
+        
+        return {
+            "status": "success", 
+            "message": "WordPress connected successfully",
+            "backend_api_key": backend_api_key,  # Return API key for WP to store
+            "backend_url": backend_url
+        }
     except HTTPException:
         raise
     except Exception as e:
