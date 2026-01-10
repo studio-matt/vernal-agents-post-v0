@@ -9208,6 +9208,7 @@ async def save_content_item(
         # Check if request includes a database ID (numeric) - if so, find that specific content item
         existing_content = None
         content_id = item.get("id")
+        database_id = None  # Track if we have a numeric database ID
         
         # If id is provided and is numeric (database ID), find that specific content item and update it
         if content_id and isinstance(content_id, (int, str)):
@@ -9215,6 +9216,7 @@ async def save_content_item(
                 # Check if it's a numeric database ID
                 if str(content_id).isdigit():
                     content_id_int = int(content_id)
+                    database_id = content_id_int
                     existing_content = db.query(Content).filter(
                         Content.id == content_id_int,
                         Content.campaign_id == campaign_id,
@@ -9224,18 +9226,16 @@ async def save_content_item(
                         logger.info(f"🔍 Found existing content by database ID: {content_id_int}")
                 else:
                     # ID is not numeric (frontend-generated like "week-1-Monday-linkedin-0-post-1")
-                    # This means we're creating NEW content, not updating existing
-                    # Don't check for existing by week/day/platform - always create new
-                    logger.info(f"🔍 Non-numeric ID provided ({content_id}), creating new content (not updating)")
+                    # Still check for existing content by week/day/platform to avoid duplicates
+                    logger.info(f"🔍 Non-numeric ID provided ({content_id}), checking for existing content by week/day/platform")
             except (ValueError, TypeError):
-                # ID format is unexpected, treat as new content
-                logger.info(f"🔍 ID format unexpected ({content_id}), creating new content")
+                # ID format is unexpected, still check for existing content
+                logger.info(f"🔍 ID format unexpected ({content_id}), checking for existing content by week/day/platform")
         
-        # If no existing content found by ID and ID was numeric (or not provided),
-        # check by week/day/platform (for backward compatibility with existing content)
-        # This allows updating existing content that was created before the ID-based system
+        # ALWAYS check by week/day/platform if no existing content found by database ID
+        # This prevents duplicate content creation when frontend uses composite IDs
         # CRITICAL: Compare using string value, not PlatformEnum object
-        if not existing_content and (not content_id or (isinstance(content_id, (int, str)) and str(content_id).isdigit())):
+        if not existing_content:
             existing_content = db.query(Content).filter(
                 Content.campaign_id == campaign_id,
                 Content.week == week,
@@ -9244,7 +9244,9 @@ async def save_content_item(
                 Content.user_id == current_user.id
             ).first()
             if existing_content:
-                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}")
+                logger.info(f"🔍 Found existing content by week/day/platform: week={week}, day={day}, platform={platform_db_value}, db_id={existing_content.id}")
+            else:
+                logger.info(f"🔍 No existing content found for week={week}, day={day}, platform={platform_db_value}, will create new")
         
         # If still no existing content, we'll create a new one
         
