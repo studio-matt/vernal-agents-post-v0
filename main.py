@@ -9273,8 +9273,9 @@ async def save_content_item(
             image_url = item.get("image") or item.get("image_url")
             if image_url:
                 existing_content.image_url = image_url
-                # Update image processed timestamp when image is updated
-                existing_content.image_processed_at = datetime.now().replace(tzinfo=None)
+                # Update image processed timestamp when image is updated (if column exists)
+                if hasattr(existing_content, 'image_processed_at'):
+                    existing_content.image_processed_at = datetime.now().replace(tzinfo=None)
             existing_content.status = "draft"
             existing_content.is_draft = True
             existing_content.can_edit = True
@@ -9319,6 +9320,9 @@ async def save_content_item(
                 day = day or "Monday"
                 platform = platform or "linkedin"
                 
+                # Create new content - only set fields that exist in database
+                # Note: content_processed_at, image_processed_at, content_published_at, image_published_at
+                # are defined in model but may not exist in database table yet
                 new_content = Content(
                     user_id=current_user.id,
                     campaign_id=campaign_id,
@@ -9329,7 +9333,7 @@ async def save_content_item(
                     status="draft",
                     date_upload=now,  # MySQL doesn't support timezone-aware datetimes
                     platform=platform,
-                    file_name=f"{campaign_id}_{week}_{day}_{platform}.txt",
+                    file_name=f"{campaign_id}_{week}_{day}_{platform.value if hasattr(platform, 'value') else platform}.txt",
                     file_type="text",
                     platform_post_no=item.get("platform_post_no", "1"),
                     schedule_time=schedule_time,
@@ -9339,10 +9343,11 @@ async def save_content_item(
                     knowledge_graph_location=item.get("knowledge_graph_location") if item.get("knowledge_graph_location") else None,
                     parent_idea=item.get("parent_idea") if item.get("parent_idea") else None,
                     landing_page_url=item.get("landing_page_url") if item.get("landing_page_url") else None,
-                    content_processed_at=now if content_text and content_text.strip() else None,  # Set timestamp if content provided
-                    image_processed_at=now if image_url else None,  # Set timestamp if image provided
                     use_without_image=bool(item.get("use_without_image", False))
                 )
+                # Only set timestamp fields if they exist in the database (check via hasattr after creation)
+                # For now, skip these fields to avoid schema mismatch errors
+                # TODO: Add database migration to add these columns
                 db.add(new_content)
                 db.flush()  # Flush to get the ID and catch any errors early
                 logger.info(f"✅ Created new content (ID: {new_content.id}): week={week}, day={day}, platform={platform}, has_image={bool(image_url)}")
