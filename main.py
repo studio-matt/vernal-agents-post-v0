@@ -9288,8 +9288,8 @@ async def save_content_item(
                 existing_content.day = day
             if item.get("platform"):
                 existing_content.platform = platform
-            # Update use_without_image if provided
-            if "use_without_image" in item:
+            # Update use_without_image if provided (only if column exists in database)
+            if "use_without_image" in item and hasattr(existing_content, 'use_without_image'):
                 existing_content.use_without_image = bool(item.get("use_without_image"))
             logger.info(f"✅ Updated existing content (ID: {existing_content.id}): week={week}, day={day}, platform={platform}, image={bool(image_url)}")
         else:
@@ -9459,7 +9459,7 @@ def get_campaign_content_items(
                     "imageProcessedAt": item.image_processed_at.isoformat() if hasattr(item, 'image_processed_at') and item.image_processed_at is not None else None,
                     "contentPublishedAt": item.content_published_at.isoformat() if hasattr(item, 'content_published_at') and item.content_published_at is not None else None,
                     "imagePublishedAt": item.image_published_at.isoformat() if hasattr(item, 'image_published_at') and item.image_published_at is not None else None,
-                    "use_without_image": bool(getattr(item, 'use_without_image', False)),
+                    "use_without_image": bool(getattr(item, 'use_without_image', False)) if hasattr(item, 'use_without_image') else False,
                 })
                 logger.info(f"📋 Item: week={item.week}, day={item.day}, platform={item.platform}, status={item.status}, has_image={bool(image_url)}, db_id={item.id}")
             except Exception as item_error:
