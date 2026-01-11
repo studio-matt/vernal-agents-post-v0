@@ -334,9 +334,41 @@ def create_content_generation_crew(
                     SystemSettings.setting_key == f"writing_agent_{platform_lower}_description"
                 ).first()
             
+            # Helper function to replace template variables with actual values or escape them
+            def format_template_string(template_str: str, **kwargs) -> str:
+                """Format template string, replacing known variables and escaping unknown ones"""
+                if not template_str:
+                    return ""
+                try:
+                    # Try to format with provided variables
+                    formatted = template_str.format(**kwargs)
+                    return formatted
+                except KeyError as e:
+                    # If a variable is missing, replace it with empty string or the variable name
+                    import re
+                    # Find all template variables
+                    pattern = r'\{([^}]+)\}'
+                    matches = re.findall(pattern, template_str)
+                    for var in matches:
+                        if var not in kwargs:
+                            # Replace unknown variables with empty string or descriptive text
+                            if var == 'context':
+                                # Replace {context} with actual context from research output
+                                template_str = template_str.replace(f'{{{var}}}', 'the research output and content queue items provided above')
+                            else:
+                                # For other unknown variables, just remove them
+                                template_str = template_str.replace(f'{{{var}}}', '')
+                    return template_str
+            
             # Use admin panel configuration if available, otherwise fall back to database task
             if expected_output_setting and expected_output_setting.setting_value:
-                writing_expected_output = expected_output_setting.setting_value
+                # Format template variables in expected_output
+                writing_expected_output = format_template_string(
+                    expected_output_setting.setting_value,
+                    week=week,
+                    platform=platform,
+                    context="the research output and content queue items"
+                )
                 logger.info(f"✅ Using {platform.capitalize()} Writer expected_output from SystemSettings (admin panel)")
             elif platform_task_desc:
                 writing_expected_output = platform_task_desc.expected_output
@@ -346,7 +378,13 @@ def create_content_generation_crew(
                 logger.warning(f"⚠️ Using default expected_output (no configuration found)")
             
             if description_setting and description_setting.setting_value:
-                writing_description = description_setting.setting_value
+                # Format template variables in description
+                writing_description = format_template_string(
+                    description_setting.setting_value,
+                    week=week,
+                    platform=platform,
+                    context="the research output and content queue items"
+                )
                 logger.info(f"✅ Using {platform} Writer description from SystemSettings (admin panel)")
             elif platform_task_desc:
                 writing_description = platform_task_desc.description
@@ -361,18 +399,25 @@ def create_content_generation_crew(
             # Add prompt (CRITICAL OUTPUT CONTRACT) if configured in admin panel
             # The prompt should be VERY prominent and clear
             if prompt_setting and prompt_setting.setting_value:
+                # Format template variables in prompt
+                formatted_prompt = format_template_string(
+                    prompt_setting.setting_value,
+                    week=week,
+                    platform=platform,
+                    context="the research output and content queue items"
+                )
                 writing_task_description_base = f"""{writing_description}
 
 ═══════════════════════════════════════════════════════════════
 CRITICAL OUTPUT CONTRACT - YOU MUST FOLLOW THIS EXACTLY:
 ═══════════════════════════════════════════════════════════════
-{prompt_setting.setting_value}
+{formatted_prompt}
 ═══════════════════════════════════════════════════════════════
 
-REMEMBER: {prompt_setting.setting_value}
+REMEMBER: {formatted_prompt}
 ═══════════════════════════════════════════════════════════════"""
                 logger.info(f"✅ Using {platform} Writer prompt from SystemSettings (admin panel)")
-                logger.info(f"📝 Prompt preview (first 200 chars): {prompt_setting.setting_value[:200]}")
+                logger.info(f"📝 Prompt preview (first 200 chars): {formatted_prompt[:200]}")
             else:
                 logger.warning(f"⚠️ No prompt found in SystemSettings for {platform} Writer (admin panel config not found)")
                 logger.warning(f"⚠️ Looking for key: writing_agent_{agent_id if agent_id else platform_lower}_prompt")
