@@ -60,6 +60,14 @@ def truthy(v: str) -> bool:
     return str(v).strip().lower() in {"true", "1", "yes", "y", "on"}
 
 
+def normalize_qc_agent_id(agent_id: str) -> str:
+    """
+    Normalize QC agent ID to match DB key format.
+    Removes 'qc_' prefix if present and strips whitespace.
+    """
+    return agent_id.replace("qc_", "").strip()
+
+
 def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = None) -> List[Agent]:
     """
     Get QC agents for a specific agent.
