@@ -235,7 +235,7 @@ def create_content_generation_crew(
         qc_task_desc = db_manager.get_task_by_name("qc_task")
         platform_task_desc = db_manager.get_task_by_name(f"{platform}_task")
         
-        if not all([research_task_desc, qc_task_desc, platform_task_desc]):
+        if not all([research_task_desc, qc_task_desc]):
             return {
                 "success": False,
                 "error": "Required tasks not found in database",
@@ -266,8 +266,64 @@ def create_content_generation_crew(
         )
         
         # Task 2: Writing Agent - Create platform-specific content from research
-        writing_description = platform_task_desc.description
-        writing_expected_output = platform_task_desc.expected_output
+        # CRITICAL: Retrieve writing agent configuration from SystemSettings (admin panel)
+        db = SessionLocal()
+        try:
+            platform_lower = platform.lower()
+            
+            # Get expected_output from SystemSettings (admin panel configuration)
+            expected_output_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"writing_agent_{platform_lower}_expected_output"
+            ).first()
+            
+            # Get prompt from SystemSettings (admin panel configuration)
+            prompt_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"writing_agent_{platform_lower}_prompt"
+            ).first()
+            
+            # Get description from SystemSettings (admin panel configuration)
+            description_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"writing_agent_{platform_lower}_description"
+            ).first()
+            
+            # Use admin panel configuration if available, otherwise fall back to database task
+            if expected_output_setting and expected_output_setting.setting_value:
+                writing_expected_output = expected_output_setting.setting_value
+                logger.info(f"✅ Using Instagram Writer expected_output from SystemSettings (admin panel)")
+            elif platform_task_desc:
+                writing_expected_output = platform_task_desc.expected_output
+                logger.warning(f"⚠️ Using fallback expected_output from database task (admin panel config not found)")
+            else:
+                writing_expected_output = f"Create engaging {platform} content based on the research analysis."
+                logger.warning(f"⚠️ Using default expected_output (no configuration found)")
+            
+            if description_setting and description_setting.setting_value:
+                writing_description = description_setting.setting_value
+                logger.info(f"✅ Using {platform} Writer description from SystemSettings (admin panel)")
+            elif platform_task_desc:
+                writing_description = platform_task_desc.description
+                logger.warning(f"⚠️ Using fallback description from database task (admin panel config not found)")
+            else:
+                writing_description = f"Create {platform}-specific content based on the research output."
+                logger.warning(f"⚠️ Using default description (no configuration found)")
+            
+            # Build the writing task description with prompt if available
+            writing_task_description_base = writing_description
+            
+            # Add prompt (CRITICAL OUTPUT CONTRACT) if configured in admin panel
+            if prompt_setting and prompt_setting.setting_value:
+                writing_task_description_base = f"""{writing_description}
+
+CRITICAL OUTPUT CONTRACT - MUST FOLLOW EXACTLY:
+{prompt_setting.setting_value}"""
+                logger.info(f"✅ Using {platform} Writer prompt from SystemSettings (admin panel)")
+            else:
+                logger.warning(f"⚠️ No prompt found in SystemSettings for {platform} Writer (admin panel config not found)")
+                
+        finally:
+            db.close()
+        
+        writing_description = writing_task_description_base
         
         writing_task = Task(
             description=f"""{writing_description}
