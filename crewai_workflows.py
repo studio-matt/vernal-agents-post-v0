@@ -359,14 +359,23 @@ def create_content_generation_crew(
             writing_task_description_base = writing_description
             
             # Add prompt (CRITICAL OUTPUT CONTRACT) if configured in admin panel
+            # The prompt should be VERY prominent and clear
             if prompt_setting and prompt_setting.setting_value:
                 writing_task_description_base = f"""{writing_description}
 
-CRITICAL OUTPUT CONTRACT - MUST FOLLOW EXACTLY:
-{prompt_setting.setting_value}"""
+═══════════════════════════════════════════════════════════════
+CRITICAL OUTPUT CONTRACT - YOU MUST FOLLOW THIS EXACTLY:
+═══════════════════════════════════════════════════════════════
+{prompt_setting.setting_value}
+═══════════════════════════════════════════════════════════════
+
+REMEMBER: {prompt_setting.setting_value}
+═══════════════════════════════════════════════════════════════"""
                 logger.info(f"✅ Using {platform} Writer prompt from SystemSettings (admin panel)")
+                logger.info(f"📝 Prompt preview (first 200 chars): {prompt_setting.setting_value[:200]}")
             else:
                 logger.warning(f"⚠️ No prompt found in SystemSettings for {platform} Writer (admin panel config not found)")
+                logger.warning(f"⚠️ Looking for key: writing_agent_{agent_id if agent_id else platform_lower}_prompt")
                 
         finally:
             db.close()
