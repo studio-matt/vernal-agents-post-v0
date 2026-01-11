@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional, List
 import logging
 import json
 import threading
+import hashlib
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -859,7 +860,6 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             logger.info(f"🔍 Iteration {iteration_count}: QC Agent reviewing content")
             
             # VERIFICATION: Log hash of writer output before QC review
-            import hashlib
             content_hash_before_qc = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
             logger.info(f"🔐 QC VERIFICATION: Writer output hash (before QC): {content_hash_before_qc[:16]}...")
             logger.info(f"📊 QC VERIFICATION: Writer output length: {len(str(current_content))} chars")
@@ -1186,7 +1186,6 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
         final_output = current_content
         
         # VERIFICATION: Final output hash check
-        import hashlib
         final_hash = hashlib.sha256(str(final_output).encode('utf-8')).hexdigest()
         if current_content:
             writer_hash = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
