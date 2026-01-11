@@ -360,14 +360,30 @@ def create_content_generation_crew(
                     SystemSettings.setting_key == f"writing_agent_{platform_lower}_description"
                 ).first()
             
+            # Extract campaign context from text parameter
+            # The text parameter contains "Campaign Context:" section with the formatted context
+            # that matches the instructional copy (query, keywords, topics, scraped text, etc.)
+            campaign_context_section = ""
+            if "Campaign Context:" in text:
+                # Extract the campaign context section
+                context_start = text.find("Campaign Context:")
+                context_end = text.find("\n\nGenerate content", context_start)
+                if context_end == -1:
+                    context_end = len(text)
+                campaign_context_section = text[context_start:context_end].replace("Campaign Context:", "").strip()
+            
             # Build the actual context string that will be passed to {context} placeholder
-            # This includes all the information from the text parameter (content queue, brand guidelines, etc.)
-            # plus author personality and any other relevant info
-            context_string = f"""{text}
-
-Author Personality: {author_personality or 'professional'}
-Platform: {platform}
-Week: {week}"""
+            # This should match the instructional copy format:
+            # - Campaign query and keywords
+            # - Top keywords found in scraped content
+            # - Topics identified from content
+            # - Number of scraped texts
+            # - Sample text (first 500 characters)
+            if campaign_context_section:
+                context_string = campaign_context_section
+            else:
+                # Fallback: use the full text if campaign context section not found
+                context_string = text
             
             # Helper function to replace template variables with actual values or escape them
             def format_template_string(template_str: str, **kwargs) -> str:

@@ -8048,13 +8048,69 @@ async def generate_campaign_content(
                         if brand_personality and brand_personality.guidelines:
                             brand_guidelines = f"\n\nBrand Voice Guidelines:\n{brand_personality.guidelines}"
                     
-                    # Build writing context
+                    # Build campaign context for {context} placeholder (matches instructional copy)
+                    # Get scraped texts for context
+                    from models import ScrapedText
+                    scraped_texts = session.query(ScrapedText).filter(
+                        ScrapedText.campaign_id == cid
+                    ).limit(10).all()
+                    
+                    # Get topics (if available from campaign or extract from scraped texts)
+                    topics_list = []
+                    if campaign.topics:
+                        try:
+                            topics_list = json.loads(campaign.topics) if isinstance(campaign.topics, str) else campaign.topics
+                        except:
+                            topics_list = []
+                    
+                    # Get keywords
+                    campaign_keywords = campaign.keywords.split(",") if campaign.keywords else []
+                    
+                    # Build sample text (first 500 chars from first scraped text)
+                    sample_text = ""
+                    if scraped_texts and scraped_texts[0].text:
+                        sample_text = scraped_texts[0].text[:500]
+                    
+                    # Build word cloud data (top keywords from scraped content)
+                    word_cloud_data = []
+                    if scraped_texts:
+                        from collections import Counter
+                        import re
+                        all_words = []
+                        for st in scraped_texts:
+                            if st.text:
+                                words = re.findall(r'\b\w+\b', st.text.lower())
+                                all_words.extend(words)
+                        word_counts = Counter(all_words)
+                        # Get top 20 keywords (excluding common stop words)
+                        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'where', 'when', 'why', 'how'}
+                        top_keywords = [(word, count) for word, count in word_counts.most_common(30) if word not in stop_words and len(word) > 3][:20]
+                        word_cloud_data = [{"term": word, "count": count} for word, count in top_keywords]
+                    
+                    # Build context string matching instructional copy format
+                    campaign_context = f"""Campaign Query: {campaign.query or 'N/A'}
+Campaign Keywords: {', '.join(campaign_keywords) if campaign_keywords else 'N/A'}
+
+Top Keywords Found in Scraped Content:
+{', '.join([item['term'] for item in word_cloud_data[:10]]) if word_cloud_data else 'N/A'}
+
+Topics Identified: {', '.join([str(t) for t in topics_list[:10]]) if topics_list else 'N/A'}
+
+Number of Scraped Texts: {len(scraped_texts)}
+
+Sample Text (first 500 characters):
+{sample_text if sample_text else 'N/A'}"""
+                    
+                    # Build writing context (includes both content queue and campaign context)
                     writing_context = f"""Content Queue Foundation:
 {queue_context}
 
 {f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}
 
-Generate content for {platform} based on the content queue items above."""
+Campaign Context:
+{campaign_context}
+
+Generate content for {platform} based on the content queue items and campaign context above."""
                     
                     # Log configuration details for verbose status tracking
                     author_personality_name = "None"
