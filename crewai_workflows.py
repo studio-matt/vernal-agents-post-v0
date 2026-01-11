@@ -129,15 +129,19 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                         if not platform_lower or platform_lower not in qc_agent_id.lower():
                             logger.info(f"⏭️  Skipped platform-scoped QC agent {qc_agent_id} (platform mismatch: {platform_lower} not in {qc_agent_id})")
                             continue
+                        
                         # Platform-scoped agents are AUTOMATICALLY included when platform matches
-                        # No need to check global flag - they're automatically enabled for their platform
-                        logger.info(f"✅ Platform-scoped QC agent {qc_agent_id} matches platform {platform_lower} - automatically including")
+                        # This is a platform override - we skip enable flag checks for platform-specific agents
+                        # The platform match itself is the selector/enablement for platform-scoped agents
+                        logger.info(f"🔄 AUTO-OVERRIDE: Platform-scoped QC agent {qc_agent_id} matches platform {platform_lower} - automatically including (ignoring enable flag)")
+                        
+                        # Create agent from QC agent ID (read-only operation - no DB writes)
                         qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)
                         if qc_agent_obj:
                             # Avoid duplicates (if assigned QC is also in the list)
                             if not any(agent.role == qc_agent_obj.role for agent in qc_agents):
                                 qc_agents.append(qc_agent_obj)
-                                logger.info(f"✅ Added platform-scoped ({platform_lower}) QC agent: {qc_agent_id}")
+                                logger.info(f"✅ Added platform-scoped ({platform_lower}) QC agent: {qc_agent_id} [AUTO-OVERRIDE: platform match, enable flag ignored]")
                             else:
                                 logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (duplicate role)")
                         else:
