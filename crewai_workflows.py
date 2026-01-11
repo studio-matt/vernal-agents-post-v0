@@ -271,20 +271,68 @@ def create_content_generation_crew(
         try:
             platform_lower = platform.lower()
             
-            # Get expected_output from SystemSettings (admin panel configuration)
-            expected_output_setting = db.query(SystemSettings).filter(
-                SystemSettings.setting_key == f"writing_agent_{platform_lower}_expected_output"
+            # First, find the agent ID for this platform from writing_agents_list
+            # Agent IDs are like "agent_0_instagram", "agent_1_facebook", etc.
+            agent_id = None
+            agents_list_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == "writing_agents_list"
             ).first()
             
-            # Get prompt from SystemSettings (admin panel configuration)
-            prompt_setting = db.query(SystemSettings).filter(
-                SystemSettings.setting_key == f"writing_agent_{platform_lower}_prompt"
-            ).first()
+            if agents_list_setting and agents_list_setting.setting_value:
+                try:
+                    agent_ids = json.loads(agents_list_setting.setting_value)
+                    # Find agent ID that matches this platform
+                    for aid in agent_ids:
+                        # Check if agent name matches platform
+                        name_setting = db.query(SystemSettings).filter(
+                            SystemSettings.setting_key == f"writing_agent_{aid}_name"
+                        ).first()
+                        if name_setting and name_setting.setting_value:
+                            agent_name_lower = name_setting.setting_value.lower()
+                            # Check if platform name is in agent name (e.g., "instagram" in "Instagram Writer")
+                            if platform_lower in agent_name_lower or agent_name_lower.replace(" writer", "").replace(" content", "") == platform_lower:
+                                agent_id = aid
+                                logger.info(f"✅ Found agent ID for {platform}: {agent_id}")
+                                break
+                        
+                        # Also check if agent ID itself contains platform name
+                        if platform_lower in aid.lower():
+                            agent_id = aid
+                            logger.info(f"✅ Found agent ID for {platform} by ID match: {agent_id}")
+                            break
+                except json.JSONDecodeError:
+                    logger.warning(f"⚠️ Could not parse writing_agents_list")
             
-            # Get description from SystemSettings (admin panel configuration)
-            description_setting = db.query(SystemSettings).filter(
-                SystemSettings.setting_key == f"writing_agent_{platform_lower}_description"
-            ).first()
+            # Try to get configuration using agent_id if found, otherwise try platform name directly
+            if agent_id:
+                # Get expected_output from SystemSettings using agent_id
+                expected_output_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == f"writing_agent_{agent_id}_expected_output"
+                ).first()
+                
+                # Get prompt from SystemSettings using agent_id
+                prompt_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == f"writing_agent_{agent_id}_prompt"
+                ).first()
+                
+                # Get description from SystemSettings using agent_id
+                description_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == f"writing_agent_{agent_id}_description"
+                ).first()
+            else:
+                # Fallback: try platform name directly (for backward compatibility)
+                logger.warning(f"⚠️ Could not find agent_id for {platform}, trying platform name directly")
+                expected_output_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == f"writing_agent_{platform_lower}_expected_output"
+                ).first()
+                
+                prompt_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == f"writing_agent_{platform_lower}_prompt"
+                ).first()
+                
+                description_setting = db.query(SystemSettings).filter(
+                    SystemSettings.setting_key == f"writing_agent_{platform_lower}_description"
+                ).first()
             
             # Use admin panel configuration if available, otherwise fall back to database task
             if expected_output_setting and expected_output_setting.setting_value:
