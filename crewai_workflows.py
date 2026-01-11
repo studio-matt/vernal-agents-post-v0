@@ -733,6 +733,7 @@ REMEMBER: {formatted_prompt}
             
             # Create writing task with research output and any QC feedback
             # Include the full context (content queue, brand guidelines, etc.) in the description
+            # CRITICAL: Platform constraints and brand voice remain authoritative; QC feedback is secondary
             writing_task_iter = Task(
                 description=f"""{writing_description}
                 
@@ -747,7 +748,23 @@ REMEMBER: {formatted_prompt}
                 Research Output:
                 {research_output}
                 
-                {f'QC Feedback from Previous Review:\n{qc_feedback_history[-1]}\n\nPlease address the feedback and revise the content accordingly.' if qc_feedback_history else 'The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.'}
+                {f'''
+═══════════════════════════════════════════════════════════════
+QC COMPLIANCE FEEDBACK (Secondary Constraints):
+═══════════════════════════════════════════════════════════════
+{qc_feedback_history[-1]}
+
+CRITICAL PRECEDENCE RULES:
+1. Platform formatting rules (emojis, headings, structure, hashtags) are MANDATORY and must be preserved
+2. Brand voice guidelines are MANDATORY and must be preserved
+3. Author personality style is MANDATORY and must be preserved
+4. Address QC constraints ONLY within the bounds of platform/brand/author requirements
+5. If QC constraint conflicts with platform rule, platform rule takes precedence (unless it's a safety/legal violation)
+
+You must satisfy BOTH the original platform/brand/author constraints AND the QC constraints.
+If they conflict on stylistic grounds, prioritize platform/brand/author. If QC identifies a safety/legal violation, address it while maintaining platform formatting where possible.
+═══════════════════════════════════════════════════════════════
+''' if qc_feedback_history else 'The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.'}
                 """,
                 expected_output=writing_expected_output,
                 agent=writing_agent,
@@ -869,37 +886,50 @@ REMEMBER: {formatted_prompt}
                     }
                 }
             
-            # Create QC task with structured output requirement
+            # Create QC task - QC is a GATE, not a rewriter
+            # QC must pass writer output unchanged if safe, or reject with minimal constraints only
             qc_task_iter = Task(
                 description=f"""{qc_task_desc.description}
                 
-                Review the content created by the writing agent for:
-                - Quality and clarity
-                - Platform-specific requirements ({platform})
-                - Compliance with guidelines
-                - Author personality match ({author_personality or 'professional'})
-                - Accuracy and relevance to the original research
+                You are a COMPLIANCE GATE, not a content rewriter.
+                
+                Review the content created by the writing agent ONLY for:
+                - Explicit policy violations (safety, legal, brand policy)
+                - Critical factual errors
+                - Platform-specific policy requirements (not stylistic preferences)
                 
                 Content to Review:
                 {current_content}
+                
+                CRITICAL RULES:
+                1. If content is SAFE (no policy violations): You MUST approve it UNCHANGED.
+                   - Do NOT suggest stylistic improvements
+                   - Do NOT rewrite for "better quality" or "clarity"
+                   - Do NOT modify platform formatting (emojis, headings, structure) unless it violates platform policy
+                   - Platform formatting rules and brand voice are set by the writing agent and must be preserved
+                
+                2. If content is UNSAFE (policy violation detected): Reject with minimal constraints only.
+                   - Identify the specific policy violation category
+                   - Provide minimal safety constraints to fix it
+                   - Do NOT provide a full rewrite
+                   - Do NOT override platform formatting or brand voice unless directly violating policy
                 
                 IMPORTANT: You must provide a structured response in the following format:
                 
                 STATUS: [APPROVED or REJECTED]
                 
                 If STATUS is APPROVED:
-                Provide the final approved content below.
+                - Return the content EXACTLY as provided (unchanged)
+                - Do not modify, improve, or rewrite
                 
                 If STATUS is REJECTED:
-                Provide specific feedback on what needs to be changed, then provide the revised content.
+                - POLICY_VIOLATION: [Category: safety/legal/brand/factual]
+                - MINIMAL_CONSTRAINTS: [Only the specific constraints needed to fix the violation, no full rewrite]
+                - Do NOT provide REVISED_CONTENT - the writer will fix it based on constraints only
                 
-                FEEDBACK: [Your detailed feedback on what needs improvement]
-                
-                REVISED_CONTENT: [The improved content addressing the feedback]
-                
-                The writing agent will use your feedback to revise the content in the next iteration.
+                FEEDBACK: [Only if rejected: policy violation category and minimal constraints]
                 """,
-                expected_output="A structured response with STATUS (APPROVED/REJECTED), FEEDBACK (if rejected), and content.",
+                expected_output="STATUS: APPROVED (return content unchanged) or REJECTED (policy violation + minimal constraints only, no rewrite).",
                 agent=primary_qc_agent,
                 verbose=True
             )
@@ -963,74 +993,97 @@ REMEMBER: {formatted_prompt}
                 qc_output_raw = str(qc_result)
             
             # Parse QC response for approval/rejection
+            # QC is a GATE: if approved, use writer output unchanged; if rejected, extract only constraints
             qc_output_str = str(qc_output_raw)
             is_approved = False
             feedback = None
-            revised_content = None
+            policy_violation = None
+            minimal_constraints = None
             
             # Check for structured response
             if "STATUS:" in qc_output_str.upper():
                 status_line = [line for line in qc_output_str.split('\n') if 'STATUS:' in line.upper()][0]
                 if "APPROVED" in status_line.upper():
                     is_approved = True
-                    revised_content = qc_output_str
+                    # QC approved - we will use writer output unchanged (current_content)
+                    # Do NOT use QC's output as it may have rewritten the content
+                    logger.info(f"✅ QC approved - using writer output unchanged")
                 elif "REJECTED" in status_line.upper():
                     is_approved = False
-                    # Extract feedback
-                    if "FEEDBACK:" in qc_output_str.upper():
-                        feedback_start = qc_output_str.upper().find("FEEDBACK:")
-                        feedback_end = qc_output_str.upper().find("REVISED_CONTENT:", feedback_start)
-                        if feedback_end > feedback_start:
-                            feedback = qc_output_str[feedback_start + 9:feedback_end].strip()
+                    # Extract policy violation category
+                    if "POLICY_VIOLATION:" in qc_output_str.upper():
+                        violation_start = qc_output_str.upper().find("POLICY_VIOLATION:")
+                        violation_end = qc_output_str.upper().find("MINIMAL_CONSTRAINTS:", violation_start)
+                        if violation_end > violation_start:
+                            policy_violation = qc_output_str[violation_start + 17:violation_end].strip()
                         else:
-                            feedback = qc_output_str[feedback_start + 9:].strip()
-                    # Extract revised content
-                    if "REVISED_CONTENT:" in qc_output_str.upper():
-                        revised_start = qc_output_str.upper().find("REVISED_CONTENT:")
-                        revised_content = qc_output_str[revised_start + 16:].strip()
+                            policy_violation = qc_output_str[violation_start + 17:].strip()
+                    
+                    # Extract minimal constraints (not full rewrite)
+                    if "MINIMAL_CONSTRAINTS:" in qc_output_str.upper():
+                        constraints_start = qc_output_str.upper().find("MINIMAL_CONSTRAINTS:")
+                        constraints_end = qc_output_str.upper().find("FEEDBACK:", constraints_start)
+                        if constraints_end > constraints_start:
+                            minimal_constraints = qc_output_str[constraints_start + 19:constraints_end].strip()
+                        else:
+                            minimal_constraints = qc_output_str[constraints_start + 19:].strip()
+                    
+                    # Extract feedback (fallback if MINIMAL_CONSTRAINTS not found)
+                    if not minimal_constraints and "FEEDBACK:" in qc_output_str.upper():
+                        feedback_start = qc_output_str.upper().find("FEEDBACK:")
+                        feedback = qc_output_str[feedback_start + 9:].strip()
+                    elif minimal_constraints:
+                        feedback = minimal_constraints
                     else:
-                        revised_content = qc_output_str
+                        feedback = "Policy violation detected - requires revision"
+                    
+                    # Build structured feedback with policy category and constraints
+                    if policy_violation:
+                        feedback = f"Policy Violation: {policy_violation}\n\nConstraints: {minimal_constraints or feedback}"
             else:
                 # Fallback: Try to detect approval/rejection from content
-                # If QC output is very similar to input, likely approved
-                # If QC output has significant changes or mentions issues, likely rejected
+                # If QC output mentions rejection keywords, reject; otherwise approve
                 qc_lower = qc_output_str.lower()
-                rejection_keywords = ["reject", "fail", "issue", "problem", "needs", "improve", "revise", "change"]
+                rejection_keywords = ["reject", "fail", "violation", "policy", "unsafe", "inappropriate"]
                 if any(keyword in qc_lower for keyword in rejection_keywords):
                     is_approved = False
-                    feedback = "QC agent identified issues requiring revision"
-                    revised_content = qc_output_str
+                    feedback = "Policy violation detected - requires revision"
                 else:
                     is_approved = True
-                    revised_content = qc_output_str
+                    logger.info(f"✅ QC approved (fallback detection) - using writer output unchanged")
             
             if is_approved:
-                logger.info(f"✅ Iteration {iteration_count}: QC Agent APPROVED content")
+                logger.info(f"✅ Iteration {iteration_count}: QC Agent APPROVED content - using writer output unchanged")
                 if update_task_status_callback:
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
-                        task=f"Content APPROVED after {iteration_count} iteration(s)",
+                        task=f"Content APPROVED after {iteration_count} iteration(s) - writer output preserved",
                         progress=90,
                         agent_status="completed"
                     )
                 # Break out of loop - content approved
+                # current_content (writer output) will be used as final_output
                 break
             else:
-                logger.warning(f"⚠️ Iteration {iteration_count}: QC Agent REJECTED content")
+                logger.warning(f"⚠️ Iteration {iteration_count}: QC Agent REJECTED content - policy violation detected")
                 current_rejection_count += 1
                 rejection_counts[primary_qc_agent_id] = current_rejection_count
-                qc_feedback_history.append(feedback or "QC agent requested revisions")
+                
+                # Store only the feedback/constraints (not rewritten content)
+                qc_feedback_history.append(feedback or "Policy violation - requires revision")
                 
                 if update_task_status_callback:
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
-                        task=f"Content REJECTED (Rejection {current_rejection_count}/{rejection_limit})\n\nFeedback: {feedback or 'Revision requested'}",
+                        task=f"Content REJECTED (Rejection {current_rejection_count}/{rejection_limit})\n\nPolicy Violation: {policy_violation or 'Detected'}\nConstraints: {minimal_constraints or feedback or 'Revision requested'}",
                         progress=70 + (iteration_count * 5),
                         agent_status="completed"
                     )
                 
-                # Continue loop - send feedback back to writing agent
-                current_content = revised_content  # Use revised content as starting point for next iteration
+                # CRITICAL: Do NOT overwrite current_content with QC's revised content
+                # Keep writer output as baseline - writer will retry with original constraints + QC feedback
+                # current_content remains unchanged (writer's output)
+                logger.info(f"📝 Keeping writer output as baseline for retry - QC feedback: {feedback[:100] if feedback else 'N/A'}")
         
         # If we exited loop due to max iterations, fail
         if iteration_count >= max_iterations and not is_approved:
@@ -1065,7 +1118,10 @@ REMEMBER: {formatted_prompt}
             }
         
         # Success - content approved
-        final_output = revised_content or current_content
+        # CRITICAL: Use writer output (current_content) unchanged, NOT QC's revised_content
+        # QC is a gate - if approved, writer output passes through unchanged
+        final_output = current_content
+        logger.info(f"✅ Final output: Using writer output unchanged (QC approved as gate)")
         
         # Helper function to extract text from CrewAI TaskOutput objects
         def extract_task_output(task_output):
