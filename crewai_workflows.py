@@ -944,16 +944,23 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 )
             
             # STEP 3: QC Agent Review (with structured approval/rejection)
+            # Get the first QC agent (for now, we'll use the primary QC agent)
+            primary_qc_agent = qc_agents_list[0] if qc_agents_list else qc_agent
+            if not qc_agents_list:
+                logger.warning("⚠️ QC GATE: qc_agents_list empty; using default qc_agent as primary")
+            primary_qc_agent_role = getattr(primary_qc_agent, "role", "QC Agent")
+            
             logger.info(f"🔍 Iteration {iteration_count}: QC Agent reviewing content")
-            logger.info(f"🚪 QC GATE: Executing QC agent '{primary_qc_agent.role if hasattr(primary_qc_agent, 'role') else 'QC Agent'}' - content will be blocked if policy violation detected")
+            logger.info(
+                f"🚪 QC GATE: Executing QC agent '{primary_qc_agent_role}' - "
+                f"content will be blocked if policy violation detected"
+            )
             
             # VERIFICATION: Log hash of writer output before QC review
             content_hash_before_qc = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
             logger.info(f"🔐 QC VERIFICATION: Writer output hash (before QC): {content_hash_before_qc[:16]}...")
             logger.info(f"📊 QC VERIFICATION: Writer output length: {len(str(current_content))} chars")
             
-            # Get the first QC agent (for now, we'll use the primary QC agent)
-            primary_qc_agent = qc_agents_list[0] if qc_agents_list else qc_agent
             primary_qc_agent_id = None
             
             # Find QC agent ID for rejection limit tracking
