@@ -471,6 +471,9 @@ REMEMBER: {formatted_prompt}
             Author personality: {author_personality or 'professional'}
             Week: {week}
             
+            Original Context (Content Queue, Brand Guidelines, Parent Idea, etc.):
+            {text}
+            
             The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.
             """,
             expected_output=writing_expected_output,
