@@ -129,11 +129,25 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                         if not platform_lower or platform_lower not in qc_agent_id.lower():
                             logger.info(f"⏭️  Skipped platform-scoped QC agent {qc_agent_id} (platform mismatch: {platform_lower} not in {qc_agent_id})")
                             continue
+                        # Platform-scoped agents are AUTOMATICALLY included when platform matches
+                        # No need to check global flag - they're automatically enabled for their platform
+                        logger.info(f"✅ Platform-scoped QC agent {qc_agent_id} matches platform {platform_lower} - automatically including")
+                        qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)
+                        if qc_agent_obj:
+                            # Avoid duplicates (if assigned QC is also in the list)
+                            if not any(agent.role == qc_agent_obj.role for agent in qc_agents):
+                                qc_agents.append(qc_agent_obj)
+                                logger.info(f"✅ Added platform-scoped ({platform_lower}) QC agent: {qc_agent_id}")
+                            else:
+                                logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (duplicate role)")
+                        else:
+                            logger.warning(f"⚠️  Failed to create QC agent from ID: {qc_agent_id} (check _create_qc_agent_from_id logs)")
+                        continue  # Skip to next agent - platform-scoped handled
                     
-                    # Check if this QC agent is enabled (global or platform-scoped)
-                    # Try multiple key formats in order of likelihood
+                    # For non-platform-scoped agents, check global flag
+                    # These are truly global QC agents that apply to all platforms
                     candidate_keys = [
-                        f"qc_agent_{qc_agent_id}_qc_global",                     # matches your DB (e.g., qc_agent_agent_1_instagram_qc_global)
+                        f"qc_agent_{qc_agent_id}_qc_global",                     # matches your DB (e.g., qc_agent_agent_0_qc_qc_global)
                         f"qc_agent_{qc_agent_id}_global",                        # legacy
                         f"qc_agent_{qc_agent_id.replace('qc_', '')}_qc_global",  # legacy alt
                         f"qc_agent_{qc_agent_id.replace('qc_', '')}_global",     # legacy alt
@@ -165,8 +179,7 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                             # Avoid duplicates (if assigned QC is also in the list)
                             if not any(agent.role == qc_agent_obj.role for agent in qc_agents):
                                 qc_agents.append(qc_agent_obj)
-                                scope_label = f"platform-scoped ({platform_lower})" if is_platform_scoped else "global"
-                                logger.info(f"✅ Added {scope_label} QC agent: {qc_agent_id}")
+                                logger.info(f"✅ Added global QC agent: {qc_agent_id}")
                             else:
                                 logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (duplicate role)")
                         else:
