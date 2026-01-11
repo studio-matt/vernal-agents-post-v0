@@ -945,6 +945,7 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             
             # STEP 3: QC Agent Review (with structured approval/rejection)
             logger.info(f"🔍 Iteration {iteration_count}: QC Agent reviewing content")
+            logger.info(f"🚪 QC GATE: Executing QC agent '{primary_qc_agent.role if hasattr(primary_qc_agent, 'role') else 'QC Agent'}' - content will be blocked if policy violation detected")
             
             # VERIFICATION: Log hash of writer output before QC review
             content_hash_before_qc = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
