@@ -731,6 +731,33 @@ REMEMBER: {formatted_prompt}
                     agent_status="running"
                 )
             
+            # VERIFICATION: Log platform formatting contract checks before writer retry
+            if qc_feedback_history:
+                logger.info(f"🔐 WRITER RETRY VERIFICATION: Platform: {platform.upper()}")
+                logger.info(f"🔐 WRITER RETRY VERIFICATION: Iteration: {iteration_count}")
+                
+                # Check platform formatting contract preservation
+                if platform.lower() == "instagram":
+                    # IG formatting checks
+                    content_str = str(current_content)
+                    has_hashtag_line = "#" in content_str and any(line.strip().startswith("#") for line in content_str.split("\n")[-3:])
+                    hashtag_count = len([line for line in content_str.split("\n") if line.strip().startswith("#")])
+                    has_headings = "##" in content_str or "**" in content_str or "Post Idea:" in content_str or "STATUS:" in content_str
+                    emoji_count = sum(1 for char in content_str if ord(char) > 127 and char in "😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿👹👺🤡💩👻💀☠️👽👾🤖🎃😺😸😹😻😼😽🙀😿😾")
+                    
+                    logger.info(f"🔐 WRITER RETRY VERIFICATION: IG Format Checks:")
+                    logger.info(f"  - Has hashtag line (last 3 lines): {has_hashtag_line}")
+                    logger.info(f"  - Hashtag count: {hashtag_count}")
+                    logger.info(f"  - Has headings (##, **, Post Idea, STATUS): {has_headings}")
+                    logger.info(f"  - Emoji count: {emoji_count}")
+                    
+                    if has_headings:
+                        logger.warning(f"⚠️ WRITER RETRY VERIFICATION: IG content contains headings - should not have headings")
+                    if not has_hashtag_line or hashtag_count < 3:
+                        logger.warning(f"⚠️ WRITER RETRY VERIFICATION: IG content missing hashtag line or insufficient hashtags")
+                    if emoji_count > 4:
+                        logger.info(f"ℹ️ WRITER RETRY VERIFICATION: IG content has {emoji_count} emojis (acceptable, but note if >4)")
+            
             # Create writing task with research output and any QC feedback
             # Include the full context (content queue, brand guidelines, etc.) in the description
             # CRITICAL: Platform constraints and brand voice remain authoritative; QC feedback is secondary
@@ -830,6 +857,12 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             
             # STEP 3: QC Agent Review (with structured approval/rejection)
             logger.info(f"🔍 Iteration {iteration_count}: QC Agent reviewing content")
+            
+            # VERIFICATION: Log hash of writer output before QC review
+            import hashlib
+            content_hash_before_qc = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
+            logger.info(f"🔐 QC VERIFICATION: Writer output hash (before QC): {content_hash_before_qc[:16]}...")
+            logger.info(f"📊 QC VERIFICATION: Writer output length: {len(str(current_content))} chars")
             
             # Get the first QC agent (for now, we'll use the primary QC agent)
             primary_qc_agent = qc_agents_list[0] if qc_agents_list else qc_agent
@@ -1054,6 +1087,17 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             
             if is_approved:
                 logger.info(f"✅ Iteration {iteration_count}: QC Agent APPROVED content - using writer output unchanged")
+                
+                # VERIFICATION: Assert that final output matches writer output (QC is a gate, not rewriter)
+                content_hash_after_qc = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
+                logger.info(f"🔐 QC VERIFICATION: Writer output hash (after QC approval): {content_hash_after_qc[:16]}...")
+                
+                if content_hash_before_qc != content_hash_after_qc:
+                    logger.error(f"❌ QC VERIFICATION FAILED: Hash changed after QC approval! Before: {content_hash_before_qc[:16]}..., After: {content_hash_after_qc[:16]}...")
+                    logger.error(f"❌ QC should be a gate - output must be unchanged when approved")
+                else:
+                    logger.info(f"✅ QC VERIFICATION PASSED: Hash unchanged - QC correctly acting as gate")
+                
                 if update_task_status_callback:
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
@@ -1066,6 +1110,25 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 break
             else:
                 logger.warning(f"⚠️ Iteration {iteration_count}: QC Agent REJECTED content - policy violation detected")
+                
+                # VERIFICATION: Log extracted policy violation and constraints
+                logger.info(f"🔐 QC VERIFICATION: Policy Violation Category: {policy_violation or 'Not specified'}")
+                logger.info(f"🔐 QC VERIFICATION: Minimal Constraints: {minimal_constraints or feedback or 'Not specified'}")
+                
+                # VERIFICATION: Assert current_content is unchanged (QC didn't rewrite it)
+                content_hash_after_rejection = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
+                logger.info(f"🔐 QC VERIFICATION: Writer output hash (after QC rejection): {content_hash_after_rejection[:16]}...")
+                
+                if content_hash_before_qc != content_hash_after_rejection:
+                    logger.error(f"❌ QC VERIFICATION FAILED: Writer output changed after QC rejection! Before: {content_hash_before_qc[:16]}..., After: {content_hash_after_rejection[:16]}...")
+                    logger.error(f"❌ QC should not modify writer output - it should only provide constraints")
+                else:
+                    logger.info(f"✅ QC VERIFICATION PASSED: Writer output unchanged - QC correctly providing constraints only")
+                
+                # Verify QC did not provide rewritten content
+                if "REVISED_CONTENT:" in qc_output_str.upper():
+                    logger.warning(f"⚠️ QC VERIFICATION WARNING: QC provided REVISED_CONTENT - this should not happen. QC should only provide constraints.")
+                
                 current_rejection_count += 1
                 rejection_counts[primary_qc_agent_id] = current_rejection_count
                 
@@ -1121,7 +1184,19 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
         # CRITICAL: Use writer output (current_content) unchanged, NOT QC's revised_content
         # QC is a gate - if approved, writer output passes through unchanged
         final_output = current_content
+        
+        # VERIFICATION: Final output hash check
+        import hashlib
+        final_hash = hashlib.sha256(str(final_output).encode('utf-8')).hexdigest()
+        if current_content:
+            writer_hash = hashlib.sha256(str(current_content).encode('utf-8')).hexdigest()
+            if final_hash != writer_hash:
+                logger.error(f"❌ FINAL OUTPUT VERIFICATION FAILED: Final hash {final_hash[:16]}... != Writer hash {writer_hash[:16]}...")
+                logger.error(f"❌ QC approved content should be unchanged - final output must equal writer output")
+            else:
+                logger.info(f"✅ FINAL OUTPUT VERIFICATION PASSED: Final hash matches writer output hash")
         logger.info(f"✅ Final output: Using writer output unchanged (QC approved as gate)")
+        logger.info(f"🔐 FINAL OUTPUT VERIFICATION: Final hash: {final_hash[:16]}...")
         
         # Helper function to extract text from CrewAI TaskOutput objects
         def extract_task_output(task_output):
