@@ -50,20 +50,35 @@ def run_with_timeout(func, timeout_seconds=CREWAI_TIMEOUT_SECONDS, *args, **kwar
     
     return result[0]
 
-def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
+def truthy(v: str) -> bool:
+    """
+    Robust boolean parser for SystemSettings values.
+    Returns True for: "true", "1", "yes", "y", "on" (case-insensitive)
+    """
+    if v is None:
+        return False
+    return str(v).strip().lower() in {"true", "1", "yes", "y", "on"}
+
+
+def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = None) -> List[Agent]:
     """
     Get QC agents for a specific agent.
-    Returns: assigned QC agents + global QC agents (always included)
+    Returns: assigned QC agents + global QC agents + platform-scoped QC agents (if platform matches)
     
     Args:
         tab: The agent tab (research, writing)
         agent_id: The agent ID
+        platform: Optional platform name (e.g., "instagram") for platform-scoped QC agents
         
     Returns:
         List of QC Agent objects
     """
     qc_agents: List[Agent] = []
     db = SessionLocal()
+    platform_lower = platform.lower() if platform else None
+    
+    # Platform tags for detecting platform-scoped agents
+    platform_tags = ["instagram", "facebook", "youtube", "twitter", "linkedin", "tiktok", "wordpress"]
     
     try:
         # Step 1: Get assigned QC agent (if any)
@@ -80,7 +95,7 @@ def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
                     qc_agents.append(qc_agent_obj)
                     logger.info(f"✅ Added assigned QC agent: {assigned_qc_id}")
         
-        # Step 2: Get all global QC agents (always included)
+        # Step 2: Get global and platform-scoped QC agents
         # Get list of all QC agents
         qc_agents_list_setting = db.query(SystemSettings).filter(
             SystemSettings.setting_key == "qc_agents_list"
@@ -90,27 +105,60 @@ def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
             try:
                 qc_agent_ids = json.loads(qc_agents_list_setting.setting_value)
                 for qc_agent_id in qc_agent_ids:
-                    # Check if this QC agent is global
-                    global_setting = db.query(SystemSettings).filter(
-                        SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_global"
-                    ).first()
+                    # Determine if this is a platform-scoped agent
+                    is_platform_scoped = any(tag in qc_agent_id.lower() for tag in platform_tags)
                     
-                    # Also check alternative format (without "qc_" prefix in key)
-                    if not global_setting:
+                    # If platform-scoped, check if it matches current platform
+                    if is_platform_scoped:
+                        if not platform_lower or platform_lower not in qc_agent_id.lower():
+                            logger.info(f"⏭️  Skipped platform-scoped QC agent {qc_agent_id} (platform mismatch: {platform_lower} not in {qc_agent_id})")
+                            continue
+                    
+                    # Check if this QC agent is enabled (global or platform-scoped)
+                    # Try multiple key formats in order of likelihood
+                    candidate_keys = [
+                        f"qc_agent_{qc_agent_id}_qc_global",                     # matches your DB
+                        f"qc_agent_{qc_agent_id}_global",                        # legacy
+                        f"qc_agent_{qc_agent_id.replace('qc_', '')}_qc_global",  # legacy alt
+                        f"qc_agent_{qc_agent_id.replace('qc_', '')}_global",     # legacy alt
+                    ]
+                    
+                    global_setting = None
+                    matched_key = None
+                    for k in candidate_keys:
                         global_setting = db.query(SystemSettings).filter(
-                            SystemSettings.setting_key == f"qc_agent_{qc_agent_id.replace('qc_', '')}_global"
+                            SystemSettings.setting_key == k
                         ).first()
+                        if global_setting:
+                            matched_key = k
+                            break
                     
-                    if global_setting and global_setting.setting_value == "true":
-                        # Create agent from global QC agent ID
+                    # Parse the value using robust boolean parser
+                    is_enabled = truthy(global_setting.setting_value) if global_setting else False
+                    
+                    # Log the resolution details
+                    if global_setting:
+                        logger.info(f"🔍 QC Agent {qc_agent_id}: key={matched_key}, value={repr(global_setting.setting_value)}, parsed={is_enabled}, platform_scoped={is_platform_scoped}")
+                    else:
+                        logger.info(f"🔍 QC Agent {qc_agent_id}: no global key found, platform_scoped={is_platform_scoped}")
+                    
+                    if is_enabled:
+                        # Create agent from QC agent ID
                         qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)
                         if qc_agent_obj:
-                            # Avoid duplicates (if assigned QC is also global)
+                            # Avoid duplicates (if assigned QC is also in the list)
                             if not any(agent.role == qc_agent_obj.role for agent in qc_agents):
                                 qc_agents.append(qc_agent_obj)
-                                logger.info(f"✅ Added global QC agent: {qc_agent_id}")
-            except json.JSONDecodeError:
-                logger.warning("⚠️ Could not parse qc_agents_list, skipping global QC agents")
+                                scope_label = f"platform-scoped ({platform_lower})" if is_platform_scoped else "global"
+                                logger.info(f"✅ Added {scope_label} QC agent: {qc_agent_id}")
+                            else:
+                                logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (duplicate role)")
+                        else:
+                            logger.warning(f"⚠️  Failed to create QC agent from ID: {qc_agent_id}")
+                    else:
+                        logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (not enabled: key={matched_key}, value={repr(global_setting.setting_value) if global_setting else 'None'})")
+            except json.JSONDecodeError as e:
+                logger.warning(f"⚠️ Could not parse qc_agents_list, skipping global QC agents: {e}")
         
         # Step 3: Fallback to default qc_agent if no QC agents found
         if not qc_agents:
@@ -119,6 +167,8 @@ def get_qc_agents_for_agent(tab: str, agent_id: str) -> List[Agent]:
         
     except Exception as e:
         logger.error(f"❌ Error getting QC agents: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         # Fallback to default
         if not qc_agents:
             qc_agents.append(qc_agent)
