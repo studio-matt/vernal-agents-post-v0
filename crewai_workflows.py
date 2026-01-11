@@ -265,6 +265,32 @@ def create_content_generation_crew(
             verbose=True  # Enable verbose logging for this task
         )
         
+        # Helper function to replace template variables with actual values or escape them
+        def format_template_string(template_str: str, **kwargs) -> str:
+            """Format template string, replacing known variables and escaping unknown ones"""
+            if not template_str:
+                return ""
+            try:
+                # Try to format with provided variables
+                formatted = template_str.format(**kwargs)
+                return formatted
+            except KeyError as e:
+                # If a variable is missing, replace it with empty string or the variable name
+                import re
+                # Find all template variables
+                pattern = r'\{([^}]+)\}'
+                matches = re.findall(pattern, template_str)
+                for var in matches:
+                    if var not in kwargs:
+                        # Replace unknown variables with empty string or descriptive text
+                        if var == 'context':
+                            # Replace {context} with actual context from research output
+                            template_str = template_str.replace(f'{{{var}}}', 'the research output and content queue items provided above')
+                        else:
+                            # For other unknown variables, just remove them
+                            template_str = template_str.replace(f'{{{var}}}', '')
+                return template_str
+        
         # Task 2: Writing Agent - Create platform-specific content from research
         # CRITICAL: Retrieve writing agent configuration from SystemSettings (admin panel)
         db = SessionLocal()
