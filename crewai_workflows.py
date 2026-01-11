@@ -159,10 +159,7 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                         logger.warning(f"⚠️  QC Agent {qc_agent_id}: no global key found (tried: {candidate_keys}), platform_scoped={is_platform_scoped}")
                     
                     if is_enabled:
-                        # Log before attempting to create agent (decisive log)
-                        logger.info(f"🔎 Resolving QC agent ID '{qc_agent_id}' (platform={platform_lower}, checking global/platform flags)")
-                        
-                        # Create agent from QC agent ID
+                        # Create agent from QC agent ID (decisive log already above)
                         qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)
                         if qc_agent_obj:
                             # Avoid duplicates (if assigned QC is also in the list)
