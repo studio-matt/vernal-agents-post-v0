@@ -112,7 +112,15 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
         if qc_agents_list_setting and qc_agents_list_setting.setting_value:
             try:
                 qc_agent_ids = json.loads(qc_agents_list_setting.setting_value)
-                for qc_agent_id in qc_agent_ids:
+                logger.info(f"🔍 QC RESOLUTION: Found {len(qc_agent_ids)} QC agent IDs in qc_agents_list: {qc_agent_ids}")
+                
+                for qc_agent_id_raw in qc_agent_ids:
+                    # Normalize the agent ID (remove qc_ prefix, strip whitespace)
+                    qc_agent_id = normalize_qc_agent_id(qc_agent_id_raw)
+                    
+                    # Log the resolution attempt
+                    logger.info(f"🔎 Resolving QC agent ID '{qc_agent_id}' (platform={platform_lower}, checking global/platform flags)")
+                    
                     # Determine if this is a platform-scoped agent
                     is_platform_scoped = any(tag in qc_agent_id.lower() for tag in platform_tags)
                     
@@ -125,7 +133,7 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                     # Check if this QC agent is enabled (global or platform-scoped)
                     # Try multiple key formats in order of likelihood
                     candidate_keys = [
-                        f"qc_agent_{qc_agent_id}_qc_global",                     # matches your DB
+                        f"qc_agent_{qc_agent_id}_qc_global",                     # matches your DB (e.g., qc_agent_agent_1_instagram_qc_global)
                         f"qc_agent_{qc_agent_id}_global",                        # legacy
                         f"qc_agent_{qc_agent_id.replace('qc_', '')}_qc_global",  # legacy alt
                         f"qc_agent_{qc_agent_id.replace('qc_', '')}_global",     # legacy alt
@@ -148,9 +156,12 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                     if global_setting:
                         logger.info(f"🔍 QC Agent {qc_agent_id}: key={matched_key}, value={repr(global_setting.setting_value)}, parsed={is_enabled}, platform_scoped={is_platform_scoped}")
                     else:
-                        logger.info(f"🔍 QC Agent {qc_agent_id}: no global key found, platform_scoped={is_platform_scoped}")
+                        logger.warning(f"⚠️  QC Agent {qc_agent_id}: no global key found (tried: {candidate_keys}), platform_scoped={is_platform_scoped}")
                     
                     if is_enabled:
+                        # Log before attempting to create agent (decisive log)
+                        logger.info(f"🔎 Resolving QC agent ID '{qc_agent_id}' (platform={platform_lower}, checking global/platform flags)")
+                        
                         # Create agent from QC agent ID
                         qc_agent_obj = _create_qc_agent_from_id(qc_agent_id)
                         if qc_agent_obj:
@@ -162,7 +173,7 @@ def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = N
                             else:
                                 logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (duplicate role)")
                         else:
-                            logger.warning(f"⚠️  Failed to create QC agent from ID: {qc_agent_id}")
+                            logger.warning(f"⚠️  Failed to create QC agent from ID: {qc_agent_id} (check _create_qc_agent_from_id logs)")
                     else:
                         logger.info(f"⏭️  Skipped QC agent {qc_agent_id} (not enabled: key={matched_key}, value={repr(global_setting.setting_value) if global_setting else 'None'})")
             except json.JSONDecodeError as e:
