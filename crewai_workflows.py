@@ -585,20 +585,24 @@ REMEMBER: {formatted_prompt}
                                 break
                     
                     if matching_agent_id:
-                        qc_agents_list = get_qc_agents_for_agent("writing", matching_agent_id)
+                        logger.info(f"🔍 Resolving QC agents for writing agent: {matching_agent_id}, platform: {platform}")
+                        qc_agents_list = get_qc_agents_for_agent("writing", matching_agent_id, platform=platform)
                     else:
                         # Fallback: try platform name directly
-                        qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
-                except json.JSONDecodeError:
+                        logger.info(f"🔍 No matching agent_id found, using platform name: {platform_lower}")
+                        qc_agents_list = get_qc_agents_for_agent("writing", platform_lower, platform=platform)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ Could not parse writing_agents_list: {e}")
                     # Fallback: try platform name directly
-                    qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+                    qc_agents_list = get_qc_agents_for_agent("writing", platform_lower, platform=platform)
             else:
                 # Fallback: try platform name directly
-                qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+                logger.info(f"🔍 No writing_agents_list found, using platform name: {platform_lower}")
+                qc_agents_list = get_qc_agents_for_agent("writing", platform_lower, platform=platform)
         except Exception as e:
             logger.warning(f"⚠️ Could not find agent_id for platform {platform}, using fallback: {e}")
             # Fallback: try platform name directly
-            qc_agents_list = get_qc_agents_for_agent("writing", platform_lower)
+            qc_agents_list = get_qc_agents_for_agent("writing", platform_lower, platform=platform)
         finally:
             db.close()
         
