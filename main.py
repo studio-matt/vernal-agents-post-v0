@@ -8016,16 +8016,21 @@ async def generate_campaign_content(
                         update_task_status(error="Campaign not found", status="error")
                         return
                     
-                    # Get content queue items
+                    # Get content queue items for THIS ONE ARTICLE ONLY
+                    # The frontend passes only the items relevant to this specific article/post
+                    # Do NOT fall back to all campaign items - we process one article at a time
                     content_queue_items = req_data.get("content_queue_items", [])
-                    if not content_queue_items and campaign.content_queue_items_json:
-                        content_queue_items = json.loads(campaign.content_queue_items_json)
+                    if not content_queue_items:
+                        # If no items passed, log warning but continue with empty list
+                        # This ensures we're only processing the items for this specific article
+                        logger.warning(f"⚠️ No content_queue_items passed for this article. Processing with empty queue.")
+                        content_queue_items = []
                     
-                    # Build context
+                    # Build context from items for THIS ONE ARTICLE
                     queue_context = "\n".join([
                         f"- {item.get('title', item.get('text', str(item)))}"
                         for item in content_queue_items
-                    ])
+                    ]) if content_queue_items else "No specific content queue items for this article."
                     
                     # Get parameters
                     platform = req_data.get("platform", "linkedin")
@@ -8101,11 +8106,29 @@ Number of Scraped Texts: {len(scraped_texts)}
 Sample Text (first 500 characters):
 {sample_text if sample_text else 'N/A'}"""
                     
-                    # Build writing context (includes both content queue and campaign context)
-                    writing_context = f"""Content Queue Foundation:
+                    # Get platform-specific settings (Instagram-specific modifications from research assistant)
+                    platform_settings_text = ""
+                    if "platformSettings" in req_data:
+                        platform_settings = req_data.get("platformSettings", {})
+                        platform_lower = platform.lower()
+                        if platform_lower in platform_settings:
+                            settings = platform_settings[platform_lower]
+                            if settings:
+                                # Format platform-specific settings/modifications
+                                settings_items = []
+                                for key, value in settings.items():
+                                    if value:  # Only include non-empty values
+                                        settings_items.append(f"{key}: {value}")
+                                if settings_items:
+                                    platform_settings_text = f"\n\n{platform.capitalize()}-Specific Settings/Modifications:\n" + "\n".join(settings_items)
+                    
+                    # Build writing context for THIS ONE ARTICLE
+                    # Includes: content queue items (for this article only), parent idea, brand guidelines,
+                    # campaign context, and platform-specific modifications
+                    writing_context = f"""Content Queue Foundation (for this article only):
 {queue_context}
 
-{f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}
+{f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}{platform_settings_text}
 
 Campaign Context:
 {campaign_context}
