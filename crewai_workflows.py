@@ -360,6 +360,15 @@ def create_content_generation_crew(
                     SystemSettings.setting_key == f"writing_agent_{platform_lower}_description"
                 ).first()
             
+            # Build the actual context string that will be passed to {context} placeholder
+            # This includes all the information from the text parameter (content queue, brand guidelines, etc.)
+            # plus author personality and any other relevant info
+            context_string = f"""{text}
+
+Author Personality: {author_personality or 'professional'}
+Platform: {platform}
+Week: {week}"""
+            
             # Helper function to replace template variables with actual values or escape them
             def format_template_string(template_str: str, **kwargs) -> str:
                 """Format template string, replacing known variables and escaping unknown ones"""
@@ -379,8 +388,9 @@ def create_content_generation_crew(
                         if var not in kwargs:
                             # Replace unknown variables with empty string or descriptive text
                             if var == 'context':
-                                # Replace {context} with actual context from research output
-                                template_str = template_str.replace(f'{{{var}}}', 'the research output and content queue items provided above')
+                                # Replace {context} with actual context from text parameter
+                                # This includes content queue, brand guidelines, parent idea, etc.
+                                template_str = template_str.replace(f'{{{var}}}', context_string)
                             else:
                                 # For other unknown variables, just remove them
                                 template_str = template_str.replace(f'{{{var}}}', '')
@@ -393,7 +403,7 @@ def create_content_generation_crew(
                     expected_output_setting.setting_value,
                     week=week,
                     platform=platform,
-                    context="the research output and content queue items"
+                    context=context_string
                 )
                 logger.info(f"✅ Using {platform.capitalize()} Writer expected_output from SystemSettings (admin panel)")
             elif platform_task_desc:
@@ -409,7 +419,7 @@ def create_content_generation_crew(
                     description_setting.setting_value,
                     week=week,
                     platform=platform,
-                    context="the research output and content queue items"
+                    context=context_string
                 )
                 logger.info(f"✅ Using {platform} Writer description from SystemSettings (admin panel)")
             elif platform_task_desc:
@@ -430,7 +440,7 @@ def create_content_generation_crew(
                     prompt_setting.setting_value,
                     week=week,
                     platform=platform,
-                    context="the research output and content queue items"
+                    context=context_string
                 )
                 writing_task_description_base = f"""{writing_description}
 
@@ -703,6 +713,7 @@ REMEMBER: {formatted_prompt}
                 )
             
             # Create writing task with research output and any QC feedback
+            # Include the full context (content queue, brand guidelines, etc.) in the description
             writing_task_iter = Task(
                 description=f"""{writing_description}
                 
@@ -710,6 +721,9 @@ REMEMBER: {formatted_prompt}
                 Platform: {platform}
                 Author personality: {author_personality or 'professional'}
                 Week: {week}
+                
+                Original Context (Content Queue, Brand Guidelines, Parent Idea, etc.):
+                {text}
                 
                 Research Output:
                 {research_output}
