@@ -289,7 +289,7 @@ def create_content_generation_crew(
             # Use admin panel configuration if available, otherwise fall back to database task
             if expected_output_setting and expected_output_setting.setting_value:
                 writing_expected_output = expected_output_setting.setting_value
-                logger.info(f"✅ Using Instagram Writer expected_output from SystemSettings (admin panel)")
+                logger.info(f"✅ Using {platform.capitalize()} Writer expected_output from SystemSettings (admin panel)")
             elif platform_task_desc:
                 writing_expected_output = platform_task_desc.expected_output
                 logger.warning(f"⚠️ Using fallback expected_output from database task (admin panel config not found)")
