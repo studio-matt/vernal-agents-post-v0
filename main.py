@@ -8054,10 +8054,10 @@ async def generate_campaign_content(
                             brand_guidelines = f"\n\nBrand Voice Guidelines:\n{brand_personality.guidelines}"
                     
                     # Build campaign context for {context} placeholder (matches instructional copy)
-                    # Get scraped texts for context
-                    from models import ScrapedText
-                    scraped_texts = session.query(ScrapedText).filter(
-                        ScrapedText.campaign_id == cid
+                    # Get scraped texts for context (using CampaignRawData model)
+                    from models import CampaignRawData
+                    scraped_texts = session.query(CampaignRawData).filter(
+                        CampaignRawData.campaign_id == cid
                     ).limit(10).all()
                     
                     # Get topics (if available from campaign or extract from scraped texts)
@@ -8073,8 +8073,8 @@ async def generate_campaign_content(
                     
                     # Build sample text (first 500 chars from first scraped text)
                     sample_text = ""
-                    if scraped_texts and scraped_texts[0].text:
-                        sample_text = scraped_texts[0].text[:500]
+                    if scraped_texts and scraped_texts[0].extracted_text:
+                        sample_text = scraped_texts[0].extracted_text[:500]
                     
                     # Build word cloud data (top keywords from scraped content)
                     word_cloud_data = []
@@ -8083,8 +8083,8 @@ async def generate_campaign_content(
                         import re
                         all_words = []
                         for st in scraped_texts:
-                            if st.text:
-                                words = re.findall(r'\b\w+\b', st.text.lower())
+                            if st.extracted_text:
+                                words = re.findall(r'\b\w+\b', st.extracted_text.lower())
                                 all_words.extend(words)
                         word_counts = Counter(all_words)
                         # Get top 20 keywords (excluding common stop words)
