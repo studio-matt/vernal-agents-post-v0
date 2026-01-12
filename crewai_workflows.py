@@ -1315,6 +1315,15 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                     is_approved = True
                     logger.info(f"✅ QC approved (fallback detection) - using writer output unchanged")
             
+            # CRITICAL: Convert "Category: legal" to WARNING, not REJECTION
+            # Legal content should be allowed with a warning, not blocked
+            is_legal_warning = False
+            if policy_violation and "legal" in policy_violation.lower():
+                is_legal_warning = True
+                is_approved = True  # Approve content, but add warning
+                logger.info(f"⚠️ QC WARNING: Legal category detected - converting to warning (not rejection)")
+                logger.info(f"⚠️ QC WARNING: Content will be approved with warning - user review recommended")
+            
             if is_approved:
                 logger.info(f"✅ Iteration {iteration_count}: QC Agent APPROVED content - using writer output unchanged")
                 
@@ -1330,14 +1339,17 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 
                 if update_task_status_callback:
                     qc_approval_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nContent APPROVED after {iteration_count} iteration(s)\nWriter output preserved unchanged"
+                    if is_legal_warning:
+                        qc_approval_info += f"\n\n⚠️ QC_WARNING:\nContent discusses regulated substances and therapeutic research.\nUser review recommended."
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
-                        task=f"✅ APPROVED\n\n{qc_approval_info}",
+                        task=f"✅ APPROVED{' (with warning)' if is_legal_warning else ''}\n\n{qc_approval_info}",
                         progress=90,
                         agent_status="completed"
                     )
                 # Break out of loop - content approved
                 # current_content (writer output) will be used as final_output
+                # Note: Legal warnings do NOT count toward rejection limit
                 break
             else:
                 logger.warning(f"⚠️ Iteration {iteration_count}: QC Agent REJECTED content - policy violation detected")
