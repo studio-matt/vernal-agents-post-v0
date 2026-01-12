@@ -849,6 +849,12 @@ REMEMBER: {formatted_prompt}
             # Create writing task with research output and any QC feedback
             # Include the full context (content queue, brand guidelines, etc.) in the description
             # CRITICAL: Platform constraints and brand voice remain authoritative; QC feedback is secondary
+            if qc_feedback_history:
+                logger.info(f"📝 WRITER TASK CREATION: Including QC feedback in writer retry task (Iteration {iteration_count})")
+                logger.info(f"📝 WRITER TASK CREATION: QC feedback preview: {qc_feedback_history[-1][:200]}...")
+            else:
+                logger.info(f"📝 WRITER TASK CREATION: No QC feedback - first iteration (Iteration {iteration_count})")
+            
             writing_task_iter = Task(
                 description=f"""{writing_description}
                 
@@ -964,6 +970,7 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             primary_qc_agent_id = None
             
             # Find QC agent ID for rejection limit tracking
+            # CRITICAL: Find the QC agent ID that matches the platform (e.g., agent_1_instagram_qc for Instagram)
             db = SessionLocal()
             try:
                 agents_list_setting = db.query(SystemSettings).filter(
@@ -972,8 +979,21 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 if agents_list_setting and agents_list_setting.setting_value:
                     try:
                         qc_agent_ids = json.loads(agents_list_setting.setting_value)
-                        if qc_agent_ids:
-                            primary_qc_agent_id = qc_agent_ids[0]
+                        platform_lower = platform.lower()
+                        
+                        # First, try to find platform-scoped QC agent (e.g., agent_1_instagram_qc for Instagram)
+                        for qc_agent_id in qc_agent_ids:
+                            normalized_id = normalize_qc_agent_id(qc_agent_id)
+                            # Check if this QC agent ID contains the platform name
+                            if platform_lower in normalized_id.lower():
+                                primary_qc_agent_id = normalized_id
+                                logger.info(f"✅ Found platform-scoped QC agent ID for {platform}: {primary_qc_agent_id}")
+                                break
+                        
+                        # Fallback: if no platform-scoped agent found, use first agent in list
+                        if not primary_qc_agent_id and qc_agent_ids:
+                            primary_qc_agent_id = normalize_qc_agent_id(qc_agent_ids[0])
+                            logger.info(f"⚠️ No platform-scoped QC agent found, using first in list: {primary_qc_agent_id}")
                     except json.JSONDecodeError:
                         pass
             finally:
@@ -982,6 +1002,12 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             # Get rejection limit for this QC agent
             rejection_limit = qc_rejection_limits.get(primary_qc_agent_id, 5) if primary_qc_agent_id else 5
             current_rejection_count = rejection_counts.get(primary_qc_agent_id, 0)
+            
+            # Log QC agent resolution and rejection limit
+            logger.info(f"🔍 QC AGENT RESOLUTION: Using QC agent ID '{primary_qc_agent_id}' for platform '{platform}'")
+            logger.info(f"🔍 QC REJECTION LIMIT: {rejection_limit} (current rejections: {current_rejection_count})")
+            if primary_qc_agent_id and primary_qc_agent_id not in qc_rejection_limits:
+                logger.warning(f"⚠️ QC agent ID '{primary_qc_agent_id}' not found in qc_rejection_limits, using default limit of 5")
             
             if current_rejection_count >= rejection_limit:
                 error_msg = f"QC Agent rejection limit ({rejection_limit}) reached. Content failed quality checks after {iteration_count} iterations."
@@ -1078,6 +1104,11 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 verbose=True,
                 memory=True
             )
+            
+            # Log which QC agent is executing
+            logger.info(f"🚪 QC GATE EXECUTION: Executing QC agent '{primary_qc_agent_role}' (ID: {primary_qc_agent_id}) for platform '{platform}'")
+            logger.info(f"🚪 QC GATE EXECUTION: QC agent role: {primary_qc_agent.role if hasattr(primary_qc_agent, 'role') else 'Unknown'}")
+            
             try:
                 qc_result = run_with_timeout(
                     qc_crew.kickoff,
@@ -1242,6 +1273,8 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 # Keep writer output as baseline - writer will retry with original constraints + QC feedback
                 # current_content remains unchanged (writer's output)
                 logger.info(f"📝 Keeping writer output as baseline for retry - QC feedback: {feedback[:100] if feedback else 'N/A'}")
+                logger.info(f"📝 QC FEEDBACK TO WRITER: Policy Violation: {policy_violation or 'N/A'}")
+                logger.info(f"📝 QC FEEDBACK TO WRITER: Minimal Constraints: {minimal_constraints[:200] if minimal_constraints else feedback[:200] if feedback else 'N/A'}")
         
         # If we exited loop due to max iterations, fail
         if iteration_count >= max_iterations and not is_approved:
