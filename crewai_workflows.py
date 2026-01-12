@@ -68,6 +68,56 @@ def normalize_qc_agent_id(agent_id: str) -> str:
     return agent_id.replace("qc_", "").strip()
 
 
+def requires_legal_acknowledgment(content: str, qc_feedback: Optional[str] = None) -> bool:
+    """
+    Determine if content requires a legal-status + risk acknowledgment line.
+    
+    Returns True if content mentions:
+    - Regulated substances/drugs (psilocybin, cannabis, etc.)
+    - Medical/mental-health treatment guidance/claims
+    - Other regulated goods (weapons, nicotine, etc.)
+    
+    Returns False for ordinary commerce (fish tanks, landscaping, apparel, SaaS, etc.)
+    """
+    if not content:
+        return False
+    
+    content_lower = content.lower()
+    qc_feedback_lower = (qc_feedback or "").lower()
+    combined_text = f"{content_lower} {qc_feedback_lower}"
+    
+    # Regulated substances/drugs
+    regulated_substances = [
+        "psilocybin", "mushroom", "cannabis", "marijuana", "thc", "cbd",
+        "cocaine", "heroin", "methamphetamine", "mdma", "lsd", "ketamine",
+        "opioid", "opiate", "fentanyl", "amphetamine", "steroid"
+    ]
+    
+    # Medical/mental health treatment claims
+    medical_keywords = [
+        "treat", "treatment", "cure", "heal", "therapeutic", "therapy",
+        "diagnose", "diagnosis", "prescription", "medication", "medicinal",
+        "mental health", "depression", "anxiety", "ptsd", "ptsd treatment",
+        "medical advice", "health advice", "therapeutic use"
+    ]
+    
+    # Other regulated goods
+    regulated_goods = [
+        "weapon", "firearm", "gun", "ammunition", "nicotine", "vape",
+        "tobacco", "alcohol", "prescription drug"
+    ]
+    
+    # Check if any regulated keywords appear
+    all_keywords = regulated_substances + medical_keywords + regulated_goods
+    
+    for keyword in all_keywords:
+        if keyword in combined_text:
+            logger.info(f"🔍 Legal acknowledgment required: detected keyword '{keyword}' in content")
+            return True
+    
+    return False
+
+
 def get_qc_agents_for_agent(tab: str, agent_id: str, platform: Optional[str] = None) -> List[Agent]:
     """
     Get QC agents for a specific agent.
@@ -811,12 +861,25 @@ REMEMBER: {formatted_prompt}
             iteration_count += 1
             logger.info(f"📝 Iteration {iteration_count}/{max_iterations}: Writing Agent creating content")
             
+            # Check if content requires legal acknowledgment (conditional, not global)
+            # Check current content, QC feedback, and original text input
+            needs_legal_ack = False
+            if current_content:
+                needs_legal_ack = requires_legal_acknowledgment(str(current_content), qc_feedback_history[-1] if qc_feedback_history else None)
+            elif qc_feedback_history:
+                # Check QC feedback for regulated content indicators
+                needs_legal_ack = requires_legal_acknowledgment("", qc_feedback_history[-1])
+            elif text:
+                # Check original text input for regulated content (first iteration)
+                needs_legal_ack = requires_legal_acknowledgment(text, None)
+            
             if update_task_status_callback:
                 task_description = f"Creating platform-specific content (Iteration {iteration_count}/{max_iterations})"
                 if qc_feedback_history:
                     task_description += f"\n\n🔄 RETRY WITH QC FEEDBACK:\n{qc_feedback_history[-1][:300]}{'...' if len(qc_feedback_history[-1]) > 300 else ''}"
-                # Global requirement: Always include neutral legal-status + risk acknowledgment
-                task_description += f"\n\n⚠️ MANDATORY GLOBAL REQUIREMENT:\nBecause QC is explicitly demanding it, you MUST include one neutral legal-status + risk line in your content.\n\nThis applies to ALL content - include a neutral statement about legal status and risks relevant to the topic being discussed."
+                # Conditional requirement: Only require legal acknowledgment for regulated content
+                if needs_legal_ack:
+                    task_description += f"\n\n⚠️ CONDITIONAL REQUIREMENT (Regulated Content Detected):\nBecause QC is explicitly demanding it, you MUST include one neutral legal-status + risk line in your content.\n\nThis applies because your content mentions regulated substances, medical treatment claims, or other regulated goods."
                 update_task_status_callback(
                     agent=f"{platform.capitalize()} Writing Agent",
                     task=task_description,
@@ -860,23 +923,25 @@ REMEMBER: {formatted_prompt}
             else:
                 logger.info(f"📝 WRITER TASK CREATION: No QC feedback - first iteration (Iteration {iteration_count})")
             
-            # Global acknowledgment requirement - applies to ALL content
-            global_acknowledgment_instruction = """
+            # Conditional acknowledgment requirement - only for regulated content
+            conditional_acknowledgment_instruction = ""
+            if needs_legal_ack:
+                conditional_acknowledgment_instruction = """
 ═══════════════════════════════════════════════════════════════
-MANDATORY GLOBAL ACKNOWLEDGMENT REQUIREMENT:
+CONDITIONAL ACKNOWLEDGMENT REQUIREMENT (Regulated Content Detected):
 ═══════════════════════════════════════════════════════════════
 Because QC is explicitly demanding it, you MUST include one neutral legal-status + risk line in your content.
 
-This is a MANDATORY GLOBAL requirement - you must include a neutral statement about legal status and risks relevant to the topic being discussed. This applies to ALL content, regardless of topic.
+This requirement applies because your content mentions regulated substances, medical/mental-health treatment guidance/claims, or other regulated goods.
 
-Include a neutral acknowledgment line that addresses any legal, regulatory, or risk considerations relevant to the content topic. The acknowledgment should be factual, neutral, and appropriate to the context.
+Include a neutral acknowledgment line that addresses legal, regulatory, or risk considerations relevant to the content topic. The acknowledgment should be factual, neutral, and appropriate to the context.
 
 Example formats:
 - For regulated substances: "[Substance] is a controlled substance in many jurisdictions. Consult legal and medical professionals before considering any use."
-- For financial advice: "This content is for informational purposes only and does not constitute financial advice. Consult a qualified financial advisor before making investment decisions."
-- For health topics: "This content is for informational purposes only and is not medical advice. Consult healthcare professionals for medical guidance."
+- For medical/mental health claims: "This content is for informational purposes only and is not medical advice. Consult healthcare professionals for medical guidance."
+- For other regulated goods: Include appropriate legal status and risk acknowledgment.
 
-You must include this acknowledgment line in ALL content you create.
+You must include this acknowledgment line in your content.
 ═══════════════════════════════════════════════════════════════
 """
             
@@ -910,10 +975,10 @@ CRITICAL PRECEDENCE RULES:
 You must satisfy BOTH the original platform/brand/author constraints AND the QC constraints.
 If they conflict on stylistic grounds, prioritize platform/brand/author. If QC identifies a safety/legal violation, address it while maintaining platform formatting where possible.
 ═══════════════════════════════════════════════════════════════
-{global_acknowledgment_instruction}
+{conditional_acknowledgment_instruction}
 ''' if qc_feedback_history else f'''The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.
 
-{global_acknowledgment_instruction}
+{conditional_acknowledgment_instruction}
 '''}
                 """,
                 expected_output=writing_expected_output,
@@ -1302,7 +1367,9 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 qc_feedback_history.append(feedback or "Policy violation - requires revision")
                 
                 if update_task_status_callback:
-                    qc_rejection_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nRejection {current_rejection_count}/{rejection_limit}\n\nPolicy Violation: {policy_violation or 'Detected'}\nConstraints: {minimal_constraints or feedback or 'Revision requested'}"
+                    # Include the actual content text that was rejected (first 500 chars for visibility)
+                    content_preview = str(current_content)[:500] + ("..." if len(str(current_content)) > 500 else "")
+                    qc_rejection_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nRejection {current_rejection_count}/{rejection_limit}\n\nPolicy Violation: {policy_violation or 'Detected'}\nConstraints: {minimal_constraints or feedback or 'Revision requested'}\n\n📄 REJECTED CONTENT (Preview):\n{content_preview}"
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
                         task=f"Content REJECTED\n\n{qc_rejection_info}",
