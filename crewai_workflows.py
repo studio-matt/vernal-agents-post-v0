@@ -811,10 +811,20 @@ REMEMBER: {formatted_prompt}
             iteration_count += 1
             logger.info(f"📝 Iteration {iteration_count}/{max_iterations}: Writing Agent creating content")
             
+            # Check if QC feedback mentions psilocybin - if so, require acknowledgment line
+            requires_psilocybin_acknowledgment = False
+            if qc_feedback_history:
+                latest_feedback = qc_feedback_history[-1].lower()
+                if "psilocybin" in latest_feedback or "mushroom" in latest_feedback:
+                    requires_psilocybin_acknowledgment = True
+                    logger.info(f"⚠️ PSILOCYBIN DETECTED: Requiring mandatory acknowledgment line in content")
+            
             if update_task_status_callback:
                 task_description = f"Creating platform-specific content (Iteration {iteration_count}/{max_iterations})"
                 if qc_feedback_history:
                     task_description += f"\n\n🔄 RETRY WITH QC FEEDBACK:\n{qc_feedback_history[-1][:300]}{'...' if len(qc_feedback_history[-1]) > 300 else ''}"
+                if requires_psilocybin_acknowledgment:
+                    task_description += f"\n\n⚠️ MANDATORY REQUIREMENT:\nBecause QC is explicitly demanding it, you MUST include one neutral legal-status + risk line whenever psilocybin appears.\n\nExample: 'Psilocybin is a controlled substance in many jurisdictions. Consult legal and medical professionals before considering any use.'"
                 update_task_status_callback(
                     agent=f"{platform.capitalize()} Writing Agent",
                     task=task_description,
@@ -858,6 +868,23 @@ REMEMBER: {formatted_prompt}
             else:
                 logger.info(f"📝 WRITER TASK CREATION: No QC feedback - first iteration (Iteration {iteration_count})")
             
+            # Build psilocybin acknowledgment instruction if required
+            psilocybin_acknowledgment_instruction = ""
+            if requires_psilocybin_acknowledgment:
+                psilocybin_acknowledgment_instruction = """
+═══════════════════════════════════════════════════════════════
+MANDATORY ACKNOWLEDGMENT REQUIREMENT:
+═══════════════════════════════════════════════════════════════
+Because QC is explicitly demanding it, you MUST include one neutral legal-status + risk line whenever psilocybin appears in the content.
+
+This is a MANDATORY requirement - you must include a neutral statement about legal status and risks whenever psilocybin is mentioned.
+
+Example format: "Psilocybin is a controlled substance in many jurisdictions. Consult legal and medical professionals before considering any use."
+
+You must include this acknowledgment line in your content when psilocybin is mentioned.
+═══════════════════════════════════════════════════════════════
+"""
+            
             writing_task_iter = Task(
                 description=f"""{writing_description}
                 
@@ -888,6 +915,7 @@ CRITICAL PRECEDENCE RULES:
 You must satisfy BOTH the original platform/brand/author constraints AND the QC constraints.
 If they conflict on stylistic grounds, prioritize platform/brand/author. If QC identifies a safety/legal violation, address it while maintaining platform formatting where possible.
 ═══════════════════════════════════════════════════════════════
+{psilocybin_acknowledgment_instruction if requires_psilocybin_acknowledgment else ''}
 ''' if qc_feedback_history else 'The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.'}
                 """,
                 expected_output=writing_expected_output,
