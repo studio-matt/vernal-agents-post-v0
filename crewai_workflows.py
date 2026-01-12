@@ -83,7 +83,6 @@ def get_qc_policy_config(qc_agent_id: str) -> Dict[str, Any]:
     default_config = {
         "version": 1,
         "strictness_preset": "balanced",
-        "max_rejections": 5,
         "warnings_break_loop": True,
         "allow_speculative_medical_language": True,
         "require_legal_risk_line_for_regulated_topics": False,
@@ -1286,9 +1285,7 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             
             # Load QC policy configuration for this agent
             qc_policy_config = get_qc_policy_config(primary_qc_agent_id) if primary_qc_agent_id else get_qc_policy_config("default")
-            # Override max_rejections from policy config if set
-            if qc_policy_config.get("max_rejections"):
-                rejection_limit = qc_policy_config["max_rejections"]
+            # Note: rejection_limit comes from qc_rejection_limits (uses reject_after setting), not from policy config
             
             # Log QC agent resolution and rejection limit
             logger.info(f"🔍 QC AGENT RESOLUTION: Using QC agent ID '{primary_qc_agent_id}' for platform '{platform}'")
