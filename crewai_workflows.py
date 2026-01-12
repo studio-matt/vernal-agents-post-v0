@@ -68,6 +68,166 @@ def normalize_qc_agent_id(agent_id: str) -> str:
     return agent_id.replace("qc_", "").strip()
 
 
+def get_qc_policy_config(qc_agent_id: str) -> Dict[str, Any]:
+    """
+    Load QC policy configuration for a specific QC agent from SystemSettings.
+    
+    Returns default "balanced" config if not found.
+    
+    Args:
+        qc_agent_id: The QC agent ID (e.g., "agent_1_instagram_qc")
+        
+    Returns:
+        Dictionary with policy configuration
+    """
+    default_config = {
+        "version": 1,
+        "strictness_preset": "balanced",
+        "max_rejections": 5,
+        "warnings_break_loop": True,
+        "allow_speculative_medical_language": True,
+        "require_legal_risk_line_for_regulated_topics": False,
+        "category_actions": {
+            "legal": "warn",  # Default: warn for legal (user review)
+            "medical_claims": "deny",
+            "regulated_goods": "deny",
+            "illegal_activity": "deny",
+            "misinformation": "deny",
+            "hate_harassment": "deny",
+            "self_harm": "deny",
+            "privacy": "deny",
+            "deceptive_media": "deny",
+            "sexual_content": "deny"
+        }
+    }
+    
+    # Hardcoded categories that can NEVER be downgraded (safety floor)
+    non_overridable_deny_categories = {
+        "sexual_minors",
+        "explicit_sexual_content",
+        "nonconsensual_sexual_content",
+        "graphic_violence_threats",
+        "hate_speech",
+        "self_harm",
+        "doxxing_personal_data",
+        "election_civic_misinformation",
+        "deceptive_manipulated_media"
+    }
+    
+    try:
+        db = SessionLocal()
+        try:
+            policy_setting = db.query(SystemSettings).filter(
+                SystemSettings.setting_key == f"qc_agent_{qc_agent_id}_policy_config"
+            ).first()
+            
+            if policy_setting and policy_setting.setting_value:
+                try:
+                    config = json.loads(policy_setting.setting_value)
+                    # Merge with defaults (user config overrides defaults)
+                    merged_config = {**default_config, **config}
+                    
+                    # Ensure category_actions exists and merge
+                    if "category_actions" in config:
+                        merged_config["category_actions"] = {**default_config["category_actions"], **config["category_actions"]}
+                    
+                    # Enforce safety floor: non-overridable categories must remain "deny"
+                    for category in non_overridable_deny_categories:
+                        if category in merged_config["category_actions"]:
+                            if merged_config["category_actions"][category] != "deny":
+                                logger.warning(f"⚠️ QC POLICY: Category '{category}' cannot be downgraded from 'deny' (safety floor)")
+                                merged_config["category_actions"][category] = "deny"
+                    
+                    logger.info(f"✅ Loaded QC policy config for {qc_agent_id}: {merged_config.get('strictness_preset', 'balanced')}")
+                    return merged_config
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ Could not parse QC policy config for {qc_agent_id}: {e}, using defaults")
+                    return default_config
+            else:
+                logger.info(f"ℹ️ No QC policy config found for {qc_agent_id}, using defaults")
+                return default_config
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"❌ Error loading QC policy config for {qc_agent_id}: {e}")
+        return default_config
+
+
+def get_category_action(policy_violation: Optional[str], policy_config: Dict[str, Any]) -> str:
+    """
+    Determine the action (deny/warn/allow) for a policy violation category.
+    
+    Args:
+        policy_violation: The policy violation category string (e.g., "Category: legal")
+        policy_config: The QC policy configuration dictionary
+        
+    Returns:
+        "deny", "warn", or "allow"
+    """
+    if not policy_violation:
+        return "allow"
+    
+    # Extract category name from violation string
+    violation_lower = policy_violation.lower()
+    
+    # Map common category patterns to category names
+    category_mapping = {
+        "legal": "legal",
+        "medical": "medical_claims",
+        "medical_claim": "medical_claims",
+        "regulated": "regulated_goods",
+        "illegal": "illegal_activity",
+        "misinformation": "misinformation",
+        "hate": "hate_harassment",
+        "harassment": "hate_harassment",
+        "self_harm": "self_harm",
+        "privacy": "privacy",
+        "deceptive": "deceptive_media",
+        "sexual": "sexual_content",
+        "sexual_minors": "sexual_minors",
+        "explicit_sexual": "explicit_sexual_content",
+        "nonconsensual": "nonconsensual_sexual_content",
+        "violence": "graphic_violence_threats",
+        "threat": "graphic_violence_threats",
+        "doxxing": "doxxing_personal_data",
+        "personal_data": "doxxing_personal_data",
+        "election": "election_civic_misinformation",
+        "civic": "election_civic_misinformation"
+    }
+    
+    # Find matching category
+    matched_category = None
+    for keyword, category in category_mapping.items():
+        if keyword in violation_lower:
+            matched_category = category
+            break
+    
+    # If no match found, try to extract category name directly
+    if not matched_category:
+        # Try to extract from "Category: X" format
+        if "category:" in violation_lower:
+            category_part = violation_lower.split("category:")[-1].strip()
+            # Normalize common variations
+            if "legal" in category_part:
+                matched_category = "legal"
+            elif "medical" in category_part:
+                matched_category = "medical_claims"
+            else:
+                matched_category = category_part.replace(" ", "_")
+    
+    # Get action from config
+    category_actions = policy_config.get("category_actions", {})
+    
+    if matched_category and matched_category in category_actions:
+        action = category_actions[matched_category]
+        logger.info(f"🔍 QC POLICY: Category '{matched_category}' → Action '{action}'")
+        return action
+    
+    # Default: deny if category not found (safe default)
+    logger.warning(f"⚠️ QC POLICY: Unknown category in violation '{policy_violation}', defaulting to 'deny'")
+    return "deny"
+
+
 def requires_legal_acknowledgment(content: str, qc_feedback: Optional[str] = None) -> bool:
     """
     Determine if content requires a legal-status + risk acknowledgment line.
@@ -924,9 +1084,36 @@ REMEMBER: {formatted_prompt}
                 logger.info(f"📝 WRITER TASK CREATION: No QC feedback - first iteration (Iteration {iteration_count})")
             
             # Conditional acknowledgment requirement - only for regulated content
+            # Check policy config to see if legal risk line is required
             conditional_acknowledgment_instruction = ""
             if needs_legal_ack:
-                conditional_acknowledgment_instruction = """
+                # Get policy config for the QC agent (use first QC agent ID if available)
+                writer_policy_config = get_qc_policy_config("default")
+                if qc_agents_list:
+                    # Try to get the QC agent ID from the first agent
+                    try:
+                        db = SessionLocal()
+                        try:
+                            agents_list_setting = db.query(SystemSettings).filter(
+                                SystemSettings.setting_key == "qc_agents_list"
+                            ).first()
+                            if agents_list_setting and agents_list_setting.setting_value:
+                                qc_agent_ids = json.loads(agents_list_setting.setting_value)
+                                if qc_agent_ids:
+                                    platform_lower = platform.lower()
+                                    for qc_agent_id in qc_agent_ids:
+                                        normalized_id = normalize_qc_agent_id(qc_agent_id)
+                                        if platform_lower in normalized_id.lower():
+                                            writer_policy_config = get_qc_policy_config(normalized_id)
+                                            break
+                        finally:
+                            db.close()
+                    except Exception as e:
+                        logger.warning(f"⚠️ Could not load policy config for acknowledgment requirement: {e}")
+                
+                # Only add acknowledgment instruction if policy config requires it
+                if writer_policy_config.get("require_legal_risk_line_for_regulated_topics", False):
+                    conditional_acknowledgment_instruction = """
 ═══════════════════════════════════════════════════════════════
 CONDITIONAL ACKNOWLEDGMENT REQUIREMENT (Regulated Content Detected):
 ═══════════════════════════════════════════════════════════════
@@ -1097,9 +1284,16 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             rejection_limit = qc_rejection_limits.get(primary_qc_agent_id, 5) if primary_qc_agent_id else 5
             current_rejection_count = rejection_counts.get(primary_qc_agent_id, 0)
             
+            # Load QC policy configuration for this agent
+            qc_policy_config = get_qc_policy_config(primary_qc_agent_id) if primary_qc_agent_id else get_qc_policy_config("default")
+            # Override max_rejections from policy config if set
+            if qc_policy_config.get("max_rejections"):
+                rejection_limit = qc_policy_config["max_rejections"]
+            
             # Log QC agent resolution and rejection limit
             logger.info(f"🔍 QC AGENT RESOLUTION: Using QC agent ID '{primary_qc_agent_id}' for platform '{platform}'")
             logger.info(f"🔍 QC REJECTION LIMIT: {rejection_limit} (current rejections: {current_rejection_count})")
+            logger.info(f"🔍 QC POLICY CONFIG: Strictness={qc_policy_config.get('strictness_preset', 'balanced')}, WarningsBreakLoop={qc_policy_config.get('warnings_break_loop', True)}")
             if primary_qc_agent_id and primary_qc_agent_id not in qc_rejection_limits:
                 logger.warning(f"⚠️ QC agent ID '{primary_qc_agent_id}' not found in qc_rejection_limits, using default limit of 5")
             
@@ -1315,14 +1509,24 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                     is_approved = True
                     logger.info(f"✅ QC approved (fallback detection) - using writer output unchanged")
             
-            # CRITICAL: Convert "Category: legal" to WARNING, not REJECTION
-            # Legal content should be allowed with a warning, not blocked
-            is_legal_warning = False
-            if policy_violation and "legal" in policy_violation.lower():
-                is_legal_warning = True
-                is_approved = True  # Approve content, but add warning
-                logger.info(f"⚠️ QC WARNING: Legal category detected - converting to warning (not rejection)")
-                logger.info(f"⚠️ QC WARNING: Content will be approved with warning - user review recommended")
+            # Apply QC policy configuration to determine action (deny/warn/allow)
+            category_action = "deny"  # Default: deny if no policy config
+            is_warning = False
+            
+            if policy_violation:
+                category_action = get_category_action(policy_violation, qc_policy_config)
+                logger.info(f"🔍 QC POLICY: Policy violation '{policy_violation}' → Action '{category_action}'")
+                
+                if category_action == "warn":
+                    is_warning = True
+                    is_approved = True  # Approve content, but add warning
+                    logger.info(f"⚠️ QC WARNING: Category action is 'warn' - approving with warning (not rejection)")
+                elif category_action == "allow":
+                    is_approved = True  # Approve content, ignore violation
+                    logger.info(f"ℹ️ QC POLICY: Category action is 'allow' - approving despite violation")
+                else:  # deny
+                    is_approved = False  # Reject content
+                    logger.info(f"❌ QC POLICY: Category action is 'deny' - rejecting content")
             
             if is_approved:
                 logger.info(f"✅ Iteration {iteration_count}: QC Agent APPROVED content - using writer output unchanged")
@@ -1339,17 +1543,26 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 
                 if update_task_status_callback:
                     qc_approval_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nContent APPROVED after {iteration_count} iteration(s)\nWriter output preserved unchanged"
-                    if is_legal_warning:
-                        qc_approval_info += f"\n\n⚠️ QC_WARNING:\nContent discusses regulated substances and therapeutic research.\nUser review recommended."
+                    if is_warning:
+                        # Build warning message based on policy violation category
+                        warning_message = "Content discusses regulated substances and therapeutic research.\nUser review recommended."
+                        if policy_violation:
+                            if "legal" in policy_violation.lower():
+                                warning_message = "Content discusses regulated substances and therapeutic research.\nUser review recommended."
+                            elif "medical" in policy_violation.lower():
+                                warning_message = "Content contains medical/health claims.\nUser review recommended."
+                            else:
+                                warning_message = f"Content flagged for: {policy_violation}\nUser review recommended."
+                        qc_approval_info += f"\n\n⚠️ QC_WARNING:\n{warning_message}"
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
-                        task=f"✅ APPROVED{' (with warning)' if is_legal_warning else ''}\n\n{qc_approval_info}",
+                        task=f"✅ APPROVED{' (with warning)' if is_warning else ''}\n\n{qc_approval_info}",
                         progress=90,
                         agent_status="completed"
                     )
                 # Break out of loop - content approved
                 # current_content (writer output) will be used as final_output
-                # Note: Legal warnings do NOT count toward rejection limit
+                # Note: Warnings do NOT count toward rejection limit (warnings_break_loop from config)
                 break
             else:
                 logger.warning(f"⚠️ Iteration {iteration_count}: QC Agent REJECTED content - policy violation detected")
