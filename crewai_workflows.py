@@ -812,9 +812,12 @@ REMEMBER: {formatted_prompt}
             logger.info(f"📝 Iteration {iteration_count}/{max_iterations}: Writing Agent creating content")
             
             if update_task_status_callback:
+                task_description = f"Creating platform-specific content (Iteration {iteration_count}/{max_iterations})"
+                if qc_feedback_history:
+                    task_description += f"\n\n🔄 RETRY WITH QC FEEDBACK:\n{qc_feedback_history[-1][:300]}{'...' if len(qc_feedback_history[-1]) > 300 else ''}"
                 update_task_status_callback(
                     agent=f"{platform.capitalize()} Writing Agent",
-                    task=f"Creating platform-specific content (Iteration {iteration_count})" + (f"\n\nQC Feedback:\n{qc_feedback_history[-1]}" if qc_feedback_history else ""),
+                    task=task_description,
                     progress=40 + (iteration_count * 5),
                     agent_status="running"
                 )
@@ -1008,6 +1011,16 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
             logger.info(f"🔍 QC REJECTION LIMIT: {rejection_limit} (current rejections: {current_rejection_count})")
             if primary_qc_agent_id and primary_qc_agent_id not in qc_rejection_limits:
                 logger.warning(f"⚠️ QC agent ID '{primary_qc_agent_id}' not found in qc_rejection_limits, using default limit of 5")
+            
+            # Update status with QC agent resolution details
+            if update_task_status_callback:
+                qc_agent_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nRejection Limit: {rejection_limit} (Current: {current_rejection_count})"
+                update_task_status_callback(
+                    agent=f"{platform.capitalize()} QC Agent",
+                    task=f"Reviewing content with {primary_qc_agent_role}\n{qc_agent_info}",
+                    progress=60 + (iteration_count * 5),
+                    agent_status="running"
+                )
             
             if current_rejection_count >= rejection_limit:
                 error_msg = f"QC Agent rejection limit ({rejection_limit}) reached. Content failed quality checks after {iteration_count} iterations."
@@ -1225,9 +1238,10 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                     logger.info(f"✅ QC VERIFICATION PASSED: Hash unchanged - QC correctly acting as gate")
                 
                 if update_task_status_callback:
+                    qc_approval_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nContent APPROVED after {iteration_count} iteration(s)\nWriter output preserved unchanged"
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
-                        task=f"Content APPROVED after {iteration_count} iteration(s) - writer output preserved",
+                        task=f"✅ APPROVED\n\n{qc_approval_info}",
                         progress=90,
                         agent_status="completed"
                     )
@@ -1262,9 +1276,10 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                 qc_feedback_history.append(feedback or "Policy violation - requires revision")
                 
                 if update_task_status_callback:
+                    qc_rejection_info = f"QC Agent: {primary_qc_agent_role} (ID: {primary_qc_agent_id or 'default'})\nRejection {current_rejection_count}/{rejection_limit}\n\nPolicy Violation: {policy_violation or 'Detected'}\nConstraints: {minimal_constraints or feedback or 'Revision requested'}"
                     update_task_status_callback(
                         agent=f"{platform.capitalize()} QC Agent",
-                        task=f"Content REJECTED (Rejection {current_rejection_count}/{rejection_limit})\n\nPolicy Violation: {policy_violation or 'Detected'}\nConstraints: {minimal_constraints or feedback or 'Revision requested'}",
+                        task=f"Content REJECTED\n\n{qc_rejection_info}",
                         progress=70 + (iteration_count * 5),
                         agent_status="completed"
                     )
