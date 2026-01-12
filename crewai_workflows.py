@@ -811,20 +811,12 @@ REMEMBER: {formatted_prompt}
             iteration_count += 1
             logger.info(f"📝 Iteration {iteration_count}/{max_iterations}: Writing Agent creating content")
             
-            # Check if QC feedback mentions psilocybin - if so, require acknowledgment line
-            requires_psilocybin_acknowledgment = False
-            if qc_feedback_history:
-                latest_feedback = qc_feedback_history[-1].lower()
-                if "psilocybin" in latest_feedback or "mushroom" in latest_feedback:
-                    requires_psilocybin_acknowledgment = True
-                    logger.info(f"⚠️ PSILOCYBIN DETECTED: Requiring mandatory acknowledgment line in content")
-            
             if update_task_status_callback:
                 task_description = f"Creating platform-specific content (Iteration {iteration_count}/{max_iterations})"
                 if qc_feedback_history:
                     task_description += f"\n\n🔄 RETRY WITH QC FEEDBACK:\n{qc_feedback_history[-1][:300]}{'...' if len(qc_feedback_history[-1]) > 300 else ''}"
-                if requires_psilocybin_acknowledgment:
-                    task_description += f"\n\n⚠️ MANDATORY REQUIREMENT:\nBecause QC is explicitly demanding it, you MUST include one neutral legal-status + risk line whenever psilocybin appears.\n\nExample: 'Psilocybin is a controlled substance in many jurisdictions. Consult legal and medical professionals before considering any use.'"
+                # Global requirement: Always include neutral legal-status + risk acknowledgment
+                task_description += f"\n\n⚠️ MANDATORY GLOBAL REQUIREMENT:\nBecause QC is explicitly demanding it, you MUST include one neutral legal-status + risk line in your content.\n\nThis applies to ALL content - include a neutral statement about legal status and risks relevant to the topic being discussed."
                 update_task_status_callback(
                     agent=f"{platform.capitalize()} Writing Agent",
                     task=task_description,
@@ -868,20 +860,23 @@ REMEMBER: {formatted_prompt}
             else:
                 logger.info(f"📝 WRITER TASK CREATION: No QC feedback - first iteration (Iteration {iteration_count})")
             
-            # Build psilocybin acknowledgment instruction if required
-            psilocybin_acknowledgment_instruction = ""
-            if requires_psilocybin_acknowledgment:
-                psilocybin_acknowledgment_instruction = """
+            # Global acknowledgment requirement - applies to ALL content
+            global_acknowledgment_instruction = """
 ═══════════════════════════════════════════════════════════════
-MANDATORY ACKNOWLEDGMENT REQUIREMENT:
+MANDATORY GLOBAL ACKNOWLEDGMENT REQUIREMENT:
 ═══════════════════════════════════════════════════════════════
-Because QC is explicitly demanding it, you MUST include one neutral legal-status + risk line whenever psilocybin appears in the content.
+Because QC is explicitly demanding it, you MUST include one neutral legal-status + risk line in your content.
 
-This is a MANDATORY requirement - you must include a neutral statement about legal status and risks whenever psilocybin is mentioned.
+This is a MANDATORY GLOBAL requirement - you must include a neutral statement about legal status and risks relevant to the topic being discussed. This applies to ALL content, regardless of topic.
 
-Example format: "Psilocybin is a controlled substance in many jurisdictions. Consult legal and medical professionals before considering any use."
+Include a neutral acknowledgment line that addresses any legal, regulatory, or risk considerations relevant to the content topic. The acknowledgment should be factual, neutral, and appropriate to the context.
 
-You must include this acknowledgment line in your content when psilocybin is mentioned.
+Example formats:
+- For regulated substances: "[Substance] is a controlled substance in many jurisdictions. Consult legal and medical professionals before considering any use."
+- For financial advice: "This content is for informational purposes only and does not constitute financial advice. Consult a qualified financial advisor before making investment decisions."
+- For health topics: "This content is for informational purposes only and is not medical advice. Consult healthcare professionals for medical guidance."
+
+You must include this acknowledgment line in ALL content you create.
 ═══════════════════════════════════════════════════════════════
 """
             
@@ -915,8 +910,11 @@ CRITICAL PRECEDENCE RULES:
 You must satisfy BOTH the original platform/brand/author constraints AND the QC constraints.
 If they conflict on stylistic grounds, prioritize platform/brand/author. If QC identifies a safety/legal violation, address it while maintaining platform formatting where possible.
 ═══════════════════════════════════════════════════════════════
-{psilocybin_acknowledgment_instruction if requires_psilocybin_acknowledgment else ''}
-''' if qc_feedback_history else 'The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.'}
+{global_acknowledgment_instruction}
+''' if qc_feedback_history else f'''The research agent has already analyzed the text and extracted themes. Use that analysis to create engaging content.
+
+{global_acknowledgment_instruction}
+'''}
                 """,
                 expected_output=writing_expected_output,
                 agent=writing_agent,
