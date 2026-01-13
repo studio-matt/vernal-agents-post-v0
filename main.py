@@ -1220,12 +1220,6 @@ def delete_post(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete post: {str(e)}"
-        )(f"Error fetching scheduled posts: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch scheduled posts: {str(e)}"
         )
 
 @app.post("/campaigns/{campaign_id}/schedule-content")
