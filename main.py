@@ -493,7 +493,7 @@ def debug_campaign_data(campaign_id: str, current_user = Depends(get_current_use
         logger.error(f"Error in debug endpoint: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            status_code=500
+            detail=str(e)
         )
 
 # Research Agent Recommendations endpoint
