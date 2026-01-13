@@ -45,3 +45,4 @@ timeout 10 curl -s --max-time 5 http://127.0.0.1:8000/health && echo "✅ Health
 echo ""
 echo "✅ Diagnostic complete"
 
+

@@ -375,80 +375,20 @@ def get_db():
         db.close()
 
 # Pydantic models for campaign endpoints
-class CampaignCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    type: str
-    query: Optional[str] = None  # Added to match frontend payload
-    keywords: Optional[List[str]] = None
-    urls: Optional[List[str]] = None
-    trendingTopics: Optional[List[str]] = None
-    topics: Optional[List[str]] = None
-    status: Optional[str] = "INCOMPLETE"  # Campaign status: INCOMPLETE, PROCESSING, READY_TO_ACTIVATE, ACTIVE, NO_CHANGES
-    extractionSettings: Optional[Dict[str, Any]] = None
-    preprocessingSettings: Optional[Dict[str, Any]] = None
-    entitySettings: Optional[Dict[str, Any]] = None
-    modelingSettings: Optional[Dict[str, Any]] = None
-    # Site Builder specific fields
-    site_base_url: Optional[str] = None
-    target_keywords: Optional[List[str]] = None
-    top_ideas_count: Optional[int] = None
-    # Look Alike specific fields
-    articles_url: Optional[str] = None
-
-class CampaignUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    type: Optional[str] = None
-    keywords: Optional[List[str]] = None
-    urls: Optional[List[str]] = None
-    status: Optional[str] = None
-    topics: Optional[List[str]] = None
-    extractionSettings: Optional[Dict[str, Any]] = None
-    preprocessingSettings: Optional[Dict[str, Any]] = None
-    entitySettings: Optional[Dict[str, Any]] = None
-    modelingSettings: Optional[Dict[str, Any]] = None
-    custom_keywords: Optional[List[str]] = None  # Custom keywords/ideas for content queue
-    personality_settings_json: Optional[str] = None  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
-    image_settings_json: Optional[str] = None  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
-    scheduling_settings_json: Optional[str] = None  # JSON string for scheduling settings: {activeDays, activePlatforms, post_frequency_type, post_frequency_value, start_date, day_frequency, defaultPosts}
-    content_queue_items_json: Optional[str] = None  # JSON string for content queue items: [{id, type, name, source, ...}]
-    research_selections_json: Optional[str] = None  # JSON string for Research Assistant selections (raw ingredients): [{id, type, name, source, ...}]
-
-# Pydantic models for author personalities endpoints
-class AuthorPersonalityCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-
-class AuthorPersonalityUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    model_config_json: Optional[str] = None  # JSON string for model configuration
-    baseline_adjustments_json: Optional[str] = None  # JSON string for baseline adjustments
-    selected_features_json: Optional[str] = None  # JSON string for selected features
-    configuration_preset: Optional[str] = None  # Configuration preset name
-    writing_samples_json: Optional[str] = None  # JSON string for writing samples (array of strings or objects with {text, domain})
-
-# Pydantic models for author profile endpoints
-class ExtractProfileRequest(BaseModel):
-    writing_samples: List[str]
-    sample_metadata: Optional[List[dict]] = None  # Optional list of {mode, audience, path} for each sample
-
-class GenerateContentRequest(BaseModel):
-    goal: str
-    target_audience: str = "general"
-    adapter_key: str = "blog"  # linkedin, blog, memo_email, etc.
-    scaffold: str  # The content prompt/topic
-
-class BrandPersonalityCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    guidelines: Optional[str] = None
-
-class BrandPersonalityUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    guidelines: Optional[str] = None
+# MOVED TO: app/schemas/models.py
+from app.schemas.models import (
+    CampaignCreate,
+    CampaignUpdate,
+    AuthorPersonalityCreate,
+    AuthorPersonalityUpdate,
+    ExtractProfileRequest,
+    GenerateContentRequest,
+    BrandPersonalityCreate,
+    BrandPersonalityUpdate,
+    ResearchAgentRequest,
+    AnalyzeRequest,
+    TransferCampaignRequest
+)
 
 @app.on_event("startup")
 async def startup_event():
@@ -469,146 +409,14 @@ async def startup_event():
         logger.error(f"Startup error: {e}")
 
 # REQUIRED ENDPOINTS FOR DEPLOYMENT
-@app.get("/health")
-@app.head("/health")
-def health():
-    return {"status": "ok", "message": "Backend is running", "timestamp": datetime.now().isoformat()}
-
-@app.get("/version")
-@app.head("/version")
-def version():
-    return {"version": os.getenv("GITHUB_SHA", "development"), "status": "ok", "timestamp": datetime.now().isoformat()}
-
-@app.get("/mcp/enhanced/health")
-@app.head("/mcp/enhanced/health")
-def database_health():
-    return {"status": "ok", "message": "Database health check", "database_connected": True}
-
-@app.get("/")
-@app.head("/")
-def root():
-    return {"message": "Vernal Agents Backend API", "status": "running"}
-
-@app.get("/deploy/commit")
-def deploy_commit(admin_user = Depends(get_admin_user)):
-    """Return the current deployed commit hash for verification - ADMIN ONLY"""
-    import subprocess
-    try:
-        # Use current file location instead of hardcoded path
-        repo_dir = os.path.dirname(os.path.abspath(__file__))
-        result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd=repo_dir)
-        if result.returncode == 0:
-            return {"commit": result.stdout.strip(), "status": "ok"}
-        else:
-            return {"commit": "unknown", "status": "error", "message": "Failed to get commit hash"}
-    except Exception as e:
-        return {"commit": "unknown", "status": "error", "message": str(e)}
+# MOVED TO: app/routes/health.py
+from app.routes.health import health_router
+app.include_router(health_router)
 
 # Campaign endpoints with REAL database operations (EMERGENCY_NET: Multi-tenant scoped)
 # Demo campaign ID - template campaign that will be copied for each user
-DEMO_CAMPAIGN_ID = "9aaa2de6-ac2c-4bd1-8cd2-44f8cbc66f2a"
-
-def create_user_demo_campaign(user_id: int, db: Session):
-    """
-    Create a user-specific copy of the demo campaign.
-    Each user gets their own independent demo campaign with unique campaign_id.
-    """
-    try:
-        from models import Campaign, CampaignRawData
-        import json
-        import uuid
-        
-        logger.info(f"📋 Creating user-specific demo campaign for user {user_id}")
-        
-        # Get the template demo campaign (regardless of user_id - template should exist)
-        template_campaign = db.query(Campaign).filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
-        if not template_campaign:
-            logger.error(f"❌ Template demo campaign {DEMO_CAMPAIGN_ID} not found in database!")
-            logger.error(f"❌ Cannot create user copy - template campaign must exist first")
-            logger.error(f"❌ Please ensure a campaign with campaign_id={DEMO_CAMPAIGN_ID} exists in the database")
-            return None
-        
-        logger.info(f"✅ Found template demo campaign: {template_campaign.campaign_name} (user_id: {template_campaign.user_id})")
-        
-        # Check if user already has a demo campaign
-        # We'll use a naming convention: demo campaigns have name starting with "Demo Campaign"
-        existing_demo = db.query(Campaign).filter(
-            Campaign.user_id == user_id,
-            Campaign.campaign_name.like("Demo Campaign%")
-        ).first()
-        
-        if existing_demo:
-            logger.info(f"✅ User {user_id} already has demo campaign: {existing_demo.campaign_id}")
-            return existing_demo.campaign_id
-        
-        # Create new campaign_id for user's copy
-        user_demo_campaign_id = str(uuid.uuid4())
-        
-        # Helper function to safely get attributes (defined later in file, but available at runtime)
-        def safe_getattr(obj, attr_name, default=None):
-            try:
-                return getattr(obj, attr_name, default)
-            except AttributeError:
-                return default
-        
-        # Copy campaign data
-        user_campaign = Campaign(
-            campaign_id=user_demo_campaign_id,
-            campaign_name=template_campaign.campaign_name,
-            description=template_campaign.description,
-            query=template_campaign.query,
-            type=template_campaign.type,
-            keywords=template_campaign.keywords,
-            urls=template_campaign.urls,
-            trending_topics=template_campaign.trending_topics,
-            topics=template_campaign.topics,
-            status=template_campaign.status,
-            user_id=user_id,  # Set to current user
-            extraction_settings_json=template_campaign.extraction_settings_json,
-            preprocessing_settings_json=template_campaign.preprocessing_settings_json,
-            entity_settings_json=template_campaign.entity_settings_json,
-            modeling_settings_json=template_campaign.modeling_settings_json,
-            site_base_url=safe_getattr(template_campaign, 'site_base_url'),
-            target_keywords_json=safe_getattr(template_campaign, 'target_keywords_json'),
-            top_ideas_count=safe_getattr(template_campaign, 'top_ideas_count'),
-            image_settings_json=safe_getattr(template_campaign, 'image_settings_json'),
-            content_queue_items_json=safe_getattr(template_campaign, 'content_queue_items_json'),
-            articles_url=safe_getattr(template_campaign, 'articles_url'),
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
-        
-        db.add(user_campaign)
-        db.flush()  # Flush to get the ID
-        
-        # Copy raw_data from template to user's copy
-        template_raw_data = db.query(CampaignRawData).filter(
-            CampaignRawData.campaign_id == DEMO_CAMPAIGN_ID
-        ).all()
-        
-        copied_raw_data_count = 0
-        for template_row in template_raw_data:
-            user_raw_data = CampaignRawData(
-                campaign_id=user_demo_campaign_id,
-                source_url=template_row.source_url,
-                fetched_at=template_row.fetched_at,
-                raw_html=template_row.raw_html,
-                extracted_text=template_row.extracted_text,
-                meta_json=template_row.meta_json
-            )
-            db.add(user_raw_data)
-            copied_raw_data_count += 1
-        
-        db.commit()
-        logger.info(f"✅ Created user demo campaign {user_demo_campaign_id} for user {user_id} with {copied_raw_data_count} raw_data entries")
-        
-        return user_demo_campaign_id
-    except Exception as e:
-        logger.error(f"❌ Error creating user demo campaign for user {user_id}: {e}")
-        import traceback
-        logger.error(f"❌ Traceback: {traceback.format_exc()}")
-        db.rollback()
-        return None  # Return None on error - endpoint will continue without demo campaign
+# MOVED TO: app/services/campaigns.py
+from app.services.campaigns import DEMO_CAMPAIGN_ID, create_user_demo_campaign
 
 @app.get("/campaigns")
 def get_campaigns(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -869,23 +677,8 @@ def create_campaign(campaign_data: CampaignCreate, current_user = Depends(get_cu
         )
 
 # Helper functions for safe attribute access (handles missing SQLAlchemy columns)
-def _safe_getattr(obj, attr_name, default=None):
-    """Safely get attribute from SQLAlchemy model, returning default if column doesn't exist"""
-    try:
-        return getattr(obj, attr_name, default)
-    except AttributeError:
-        return default
-
-def _safe_get_json(obj, attr_name, default=None):
-    """Safely get and parse JSON attribute from SQLAlchemy model"""
-    try:
-        import json
-        value = getattr(obj, attr_name, None)
-        if value:
-            return json.loads(value)
-        return default
-    except (AttributeError, json.JSONDecodeError, TypeError):
-        return default
+# MOVED TO: app/utils/helpers.py
+from app.utils.helpers import _safe_getattr, _safe_get_json
 
 @app.get("/campaigns/{campaign_id}")
 def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1181,45 +974,7 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
         )
 
 # Analyze endpoint models
-class ResearchAgentRequest(BaseModel):
-    agent_type: str
-    force_refresh: Optional[bool] = False  # Admin-only: force re-run even if cached
-
-class AnalyzeRequest(BaseModel):
-    campaign_id: Optional[str] = None
-    campaign_name: Optional[str] = None
-    description: Optional[str] = None
-    query: Optional[str] = None
-    keywords: Optional[List[str]] = []
-    urls: Optional[List[str]] = []
-    trendingTopics: Optional[List[str]] = []
-    topics: Optional[List[str]] = []
-    type: Optional[str] = "keyword"
-    # Site Builder specific fields
-    site_base_url: Optional[str] = None
-    target_keywords: Optional[List[str]] = None
-    top_ideas_count: Optional[int] = 10
-    most_recent_urls: Optional[int] = None  # Number of most recent URLs to scrape (date-based)
-    depth: Optional[int] = 1
-    max_pages: Optional[int] = 10
-    batch_size: Optional[int] = 1
-    include_links: Optional[bool] = True
-    include_images: Optional[bool] = False
-    stem: Optional[bool] = False
-    lemmatize: Optional[bool] = False
-    remove_stopwords_toggle: Optional[bool] = False
-    extract_persons: Optional[bool] = False
-    extract_organizations: Optional[bool] = False
-    extract_locations: Optional[bool] = False
-    extract_dates: Optional[bool] = False
-    extract_money: Optional[bool] = False
-    extract_percent: Optional[bool] = False
-    extract_time: Optional[bool] = False
-    extract_facility: Optional[bool] = False
-    topic_tool: Optional[str] = "lda"
-    num_topics: Optional[int] = 3
-    iterations: Optional[int] = 25
-    pass_threshold: Optional[float] = 0.7
+# MOVED TO: app/schemas/models.py (ResearchAgentRequest, AnalyzeRequest)
 
 # Analyze endpoint (for campaign building)
 # Test endpoint to verify /analyze is reachable
@@ -3452,8 +3207,7 @@ def update_environment_variable(key: str, value: str, admin_user = Depends(get_a
             detail=f"Failed to update environment variable: {str(e)}"
         )
 
-class TransferCampaignRequest(BaseModel):
-    target_user_id: int
+# MOVED TO: app/schemas/models.py (TransferCampaignRequest)
 
 @app.post("/admin/campaigns/{campaign_id}/transfer")
 def transfer_campaign(campaign_id: str, request: TransferCampaignRequest, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):

@@ -58,3 +58,4 @@ echo "💡 Check service status: sudo systemctl status vernal-agents"
 echo "💡 Check logs: sudo journalctl -u vernal-agents -n 50 --no-pager"
 exit 1
 
+
