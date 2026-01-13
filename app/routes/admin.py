@@ -27,7 +27,7 @@ def get_db():
     finally:
         db.close()
 
-admin_router.get("/admin/settings/{setting_key}")
+@admin_router.get("/admin/settings/{setting_key}")
 def get_system_setting(setting_key: str, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Get a system setting by key - ADMIN ONLY"""
     try:
@@ -55,7 +55,7 @@ def get_system_setting(setting_key: str, admin_user = Depends(get_admin_user), d
         )
 
 # Admin User Management endpoints
-admin_router.get("/admin/users")
+@admin_router.get("/admin/users")
 def get_all_users(admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Get all users with admin status - ADMIN ONLY"""
     try:
@@ -82,7 +82,7 @@ def get_all_users(admin_user = Depends(get_admin_user), db: Session = Depends(ge
             detail=f"Failed to fetch users: {str(e)}"
         )
 
-admin_router.get("/admin/env-check")
+@admin_router.get("/admin/env-check")
 def check_environment_variables(admin_user = Depends(get_admin_user)):
     """
     Check which environment variables are set and which are missing - ADMIN ONLY
@@ -387,7 +387,7 @@ def check_environment_variables(admin_user = Depends(get_admin_user)):
         ],
     }
 
-admin_router.post("/admin/env-update")
+@admin_router.post("/admin/env-update")
 def update_environment_variable(key: str, value: str, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """
     Update an environment variable value in system_settings - ADMIN ONLY
@@ -455,7 +455,7 @@ def update_environment_variable(key: str, value: str, admin_user = Depends(get_a
 
 # MOVED TO: app/schemas/models.py (TransferCampaignRequest)
 
-admin_router.post("/admin/campaigns/{campaign_id}/transfer")
+@admin_router.post("/admin/campaigns/{campaign_id}/transfer")
 def transfer_campaign(campaign_id: str, request: TransferCampaignRequest, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Transfer a campaign to another user - ADMIN ONLY"""
     try:
@@ -509,7 +509,7 @@ def transfer_campaign(campaign_id: str, request: TransferCampaignRequest, admin_
             detail=f"Failed to transfer campaign: {str(e)}"
         )
 
-admin_router.post("/admin/users/{user_id}/admin")
+@admin_router.post("/admin/users/{user_id}/admin")
 def grant_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Grant admin access to a user - ADMIN ONLY"""
     try:
@@ -553,7 +553,7 @@ def grant_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: S
             detail=f"Failed to grant admin access: {str(e)}"
         )
 
-admin_router.delete("/admin/users/{user_id}/admin")
+@admin_router.delete("/admin/users/{user_id}/admin")
 def revoke_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Revoke admin access from a user - ADMIN ONLY"""
     try:
@@ -598,7 +598,7 @@ def revoke_admin_access(user_id: int, admin_user = Depends(get_admin_user), db: 
         )
 
 # Code Health Scanner endpoints
-admin_router.get("/admin/code-health")
+@admin_router.get("/admin/code-health")
 def get_code_health(admin_user = Depends(get_admin_user)):
     """Get latest code health scan results - ADMIN ONLY"""
     try:
@@ -630,7 +630,7 @@ def get_code_health(admin_user = Depends(get_admin_user)):
             detail=f"Failed to fetch code health: {str(e)}"
         )
 
-admin_router.post("/admin/code-health/scan")
+@admin_router.post("/admin/code-health/scan")
 def trigger_code_health_scan(admin_user = Depends(get_admin_user)):
     """Trigger a new code health scan - ADMIN ONLY"""
     try:
@@ -664,7 +664,7 @@ def trigger_code_health_scan(admin_user = Depends(get_admin_user)):
             detail=f"Failed to run code health scan: {str(e)}"
         )
 
-admin_router.post("/admin/plugins/api-keys")
+@admin_router.post("/admin/plugins/api-keys")
 def create_plugin_api_key(
     name: Optional[str] = None,
     admin_user = Depends(get_admin_user),
@@ -715,7 +715,7 @@ def create_plugin_api_key(
             detail=f"Failed to create API key: {str(e)}"
         )
 
-admin_router.get("/admin/plugins/api-keys")
+@admin_router.get("/admin/plugins/api-keys")
 def list_plugin_api_keys(
     admin_user = Depends(get_admin_user),
     db: Session = Depends(get_db)
@@ -752,7 +752,7 @@ def list_plugin_api_keys(
             detail=f"Failed to list API keys: {str(e)}"
         )
 
-admin_router.delete("/admin/plugins/api-keys/{key_id}")
+@admin_router.delete("/admin/plugins/api-keys/{key_id}")
 def delete_plugin_api_key(
     key_id: int,
     admin_user = Depends(get_admin_user),
@@ -793,7 +793,7 @@ def delete_plugin_api_key(
             detail=f"Failed to delete API key: {str(e)}"
         )
 
-admin_router.get("/plugin/test")
+@admin_router.get("/plugin/test")
 def plugin_test_endpoint(plugin_user = Depends(get_plugin_user)):
     """Test endpoint for WordPress plugin authentication - Requires API key"""
     return {
@@ -806,7 +806,7 @@ def plugin_test_endpoint(plugin_user = Depends(get_plugin_user)):
         }
     }
 
-admin_router.put("/admin/settings/{setting_key}")
+@admin_router.put("/admin/settings/{setting_key}")
 def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Update or create a system setting - ADMIN ONLY"""
     try:
@@ -858,7 +858,7 @@ def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update setting: {str(e)}"
         )
-admin_router.get("/plugin/test")
+@admin_router.get("/plugin/test")
 def plugin_test_endpoint(plugin_user = Depends(get_plugin_user)):
     """Test endpoint for WordPress plugin authentication - Requires API key"""
     return {
@@ -870,7 +870,7 @@ def plugin_test_endpoint(plugin_user = Depends(get_plugin_user)):
             "email": plugin_user.email
         }
     }
-admin_router.post("/admin/initialize-research-agent-prompts")
+@admin_router.post("/admin/initialize-research-agent-prompts")
 def initialize_research_agent_prompts(admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
     """
     Initialize default research agent prompts in the database if they don't exist.
