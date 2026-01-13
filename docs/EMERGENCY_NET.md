@@ -588,6 +588,55 @@ curl -I https://themachine.vernalcontentum.com/auth/login
 - **Fix:** Remove ALL nginx CORS headers, let FastAPI handle everything
 - **Test:** `curl -i -X OPTIONS https://themachine.vernalcontentum.com/auth/signup`
 
+### **Missing Router Decorators (CRITICAL - REFACTORING PITFALL)**
+- **Error:** "Access to XMLHttpRequest... has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present"
+- **Root Cause:** FastAPI router routes missing `@` decorator, causing routes to not be registered
+- **Symptoms:**
+  - Routes return 404 or CORS errors even though code exists
+  - Routes defined but not accessible
+  - CORS preflight fails because route doesn't exist
+- **Diagnosis:**
+  ```bash
+  # Check if routes are missing @ decorator
+  grep -n "^[a-z_]*_router\.\(get\|post\|put\|delete\)" app/routes/*.py
+  
+  # Should show NO matches (all should have @)
+  # If you see matches, those routes are NOT registered!
+  ```
+- **Fix:**
+  ```bash
+  # Add @ to all router decorators
+  sed -i 's/^\([a-z_]*_router\)\./@\1./g' app/routes/*.py
+  
+  # Verify fix
+  grep -c "^@[a-z_]*_router\." app/routes/*.py
+  
+  # Restart service
+  sudo systemctl restart vernal-agents
+  ```
+- **Prevention:** Always verify router decorators after refactoring:
+  ```bash
+  # Before committing, check all router files
+  for file in app/routes/*.py; do
+    echo "Checking $file..."
+    grep -q "^@.*_router\." "$file" || echo "⚠️  WARNING: Missing @ decorators in $file"
+  done
+  
+  # Also verify routers are included in main.py
+  grep "app.include_router" main.py
+  # Should show all routers: health_router, campaigns_router, admin_router, etc.
+  ```
+- **Example of WRONG:**
+  ```python
+  admin_router.get("/admin/settings/{setting_key}")  # ❌ Missing @
+  def get_system_setting(...):
+  ```
+- **Example of CORRECT:**
+  ```python
+  @admin_router.get("/admin/settings/{setting_key}")  # ✅ Has @
+  def get_system_setting(...):
+  ```
+
 ### **422/500 Errors on Auth Endpoints**
 - **422 Error:** Invalid request format or missing required fields
 - **500 Error:** Server-side error (check logs: `sudo journalctl -u vernal-agents -f`)
@@ -1040,6 +1089,7 @@ curl -f http://localhost:8000/health || echo "Rollback failed - manual intervent
 |-------------------------|----------------------|------------------|
 | 502 from nginx          | Service not running  | `sudo systemctl restart vernal-agents` |
 | CORS errors             | nginx handling CORS  | Remove nginx CORS headers, let FastAPI handle |
+| **CORS errors (routes missing)** | **Missing @ decorators on router routes** | **Check `grep "^[a-z_]*_router\." app/routes/*.py` - should be empty. Fix: `sed -i 's/^\([a-z_]*_router\)\./@\1./g' app/routes/*.py`** |
 | 422 on auth endpoints   | Invalid payload      | Check request format, required fields |
 | 500 on auth endpoints   | Server error         | Check systemd logs, database connectivity |
 | **Database connection failed** | **DB credentials/network** | **Check `.env`, test DB connectivity** |
