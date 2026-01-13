@@ -446,10 +446,6 @@ app.include_router(campaigns_research_router)
 from app.routes.content import content_router
 app.include_router(content_router)
 
-# Analyze endpoint models
-    logger.debug(f"📊 get_status_by_campaign: Using task {active_task_id} for campaign {campaign_id} (index had {task_id_from_index})")
-    return get_analyze_status(active_task_id, current_user)
-
 # Debug endpoint to check raw data for a campaign
 @app.get("/campaigns/{campaign_id}/debug")
 def debug_campaign_data(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
