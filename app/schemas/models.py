@@ -134,3 +134,4 @@ class AnalyzeRequest(BaseModel):
 class TransferCampaignRequest(BaseModel):
     target_user_id: int
 
+

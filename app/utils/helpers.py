@@ -23,3 +23,4 @@ def _safe_get_json(obj, attr_name, default=None):
     except (AttributeError, json.JSONDecodeError, TypeError):
         return default
 
+
