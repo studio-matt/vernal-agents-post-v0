@@ -125,6 +125,16 @@ def get_openai_api_key(current_user=None, db: Session = None) -> Optional[str]:
 # Create FastAPI app
 app = FastAPI()
 
+# Add CORS middleware
+# Note: When allow_credentials=True, cannot use allow_origins=["*"]
+# Must specify exact origins
+ALLOWED_ORIGINS = [
+    "https://machine.vernalcontentum.com",
+    "https://themachine.vernalcontentum.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
 # Guardrails blocking exception handler - returns clean HTTP 400
 @app.exception_handler(GuardrailsBlocked)
 async def guardrails_blocked_handler(request: Request, exc: GuardrailsBlocked):
@@ -253,16 +263,6 @@ async def log_requests(request: Request, call_next):
         import traceback
         logger.error(f"❌ REQUEST FAILED traceback:\n{traceback.format_exc()}")
         raise
-
-# Add CORS middleware
-# Note: When allow_credentials=True, cannot use allow_origins=["*"]
-# Must specify exact origins
-ALLOWED_ORIGINS = [
-    "https://machine.vernalcontentum.com",
-    "https://themachine.vernalcontentum.com",
-    "http://localhost:3000",
-    "http://localhost:3001",
-]
 
 # CORS middleware - handles all CORS including OPTIONS preflight
 app.add_middleware(
