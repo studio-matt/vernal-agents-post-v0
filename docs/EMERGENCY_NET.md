@@ -637,6 +637,120 @@ curl -I https://themachine.vernalcontentum.com/auth/login
   def get_system_setting(...):
   ```
 
+### **Missing Imports During Refactoring (CRITICAL - REFACTORING PITFALL)**
+- **Error:** `NameError: name 'X' is not defined. Did you mean: 'Y'?`
+- **Root Cause:** When extracting routes to separate files, imports for Pydantic models, types, or dependencies are not copied to the new file
+- **Symptoms:**
+  - Service crashes on startup with `NameError`
+  - Routes defined but service won't start
+  - Import errors in systemd logs: `NameError: name 'BrandPersonalityCreate' is not defined`
+- **Diagnosis:**
+  ```bash
+  # Check for NameError in service logs
+  sudo journalctl -u vernal-agents --since "5 minutes ago" | grep -i "NameError"
+  
+  # Test Python import to catch errors before deployment
+  cd /home/ubuntu/vernal-agents-post-v0
+  python3 -c "import main" 2>&1 | grep -i "NameError\|ImportError"
+  
+  # Check if all used types are imported in route files
+  for file in app/routes/*.py; do
+    echo "Checking $file..."
+    # Extract all type hints used in function signatures
+    grep -oE ":\s*[A-Z][a-zA-Z]*(Create|Update|Request|Response)" "$file" | \
+      sed 's/.*:\s*//' | sort -u | while read type; do
+        if ! grep -q "$type" "$file" | head -1; then
+          echo "⚠️  WARNING: $type used but not imported in $file"
+        fi
+      done
+  done
+  ```
+- **Fix:**
+  ```bash
+  # 1. Identify missing import from error message
+  # Error: NameError: name 'BrandPersonalityCreate' is not defined
+  # Missing: BrandPersonalityCreate
+  
+  # 2. Find where it's defined
+  grep -r "class BrandPersonalityCreate" app/schemas/
+  # Output: app/schemas/models.py:80:class BrandPersonalityCreate(BaseModel):
+  
+  # 3. Add to imports in the route file
+  # Edit app/routes/author_personalities.py
+  # Change: from app.schemas.models import AuthorPersonalityCreate, AuthorPersonalityUpdate
+  # To: from app.schemas.models import AuthorPersonalityCreate, AuthorPersonalityUpdate, BrandPersonalityCreate
+  
+  # 4. Verify fix
+  python3 -c "import main" 2>&1 | grep -i "NameError" || echo "✅ No NameError"
+  
+  # 5. Restart service
+  sudo systemctl restart vernal-agents
+  ```
+- **Prevention (MANDATORY CHECKLIST BEFORE COMMITTING REFACTORING):**
+  ```bash
+  # 1. Test Python import (catches NameError before deployment)
+  python3 -c "import main" 2>&1 | tee /tmp/import_check.log
+  if grep -qi "NameError\|ImportError\|SyntaxError" /tmp/import_check.log; then
+    echo "❌ Import check FAILED - fix errors before committing"
+    exit 1
+  fi
+  
+  # 2. Check all route files for missing imports
+  for file in app/routes/*.py; do
+    # Get all type hints used in function parameters
+    TYPES=$(grep -oE ":\s*[A-Z][a-zA-Z]*(Create|Update|Request|Response|Enum)" "$file" | \
+            sed 's/.*:\s*//' | sort -u)
+    
+    # Check each type is imported
+    for type in $TYPES; do
+      if ! grep -q "^from.*import.*$type\|^import.*$type" "$file"; then
+        echo "⚠️  WARNING: $type used in $file but not imported"
+      fi
+    done
+  done
+  
+  # 3. Verify all routers can be imported
+  python3 -c "
+  from app.routes import campaigns, admin, author_personalities, brand_personalities, platforms
+  print('✅ All routers import successfully')
+  " 2>&1 || echo "❌ Router import failed"
+  
+  # 4. Check for common missing imports after refactoring
+  # - Pydantic models (Create, Update, Request, Response)
+  # - Enum types
+  # - Custom exceptions
+  # - Helper functions from other modules
+  ```
+- **Example of WRONG:**
+  ```python
+  # app/routes/author_personalities.py
+  from app.schemas.models import AuthorPersonalityCreate, AuthorPersonalityUpdate
+  
+  @author_personalities_router.post("/brand_personalities")
+  def create_brand_personality(personality_data: BrandPersonalityCreate, ...):  # ❌ BrandPersonalityCreate not imported
+      ...
+  ```
+- **Example of CORRECT:**
+  ```python
+  # app/routes/author_personalities.py
+  from app.schemas.models import (
+      AuthorPersonalityCreate, 
+      AuthorPersonalityUpdate,
+      BrandPersonalityCreate,  # ✅ All used types imported
+      BrandPersonalityUpdate
+  )
+  
+  @author_personalities_router.post("/brand_personalities")
+  def create_brand_personality(personality_data: BrandPersonalityCreate, ...):  # ✅ Type is imported
+      ...
+  ```
+- **Refactoring Workflow (MANDATORY):**
+  1. **Before extracting routes:** List all types used in the code being extracted
+  2. **During extraction:** Copy ALL imports, not just the ones you think are needed
+  3. **After extraction:** Run `python3 -c "import main"` to catch NameError
+  4. **Before committing:** Run the prevention checklist above
+  5. **After deployment:** Monitor service logs for NameError/ImportError
+
 ### **422/500 Errors on Auth Endpoints**
 - **422 Error:** Invalid request format or missing required fields
 - **500 Error:** Server-side error (check logs: `sudo journalctl -u vernal-agents -f`)
