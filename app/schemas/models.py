@@ -135,3 +135,4 @@ class TransferCampaignRequest(BaseModel):
     target_user_id: int
 
 
+

@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ChevronLeft, RotateCw, Check } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import {
+  Service,
   linkedinConnect,
   twitterConnect,
   wordpressConnect,
@@ -131,6 +132,42 @@ export default function AccountSettings() {
           }))
         } else {
           console.log("🔍 No credentials found or error:", response);
+        }
+
+        // Fetch platform credentials to get "Connected As" info
+        try {
+          const platformResponse = await Service("platforms/credentials/all", "GET", {})
+          console.log("🔍 Platform credentials response:", platformResponse);
+          
+          if (platformResponse && platformResponse?.success && platformResponse?.credentials) {
+            const platformCreds = platformResponse.credentials
+            const accountInfo: Record<string, string> = {}
+            
+            // Extract platform_user_id for each platform to display "Connected As"
+            if (platformCreds.linkedin?.platform_user_id) {
+              accountInfo["LinkedIn"] = platformCreds.linkedin.platform_user_id
+              setLinkedinConnected(true)
+            }
+            if (platformCreds.twitter?.platform_user_id) {
+              accountInfo["Twitter"] = platformCreds.twitter.platform_user_id
+              setTwitterConnected(true)
+            }
+            if (platformCreds.wordpress?.platform_user_id) {
+              accountInfo["WordPress"] = platformCreds.wordpress.platform_user_id
+              setWordpressConnected(true)
+            }
+            if (platformCreds.instagram?.platform_user_id) {
+              accountInfo["Instagram"] = platformCreds.instagram.platform_user_id
+            }
+            if (platformCreds.facebook?.platform_user_id) {
+              accountInfo["Facebook"] = platformCreds.facebook.platform_user_id
+            }
+            
+            console.log("✅ Setting platform account info:", accountInfo)
+            setPlatformAccountInfo(accountInfo)
+          }
+        } catch (err: any) {
+          console.log("ℹ️ platforms/credentials/all endpoint not available or error:", err?.response?.status, err?.response?.data)
         }
       } catch (error) {
         console.error("Failed to fetch stored credentials:", error)

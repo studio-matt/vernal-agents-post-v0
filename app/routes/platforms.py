@@ -1070,6 +1070,7 @@ async def get_all_platform_credentials(
                     "api_key": conn.platform_user_id or "",
                     "api_secret": conn.refresh_token or "",
                     "access_token": conn.access_token or "",
+                    "platform_user_id": conn.platform_user_id or "",  # For display: "Connected As"
                 }
             elif conn.platform == PlatformEnum.WORDPRESS:
                 credentials[platform_name] = {
@@ -1077,6 +1078,7 @@ async def get_all_platform_credentials(
                     "site_url": conn.platform_user_id or "",
                     "username": conn.refresh_token or "",
                     "app_password": conn.access_token or "",
+                    "platform_user_id": conn.platform_user_id or "",  # For display: "Connected As" (site URL)
                 }
             elif conn.platform == PlatformEnum.INSTAGRAM:
                 credentials[platform_name] = {
