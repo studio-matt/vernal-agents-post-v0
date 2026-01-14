@@ -950,3 +950,6 @@ def delete_brand_personality(personality_id: str, current_user = Depends(get_cur
         logger.error(f"Traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete brand personality: {str(e)}"
+        )
