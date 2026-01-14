@@ -235,6 +235,13 @@ async def log_requests(request: Request, call_next):
     logger.info(f"📥 INCOMING REQUEST: {request.method} {request.url}")
     logger.info(f"📥 Headers: {redact_headers(dict(request.headers))}")
     
+    # Skip body reading for OPTIONS requests (CORS preflight) - they don't have bodies
+    if request.method == "OPTIONS":
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logger.info(f"📤 RESPONSE: {request.method} {request.url} - Status: {response.status_code} - Time: {process_time:.2f}s")
+        return response
+    
     # Read and log body, then restore it
     try:
         body_bytes = await request.body()
