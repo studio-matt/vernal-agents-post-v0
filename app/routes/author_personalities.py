@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
 from database import SessionLocal
-from app.schemas.models import AuthorPersonalityCreate, AuthorPersonalityUpdate, ExtractProfileRequest, BrandPersonalityCreate
+from app.schemas.models import AuthorPersonalityCreate, AuthorPersonalityUpdate, ExtractProfileRequest, BrandPersonalityCreate, BrandPersonalityUpdate
 
 logger = logging.getLogger(__name__)
 
