@@ -16,3 +16,5 @@ What this is NOT:
 ## Documentation
 
 - **[SYNTAX_CHECKING.md](./SYNTAX_CHECKING.md)** - Comprehensive syntax error detection tools and procedures. **CRITICAL**: Always run these tools before deployment and after refactoring to catch ALL syntax errors at once.
+
+- **[REFACTORING.md](./REFACTORING.md)** - Refactoring guardrails and best practices. **CRITICAL**: Read this before extracting routes or refactoring `main.py`. Includes checklist, validation script, and common mistakes to avoid.
