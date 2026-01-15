@@ -48,7 +48,11 @@ python3 scripts/check_syntax_patterns.py
 - Incomplete dictionary/list/tuple definitions
 - Common refactoring issues (orphaned code)
 
-**Note:** This tool may produce false positives for nested try blocks, which are valid Python. Use it as a guide, not as the final authority.
+**Important Notes:**
+- This tool may produce false positives for nested try blocks, which are valid Python
+- The "except block without matching try above" warnings often indicate nested try/except structures, which are valid
+- Use `find_all_syntax_errors.sh` as the authoritative source - if it passes, the code is syntactically valid
+- Use this pattern checker as a guide to identify potential structural issues, not as the final authority
 
 ## When to Use
 
