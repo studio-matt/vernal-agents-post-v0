@@ -1624,3 +1624,6 @@ async def instagram_callback(
         try:
             profile_url = "https://graph.facebook.com/v18.0/me"
             params = {
+                "access_token": access_token,
+                "fields": "email,name"
+            }
