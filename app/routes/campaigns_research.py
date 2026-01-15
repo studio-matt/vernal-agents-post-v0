@@ -792,156 +792,156 @@ def get_topicwizard_visualization(
         
         db_settings = SessionLocal()
         try:
-                # Load system model settings
-                tfidf_min_df = 3
-                tfidf_max_df = 0.7
-                num_topics = 10
-                
-                settings = db_settings.query(SystemSettings).filter(
-                    SystemSettings.setting_key.like("system_model_%")
-                ).all()
-                
-                for setting in settings:
-                    key = setting.setting_key.replace("system_model_", "")
-                    value = setting.setting_value
-                    if key == "tfidf_min_df":
-                        tfidf_min_df = int(value) if value else 3
-                    elif key == "tfidf_max_df":
-                        tfidf_max_df = float(value) if value else 0.7
-                    elif key == "k_grid":
-                        k_grid = json.loads(value) if value else [10, 15, 20, 25]
-                        num_topics = k_grid[0] if k_grid else 10
-                
-                # Load visualizer settings
-                max_texts = 100
-                top_words_per_topic = 10
-                grid_columns = 0  # 0 = auto-fill
-                sort_order = "coverage"  # "coverage" or "topic_id"
-                show_coverage = True
-                show_top_weights = False
-                visualization_type = "scatter"  # All types: "columns", "scatter", "bubble", "network", "word-cloud", "word_map", "topic_map", "document_map", "heatmap", "treemap"
-                color_scheme = "rainbow"  # "single", "gradient", "rainbow", "categorical", "viridis", "plasma", "inferno"
-                size_scaling = True
-                show_title = False
-                show_info_box = False
-                background_color = "#ffffff"
-                min_size = 20
-                max_size = 100
+            # Load system model settings
+            tfidf_min_df = 3
+            tfidf_max_df = 0.7
+            num_topics = 10
+            
+            settings = db_settings.query(SystemSettings).filter(
+                SystemSettings.setting_key.like("system_model_%")
+            ).all()
+            
+            for setting in settings:
+                key = setting.setting_key.replace("system_model_", "")
+                value = setting.setting_value
+                if key == "tfidf_min_df":
+                    tfidf_min_df = int(value) if value else 3
+                elif key == "tfidf_max_df":
+                    tfidf_max_df = float(value) if value else 0.7
+                elif key == "k_grid":
+                    k_grid = json.loads(value) if value else [10, 15, 20, 25]
+                    num_topics = k_grid[0] if k_grid else 10
+            
+            # Load visualizer settings
+            max_texts = 100
+            top_words_per_topic = 10
+            grid_columns = 0  # 0 = auto-fill
+            sort_order = "coverage"  # "coverage" or "topic_id"
+            show_coverage = True
+            show_top_weights = False
+            visualization_type = "scatter"  # All types: "columns", "scatter", "bubble", "network", "word-cloud", "word_map", "topic_map", "document_map", "heatmap", "treemap"
+            color_scheme = "rainbow"  # "single", "gradient", "rainbow", "categorical", "viridis", "plasma", "inferno"
+            size_scaling = True
+            show_title = False
+            show_info_box = False
+            background_color = "#ffffff"
+            min_size = 20
+            max_size = 100
+            # Advanced styling
+            opacity = 0.7
+            font_size = 14
+            font_weight = 600
+            spacing = 20
+            border_radius = 8
+            border_width = 2
+            border_color = "#333333"
+            shadow_enabled = False
+            # Layout
+            orientation = "horizontal"
+            alignment = "center"
+            padding = 20
+            margin = 10
+            # Animation
+            hover_effects = True
+            animation_speed = 300
+            # Visualization-specific
+            word_map_layout = "force"
+            word_map_link_distance = 50
+            topic_map_clustering = True
+            topic_map_distance = 100
+            document_map_point_size = 5
+            document_map_color_by = "topic"
+            
+            visualizer_settings = db_settings.query(SystemSettings).filter(
+                SystemSettings.setting_key.like("visualizer_%")
+            ).all()
+            
+            logger.info(f"🔍 Found {len(visualizer_settings)} visualizer settings in database")
+            if len(visualizer_settings) == 0:
+                logger.warning("⚠️ No visualizer settings found in database - using defaults!")
+            for setting in visualizer_settings:
+                logger.info(f"  ✓ {setting.setting_key} = '{setting.setting_value}'")
+            
+            for setting in visualizer_settings:
+                key = setting.setting_key.replace("visualizer_", "")
+                value = setting.setting_value
+                if key == "max_documents":
+                    max_texts = int(value) if value else 100
+                elif key == "top_words_per_topic":
+                    top_words_per_topic = int(value) if value else 10
+                elif key == "grid_columns":
+                    grid_columns = int(value) if value else 0
+                elif key == "sort_order":
+                    sort_order = value if value in ["coverage", "topic_id"] else "coverage"
+                elif key == "show_coverage":
+                    show_coverage = value.lower() == "true" if value else True
+                elif key == "show_top_weights":
+                    show_top_weights = value.lower() == "true" if value else False
+                elif key == "visualization_type":
+                    valid_types = ["columns", "scatter", "bubble", "network", "word-cloud", "word_map", "topic_map", "document_map", "heatmap", "treemap"]
+                    visualization_type = value if value in valid_types else "scatter"
+                    logger.info(f"📊 Loaded visualization_type: {visualization_type} (raw DB value: '{value}')")
+                elif key == "color_scheme":
+                    valid_schemes = ["single", "gradient", "rainbow", "categorical", "viridis", "plasma", "inferno"]
+                    color_scheme = value if value in valid_schemes else "rainbow"
+                elif key == "size_scaling":
+                    size_scaling = value.lower() == "true" if value else True
+                elif key == "show_title":
+                    show_title = value.lower() == "true" if value else False
+                elif key == "show_info_box":
+                    show_info_box = value.lower() == "true" if value else False
+                elif key == "background_color":
+                    background_color = value if value else "#ffffff"
+                elif key == "min_size":
+                    min_size = int(value) if value else 20
+                elif key == "max_size":
+                    max_size = int(value) if value else 100
                 # Advanced styling
-                opacity = 0.7
-                font_size = 14
-                font_weight = 600
-                spacing = 20
-                border_radius = 8
-                border_width = 2
-                border_color = "#333333"
-                shadow_enabled = False
+                elif key == "opacity":
+                    opacity = float(value) if value else 0.7
+                elif key == "font_size":
+                    font_size = int(value) if value else 14
+                elif key == "font_weight":
+                    font_weight = int(value) if value else 600
+                elif key == "spacing":
+                    spacing = int(value) if value else 20
+                elif key == "border_radius":
+                    border_radius = int(value) if value else 8
+                elif key == "border_width":
+                    border_width = int(value) if value else 2
+                elif key == "border_color":
+                    border_color = value if value else "#333333"
+                elif key == "shadow_enabled":
+                    shadow_enabled = value.lower() == "true" if value else False
                 # Layout
-                orientation = "horizontal"
-                alignment = "center"
-                padding = 20
-                margin = 10
+                elif key == "orientation":
+                    orientation = value if value in ["horizontal", "vertical"] else "horizontal"
+                elif key == "alignment":
+                    alignment = value if value in ["left", "center", "right"] else "center"
+                elif key == "padding":
+                    padding = int(value) if value else 20
+                elif key == "margin":
+                    margin = int(value) if value else 10
                 # Animation
-                hover_effects = True
-                animation_speed = 300
+                elif key == "hover_effects":
+                    hover_effects = value.lower() == "true" if value else True
+                elif key == "animation_speed":
+                    animation_speed = int(value) if value else 300
                 # Visualization-specific
-                word_map_layout = "force"
-                word_map_link_distance = 50
-                topic_map_clustering = True
-                topic_map_distance = 100
-                document_map_point_size = 5
-                document_map_color_by = "topic"
-                
-                visualizer_settings = db_settings.query(SystemSettings).filter(
-                    SystemSettings.setting_key.like("visualizer_%")
-                ).all()
-                
-                logger.info(f"🔍 Found {len(visualizer_settings)} visualizer settings in database")
-                if len(visualizer_settings) == 0:
-                    logger.warning("⚠️ No visualizer settings found in database - using defaults!")
-                for setting in visualizer_settings:
-                    logger.info(f"  ✓ {setting.setting_key} = '{setting.setting_value}'")
-                
-                for setting in visualizer_settings:
-                    key = setting.setting_key.replace("visualizer_", "")
-                    value = setting.setting_value
-                    if key == "max_documents":
-                        max_texts = int(value) if value else 100
-                    elif key == "top_words_per_topic":
-                        top_words_per_topic = int(value) if value else 10
-                    elif key == "grid_columns":
-                        grid_columns = int(value) if value else 0
-                    elif key == "sort_order":
-                        sort_order = value if value in ["coverage", "topic_id"] else "coverage"
-                    elif key == "show_coverage":
-                        show_coverage = value.lower() == "true" if value else True
-                    elif key == "show_top_weights":
-                        show_top_weights = value.lower() == "true" if value else False
-                    elif key == "visualization_type":
-                        valid_types = ["columns", "scatter", "bubble", "network", "word-cloud", "word_map", "topic_map", "document_map", "heatmap", "treemap"]
-                        visualization_type = value if value in valid_types else "scatter"
-                        logger.info(f"📊 Loaded visualization_type: {visualization_type} (raw DB value: '{value}')")
-                    elif key == "color_scheme":
-                        valid_schemes = ["single", "gradient", "rainbow", "categorical", "viridis", "plasma", "inferno"]
-                        color_scheme = value if value in valid_schemes else "rainbow"
-                    elif key == "size_scaling":
-                        size_scaling = value.lower() == "true" if value else True
-                    elif key == "show_title":
-                        show_title = value.lower() == "true" if value else False
-                    elif key == "show_info_box":
-                        show_info_box = value.lower() == "true" if value else False
-                    elif key == "background_color":
-                        background_color = value if value else "#ffffff"
-                    elif key == "min_size":
-                        min_size = int(value) if value else 20
-                    elif key == "max_size":
-                        max_size = int(value) if value else 100
-                    # Advanced styling
-                    elif key == "opacity":
-                        opacity = float(value) if value else 0.7
-                    elif key == "font_size":
-                        font_size = int(value) if value else 14
-                    elif key == "font_weight":
-                        font_weight = int(value) if value else 600
-                    elif key == "spacing":
-                        spacing = int(value) if value else 20
-                    elif key == "border_radius":
-                        border_radius = int(value) if value else 8
-                    elif key == "border_width":
-                        border_width = int(value) if value else 2
-                    elif key == "border_color":
-                        border_color = value if value else "#333333"
-                    elif key == "shadow_enabled":
-                        shadow_enabled = value.lower() == "true" if value else False
-                    # Layout
-                    elif key == "orientation":
-                        orientation = value if value in ["horizontal", "vertical"] else "horizontal"
-                    elif key == "alignment":
-                        alignment = value if value in ["left", "center", "right"] else "center"
-                    elif key == "padding":
-                        padding = int(value) if value else 20
-                    elif key == "margin":
-                        margin = int(value) if value else 10
-                    # Animation
-                    elif key == "hover_effects":
-                        hover_effects = value.lower() == "true" if value else True
-                    elif key == "animation_speed":
-                        animation_speed = int(value) if value else 300
-                    # Visualization-specific
-                    elif key == "word_map_layout":
-                        word_map_layout = value if value in ["force", "circular", "hierarchical"] else "force"
-                    elif key == "word_map_link_distance":
-                        word_map_link_distance = int(value) if value else 50
-                    elif key == "topic_map_clustering":
-                        topic_map_clustering = value.lower() == "true" if value else True
-                    elif key == "topic_map_distance":
-                        topic_map_distance = int(value) if value else 100
-                    elif key == "document_map_point_size":
-                        document_map_point_size = int(value) if value else 5
-                    elif key == "document_map_color_by":
-                        document_map_color_by = value if value in ["topic", "coverage", "document"] else "topic"
-            finally:
-                db_settings.close()
+                elif key == "word_map_layout":
+                    word_map_layout = value if value in ["force", "circular", "hierarchical"] else "force"
+                elif key == "word_map_link_distance":
+                    word_map_link_distance = int(value) if value else 50
+                elif key == "topic_map_clustering":
+                    topic_map_clustering = value.lower() == "true" if value else True
+                elif key == "topic_map_distance":
+                    topic_map_distance = int(value) if value else 100
+                elif key == "document_map_point_size":
+                    document_map_point_size = int(value) if value else 5
+                elif key == "document_map_color_by":
+                    document_map_color_by = value if value in ["topic", "coverage", "document"] else "topic"
+        finally:
+            db_settings.close()
         except Exception as e:
             logger.warning(f"Could not load settings, using defaults: {e}")
             tfidf_min_df = 3
