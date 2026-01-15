@@ -1627,3 +1627,12 @@ async def instagram_callback(
                 "access_token": access_token,
                 "fields": "email,name"
             }
+            profile_response = requests.get(profile_url, params=params)
+            
+            if profile_response.status_code == 200:
+                profile_data = profile_response.json()
+                user_email = profile_data.get("email")
+                user_name = profile_data.get("name")
+                logger.info(f"✅ Fetched Instagram profile: email={user_email}, name={user_name}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not fetch Instagram profile: {e}")

@@ -940,8 +940,6 @@ def get_topicwizard_visualization(
                     document_map_point_size = int(value) if value else 5
                 elif key == "document_map_color_by":
                     document_map_color_by = value if value in ["topic", "coverage", "document"] else "topic"
-        finally:
-            db_settings.close()
         except Exception as e:
             logger.warning(f"Could not load settings, using defaults: {e}")
             tfidf_min_df = 3
@@ -953,6 +951,8 @@ def get_topicwizard_visualization(
             sort_order = "coverage"
             show_coverage = True
             show_top_weights = False
+        finally:
+            db_settings.close()
             visualization_type = "scatter"
             color_scheme = "rainbow"
             size_scaling = True
