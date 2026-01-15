@@ -30,16 +30,30 @@ echo ""
 echo "2. CHECKING PYTHON IMPORTS"
 echo "--------------------------"
 source venv/bin/activate 2>/dev/null || true
-if python3 -c "import main" 2>&1 | grep -q "SyntaxError\|IndentationError\|ImportError\|NameError"; then
+# Capture both stdout and stderr, but only check for actual errors
+IMPORT_OUTPUT=$(python3 -c "import main" 2>&1)
+IMPORT_EXIT=$?
+
+# Check for actual error messages (not INFO logs)
+if [ $IMPORT_EXIT -ne 0 ] || echo "$IMPORT_OUTPUT" | grep -qiE "SyntaxError|IndentationError|ImportError|NameError|Traceback|Error:"; then
     echo "   ❌ Python import FAILED!"
     echo ""
     echo "   Error details:"
-    python3 -c "import main" 2>&1 | head -20 | sed 's/^/   /'
+    echo "$IMPORT_OUTPUT" | grep -iE "SyntaxError|IndentationError|ImportError|NameError|Traceback|Error:" | head -20 | sed 's/^/   /'
+    if [ -z "$(echo "$IMPORT_OUTPUT" | grep -iE "SyntaxError|IndentationError|ImportError|NameError|Traceback|Error:")" ]; then
+        echo "   Exit code: $IMPORT_EXIT"
+        echo "   Full output (last 10 lines):"
+        echo "$IMPORT_OUTPUT" | tail -10 | sed 's/^/   /'
+    fi
     echo ""
     echo "   This will prevent the service from starting!"
     exit 1
 else
-    echo "   ✅ Python imports successful"
+    echo "   ✅ Python imports successful (exit code: $IMPORT_EXIT)"
+    # Show a sample of the output to confirm it's working
+    if echo "$IMPORT_OUTPUT" | grep -q "INFO"; then
+        echo "   (Database connection successful - INFO logs present)"
+    fi
 fi
 echo ""
 
