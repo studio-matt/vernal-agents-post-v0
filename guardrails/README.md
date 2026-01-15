@@ -12,3 +12,7 @@ What this is NOT:
 - This is not application code.
 - This is not deployment code.
 - This is process + safety rails only.
+
+## Documentation
+
+- **[SYNTAX_CHECKING.md](./SYNTAX_CHECKING.md)** - Comprehensive syntax error detection tools and procedures. **CRITICAL**: Always run these tools before deployment and after refactoring to catch ALL syntax errors at once.
