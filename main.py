@@ -22,10 +22,16 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Vernal Agents API", version="1.0.0")
 
 # Configure CORS - CRITICAL for frontend access
-# Allow all origins for now (can be restricted later for security)
+# NOTE: When allow_credentials=True, you CANNOT use allow_origins=["*"]
+# Must specify exact origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins - can restrict to specific domains later
+    allow_origins=[
+        "https://machine.vernalcontentum.com",
+        "https://themachine.vernalcontentum.com",
+        "http://localhost:3000",  # For local development
+        "http://localhost:3001",  # Alternative local port
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
