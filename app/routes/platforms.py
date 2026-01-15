@@ -1636,3 +1636,28 @@ async def instagram_callback(
                 logger.info(f"✅ Fetched Instagram profile: email={user_email}, name={user_name}")
         except Exception as e:
             logger.warning(f"⚠️ Could not fetch Instagram profile: {e}")
+            # Continue without profile info - connection still works
+        
+        # Use email if available, otherwise use name, otherwise use a generic identifier
+        platform_user_identifier = user_email or user_name or "Instagram User"
+        
+        conn = db.query(PlatformConnection).filter(PlatformConnection.user_id == user_id, PlatformConnection.platform == PlatformEnum.INSTAGRAM).first()
+        if conn:
+            conn.access_token = access_token
+            conn.connected_at = datetime.now()
+            if platform_user_identifier:
+                conn.platform_user_id = platform_user_identifier
+        else:
+            conn = PlatformConnection(user_id=user_id, platform=PlatformEnum.INSTAGRAM, access_token=access_token, platform_user_id=platform_user_identifier, connected_at=datetime.now())
+            db.add(conn)
+        db.commit()
+        logger.info(f"✅ Instagram connection successful for user {user_id}")
+        return RedirectResponse(url="https://themachine.vernalcontentum.com/account-settings?instagram=connected")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Instagram callback error: {e}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        db.rollback()
+        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
