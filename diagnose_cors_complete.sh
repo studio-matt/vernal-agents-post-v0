@@ -2,7 +2,8 @@
 # Comprehensive CORS diagnostic script
 # Run this on the server to diagnose CORS issues
 
-set -e
+# Don't exit on error - we want to complete all checks
+set +e
 
 echo "=========================================="
 echo "COMPREHENSIVE CORS DIAGNOSTIC"
@@ -10,6 +11,9 @@ echo "=========================================="
 echo ""
 
 cd /home/ubuntu/vernal-agents-post-v0
+
+# Initialize issue counter
+ISSUES=0
 
 # 1. Check if code is up to date
 echo "1. CHECKING CODE STATUS"
@@ -66,6 +70,96 @@ if grep -q "ALLOWED_ORIGINS" main.py && grep -q "machine.vernalcontentum.com" ma
     grep -A 5 "ALLOWED_ORIGINS" main.py | grep -E "https?://" | sed 's/^/     /'
 else
     echo "   ❌ CORS configuration NOT found or incomplete!"
+fi
+echo ""
+
+# 3a. GUARDRAIL CHECK: Missing Router Decorators (CRITICAL - REFACTORING PITFALL)
+echo "3a. GUARDRAIL CHECK: Missing Router Decorators"
+echo "------------------------------------------------"
+if [ -d "app/routes" ]; then
+    MISSING_DECORATORS=$(grep -n "^[a-z_]*_router\.\(get\|post\|put\|delete\|patch\)" app/routes/*.py 2>/dev/null || true)
+    if [ -n "$MISSING_DECORATORS" ]; then
+        echo "   ❌ CRITICAL: Found routes missing @ decorator!"
+        echo "   These routes will NOT be registered and will cause CORS errors:"
+        echo "$MISSING_DECORATORS" | sed 's/^/     /'
+        echo ""
+        echo "   Fix: sed -i 's/^\\([a-z_]*_router\\)\\./@\\1./g' app/routes/*.py"
+        ISSUES=$((ISSUES + 1))
+    else
+        echo "   ✅ All router routes have @ decorators"
+    fi
+else
+    echo "   ⚠️  app/routes directory not found (may not be refactored yet)"
+fi
+echo ""
+
+# 3b. GUARDRAIL CHECK: Router Inclusion in main.py
+echo "3b. GUARDRAIL CHECK: Router Inclusion in main.py"
+echo "--------------------------------------------------"
+ROUTER_INCLUDES=$(grep -c "app.include_router" main.py 2>/dev/null || echo "0")
+if [ "$ROUTER_INCLUDES" -gt 0 ]; then
+    echo "   ✅ Found $ROUTER_INCLUDES router includes in main.py"
+    echo "   Routers included:"
+    grep "app.include_router" main.py | sed 's/^/     /'
+else
+    echo "   ⚠️  No router includes found (may not be refactored yet)"
+fi
+echo ""
+
+# 3c. GUARDRAIL CHECK: Missing Imports (NameError/ImportError)
+echo "3c. GUARDRAIL CHECK: Missing Imports (NameError/ImportError)"
+echo "------------------------------------------------------------"
+if echo "$IMPORT_OUTPUT" | grep -qiE "NameError|ImportError"; then
+    echo "   ❌ CRITICAL: Found NameError or ImportError in Python import!"
+    echo "   This will prevent the service from starting:"
+    echo "$IMPORT_OUTPUT" | grep -iE "NameError|ImportError" | head -10 | sed 's/^/     /'
+    echo ""
+    echo "   Common causes:"
+    echo "   - Missing imports in app/routes/*.py files"
+    echo "   - Pydantic models not imported (e.g., BrandPersonalityCreate)"
+    echo "   - Dependencies not installed"
+    echo ""
+    echo "   Fix: Check the error above and add missing imports"
+    ISSUES=$((ISSUES + 1))
+else
+    echo "   ✅ No NameError or ImportError detected"
+fi
+echo ""
+
+# 3d. GUARDRAIL CHECK: Missing Type Imports in Route Files
+echo "3d. GUARDRAIL CHECK: Missing Type Imports in Route Files"
+echo "--------------------------------------------------------"
+if [ -d "app/routes" ]; then
+    MISSING_TYPE_IMPORTS=0
+    for file in app/routes/*.py; do
+        if [ -f "$file" ]; then
+            # Extract type hints used in function parameters
+            TYPES=$(grep -oE ":\s*[A-Z][a-zA-Z]*(Create|Update|Request|Response|Enum)" "$file" 2>/dev/null | \
+                    sed 's/.*:\s*//' | sort -u || true)
+            
+            if [ -n "$TYPES" ]; then
+                for type in $TYPES; do
+                    # Check if type is imported
+                    if ! grep -qE "^from.*import.*$type|^import.*$type" "$file" 2>/dev/null; then
+                        if [ $MISSING_TYPE_IMPORTS -eq 0 ]; then
+                            echo "   ⚠️  Potential missing type imports found:"
+                        fi
+                        echo "     - $type used in $(basename $file) but not imported"
+                        MISSING_TYPE_IMPORTS=$((MISSING_TYPE_IMPORTS + 1))
+                    fi
+                done
+            fi
+        fi
+    done
+    
+    if [ $MISSING_TYPE_IMPORTS -eq 0 ]; then
+        echo "   ✅ All type hints appear to be imported"
+    else
+        echo "   ⚠️  Found $MISSING_TYPE_IMPORTS potential missing imports"
+        echo "   (This is a warning - verify manually if service fails to start)"
+    fi
+else
+    echo "   ⚠️  app/routes directory not found (may not be refactored yet)"
 fi
 echo ""
 
@@ -224,7 +318,7 @@ echo "SUMMARY"
 echo "=========================================="
 echo ""
 
-ISSUES=0
+# Note: ISSUES counter already initialized at start and incremented by guardrail checks
 
 if [ "$SERVICE_STATUS" != "active" ]; then
     echo "❌ ISSUE 1: Service is not active"
@@ -256,8 +350,23 @@ if [ "$LATEST_COMMIT" != "$CURRENT_COMMIT" ]; then
     ISSUES=$((ISSUES + 1))
 fi
 
+# Check if guardrail issues were found (they increment ISSUES earlier)
+GUARDRAIL_ISSUES_FOUND=0
+if [ -d "app/routes" ]; then
+    if grep -q "^[a-z_]*_router\.\(get\|post\|put\|delete\|patch\)" app/routes/*.py 2>/dev/null; then
+        GUARDRAIL_ISSUES_FOUND=$((GUARDRAIL_ISSUES_FOUND + 1))
+    fi
+fi
+if echo "$IMPORT_OUTPUT" | grep -qiE "NameError|ImportError"; then
+    GUARDRAIL_ISSUES_FOUND=$((GUARDRAIL_ISSUES_FOUND + 1))
+fi
+
 if [ $ISSUES -eq 0 ]; then
     echo "✅ All checks passed!"
+    echo ""
+    if [ $GUARDRAIL_ISSUES_FOUND -gt 0 ]; then
+        echo "⚠️  Note: Guardrail checks found potential issues (see sections 3a-3d above)"
+    fi
     echo ""
     echo "If you still see CORS errors in the browser:"
     echo "1. Clear browser cache (Ctrl+Shift+Delete)"
@@ -266,9 +375,19 @@ if [ $ISSUES -eq 0 ]; then
     echo "4. Verify the Origin header matches exactly: https://machine.vernalcontentum.com"
 else
     echo ""
+    if [ $GUARDRAIL_ISSUES_FOUND -gt 0 ]; then
+        echo "🚨 GUARDRAIL ISSUES FOUND (CRITICAL - REFACTORING PITFALLS):"
+        echo "   - Check sections 3a-3d above for details"
+        echo "   - These issues can cause CORS errors even if service is running"
+        echo ""
+    fi
     echo "🔧 RECOMMENDED FIX:"
     echo "   cd /home/ubuntu/vernal-agents-post-v0"
     echo "   git pull origin main"
+    if [ $GUARDRAIL_ISSUES_FOUND -gt 0 ]; then
+        echo "   # Fix guardrail issues first (missing decorators/imports)"
+        echo "   # Then restart:"
+    fi
     echo "   bash restart_service.sh"
 fi
 
