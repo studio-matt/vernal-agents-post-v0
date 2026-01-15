@@ -25,18 +25,6 @@ def get_db():
     finally:
         db.close()
 
-        }
-    except Exception as e:
-        logger.error(f"Error generating ideas: {e}")
-        import traceback
-        logger.error(f"Error deleting brand personality: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete brand personality: {str(e)}"
-        )
-
 # Campaign Planning Endpoint
 @brand_personalities_router.post("/campaigns/{campaign_id}/plan")
 async def create_campaign_plan(

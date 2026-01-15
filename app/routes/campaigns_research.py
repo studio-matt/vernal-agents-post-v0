@@ -789,8 +789,9 @@ def get_topicwizard_visualization(
         for r in rows:
             if r.extracted_text and len(r.extracted_text.strip()) > 0 and not (r.source_url and r.source_url.startswith(("error:", "placeholder:"))):
                 texts.append(r.extracted_text.strip())
-            db_settings = SessionLocal()
-            try:
+        
+        db_settings = SessionLocal()
+        try:
                 # Load system model settings
                 tfidf_min_df = 3
                 tfidf_max_df = 0.7
