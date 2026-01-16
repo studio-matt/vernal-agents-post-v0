@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.utils.openai_helpers import get_openai_api_key
 from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX
+from app.schemas.models import AnalyzeRequest
 
 @content_router.post("/analyze/test")
 def test_analyze_endpoint():
