@@ -88,6 +88,7 @@ def scan_codebase(
             'backend-repo', 'backend-repo-git', 'backend-repo-temp',
             'temp-agents-fix', 'temp-agents-fix2', 'temp-agents-repo',
             'temp-api', 'temp-pages', '.local', 'dist', 'build',
+            '.refactor_backups',  # Refactoring backups
         ]
     
     root_path = Path(root_dir)
@@ -98,6 +99,11 @@ def scan_codebase(
     for py_file in root_path.rglob("*.py"):
         # Skip excluded directories
         if any(excluded in py_file.parts for excluded in exclude_dirs):
+            continue
+        
+        # Skip backup directories (pattern: *-bak-* or *-backup-*)
+        file_path_str = str(py_file)
+        if '-bak-' in file_path_str or '-backup-' in file_path_str or file_path_str.endswith('.bak'):
             continue
         
         # Skip if in a hidden directory
