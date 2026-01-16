@@ -85,10 +85,7 @@ When extracting routes from `main.py`:
   - Shows what changed (added/removed/modified)
   - Helps identify lost functionality
   - Fast way to diff old monolith vs new refactor
-- [ ] **CRITICAL: Verify ALL routers are included in main.py**
-  - Run: `bash guardrails/validate_all_routers_included.sh`
-  - This checks that every `*_router = APIRouter()` in `app/routes/` is imported and included in `main.py`
-  - **This prevents 404 errors from missing routers** ⚠️
+  - **Automatically validates all routers are included** (prevents 404 errors) ⚠️
 - [ ] Run syntax check: `bash find_all_syntax_errors.sh`
 - [ ] Verify `main.py` is < 200 lines
 - [ ] Verify `main.py` only has:

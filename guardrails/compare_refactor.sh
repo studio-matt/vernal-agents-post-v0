@@ -109,6 +109,29 @@ if [ "$DIFF_COUNT" -gt 0 ]; then
     echo "   3. Compare router includes: grep 'include_router' $BACKUP_PATH/main.py main.py"
 fi
 
+# CRITICAL: Validate all routers are included (prevents 404 errors)
+echo ""
+echo "=========================================================="
+echo "🔍 Router Completeness Check"
+echo "=========================================================="
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/validate_all_routers_included.sh" ]; then
+    if bash "$SCRIPT_DIR/validate_all_routers_included.sh" 2>/dev/null; then
+        echo "✅ All routers from app/routes/ are included in main.py"
+    else
+        echo "❌ ERROR: Some routers are missing from main.py!"
+        echo "   This will cause 404 errors for those endpoints."
+        echo "   Run 'bash guardrails/validate_all_routers_included.sh' for details"
+        echo ""
+        echo "💡 Compare router includes:"
+        echo "   Backup: grep 'include_router' $BACKUP_PATH/main.py"
+        echo "   Current: grep 'include_router' main.py"
+    fi
+else
+    echo "⚠️  Router validation script not found - skipping check"
+fi
+echo ""
+
 if [ "$MISSING_COUNT" -gt 0 ]; then
     echo "⚠️  WARNING: Files were deleted during refactoring!"
     echo "   Review missing files to ensure functionality wasn't lost"
