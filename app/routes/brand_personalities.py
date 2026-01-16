@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from auth_api import get_current_user
 from database import SessionLocal
 from app.schemas.models import BrandPersonalityCreate, BrandPersonalityUpdate
+from app.utils.openai_helpers import get_openai_api_key
+from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX
 
 logger = logging.getLogger(__name__)
 
