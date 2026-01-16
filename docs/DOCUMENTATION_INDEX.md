@@ -83,6 +83,59 @@ bash guardrails/validate_main_structure.sh
 # Always run before deployment:
 bash find_all_syntax_errors.sh
 ```
+---
+
+### **guardrails/CORS_EMERGENCY_NET.md**
+**When to use:**
+- Frontend shows CORS errors
+- Browser console: "No 'Access-Control-Allow-Origin' header"
+- Browser console: "wildcard '*' when credentials mode is 'include'"
+- Preflight requests failing
+- Service running but frontend can't connect
+
+**What it contains:**
+- **The exact fix that works** - Specific origins with credentials
+- Complete diagnostic checklist (14 steps)
+- Common issues and solutions
+- Step-by-step fix procedures
+- Quick reference commands
+
+**Location:** `guardrails/CORS_EMERGENCY_NET.md`
+
+**Quick access:**
+```bash
+# Diagnose CORS issues:
+bash scripts/diagnose_cors.sh
+
+# Quick reference:
+cat guardrails/CORS_QUICK_REFERENCE.md
+
+# Auto-fix wildcard issue:
+bash scripts/fix_cors_wildcard.sh
+```
+
+**Key Rule:** When `allow_credentials=True`, you CANNOT use `allow_origins=["*"]` - must use specific origins.
+
+---
+
+### **guardrails/CORS_QUICK_REFERENCE.md**
+**When to use:**
+- Quick CORS fix needed
+- Don't remember the exact rule
+- Need one-page cheat sheet
+
+**What it contains:**
+- The critical rule (wildcard vs specific origins)
+- Quick diagnostic commands
+- Common issues table
+- Quick fix procedure
+
+**Location:** `guardrails/CORS_QUICK_REFERENCE.md`
+
+**Quick access:**
+```bash
+cat guardrails/CORS_QUICK_REFERENCE.md
+```
 
 ---
 
@@ -219,9 +272,11 @@ bash verify_service.sh
 3. Check `guardrails/REFACTORING.md` - If you just refactored
 
 ### **CORS Errors**
-1. Check `docs/CORS_DIAGNOSTIC_GUIDE.md` - Step-by-step diagnosis
-2. Check `EMERGENCY_NET_BACKEND.md` - CORS configuration
-3. Run `bash verify_service.sh` - Service health
+1. **START HERE:** `guardrails/CORS_EMERGENCY_NET.md` - Complete fix guide with exact solution
+2. Run `bash scripts/diagnose_cors.sh` - Comprehensive diagnostic
+3. If wildcard issue: `bash scripts/fix_cors_wildcard.sh` - Auto-fix
+4. Quick reference: `guardrails/CORS_QUICK_REFERENCE.md` - One-page cheat sheet
+5. Legacy: `docs/CORS_DIAGNOSTIC_GUIDE.md` - Alternative diagnostic approach
 
 ### **After Refactoring**
 1. Read `guardrails/REFACTORING.md` - Best practices
@@ -269,8 +324,13 @@ REFACTORING_TESTING_CHECKLIST.md (Testing)
 verify_service.sh (Quick Health Check)
     └── Used by: REFACTORING_TESTING_CHECKLIST.md
 
+guardrails/
+    ├── CORS_EMERGENCY_NET.md (CORS Fix - PRIMARY)
+    ├── CORS_QUICK_REFERENCE.md (CORS Quick Ref)
+    └── ... (other guardrails)
+
 docs/
-    ├── CORS_DIAGNOSTIC_GUIDE.md (CORS Issues)
+    ├── CORS_DIAGNOSTIC_GUIDE.md (CORS Issues - Legacy)
     └── GUARDRAILS_SYSTEM.md (Feature Docs)
 ```
 
