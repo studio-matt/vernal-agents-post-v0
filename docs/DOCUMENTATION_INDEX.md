@@ -6,6 +6,38 @@
 
 ---
 
+## 🎯 Master Diagnostic Router (START HERE)
+
+### **MASTER_DIAGNOSTIC_ROUTER.md**
+**When to use:**
+- Something is broken and you don't know where to start
+- Need a complete system health check
+- After deployment to verify everything works
+- Before deployment to catch issues early
+- When troubleshooting any backend issue
+
+**What it contains:**
+- **15-step comprehensive diagnostic checklist** (all phases)
+- Decision tree for common issues
+- Routes to all other documentation
+- Complete workflow procedures
+- Success criteria
+
+**Location:** `docs/MASTER_DIAGNOSTIC_ROUTER.md`
+
+**Quick access:**
+```bash
+# Run full automated diagnostic:
+bash docs/run_full_diagnostic.sh
+
+# Or follow step-by-step:
+cat docs/MASTER_DIAGNOSTIC_ROUTER.md
+```
+
+**This is your ONE-STOP diagnostic guide** - it routes you to all other docs.
+
+---
+
 ## 🚨 Emergency / Critical Issues
 
 ### **EMERGENCY_NET_BACKEND.md**
