@@ -1,15 +1,24 @@
 #!/bin/bash
 # Validate main.py structure after refactoring
 # Ensures main.py is a thin entry point, not a monolithic file
+# Automatically creates backup before validation if backup doesn't exist
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MAIN_PY="$REPO_ROOT/main.py"
+BACKUP_DIR="$REPO_ROOT/.refactor_backups"
 
 echo "🔍 Validating main.py structure..."
 echo ""
+
+# Auto-create backup if it doesn't exist and we're in a refactoring context
+if [ -f "$MAIN_PY" ] && [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
+    echo "📦 No backup found - creating automatic backup..."
+    bash "$SCRIPT_DIR/backup_before_refactor.sh" "$MAIN_PY" 2>/dev/null || true
+    echo ""
+fi
 
 # Check if main.py exists
 if [ ! -f "$MAIN_PY" ]; then

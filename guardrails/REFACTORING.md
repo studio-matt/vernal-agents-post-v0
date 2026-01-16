@@ -64,7 +64,10 @@ After extracting routes to `app/routes/*.py`, `main.py` should be a **thin entry
 When extracting routes from `main.py`:
 
 ### Before Starting
-- [ ] Create a backup: `cp main.py main.py.backup.$(date +%Y%m%d)`
+- [ ] **Create backup:** `bash guardrails/backup_before_refactor.sh`
+  - This saves `main.py` and all route files to `.refactor_backups/`
+  - Backup includes timestamp for easy comparison later
+  - **CRITICAL:** Always backup before refactoring - enables fast diff/debugging
 - [ ] Run syntax check: `bash find_all_syntax_errors.sh`
 - [ ] Verify service is running: `curl http://127.0.0.1:8000/health`
 
@@ -78,6 +81,10 @@ When extracting routes from `main.py`:
 - [ ] **Remove duplicate endpoint definitions from `main.py`** ⚠️
 
 ### After Extraction
+- [ ] **Compare with backup:** `bash guardrails/compare_refactor.sh`
+  - Shows what changed (added/removed/modified)
+  - Helps identify lost functionality
+  - Fast way to diff old monolith vs new refactor
 - [ ] Run syntax check: `bash find_all_syntax_errors.sh`
 - [ ] Verify `main.py` is < 200 lines
 - [ ] Verify `main.py` only has:
@@ -89,6 +96,7 @@ When extracting routes from `main.py`:
 - [ ] Restart service: `sudo systemctl restart vernal-agents`
 - [ ] Verify health endpoint: `curl http://127.0.0.1:8000/health`
 - [ ] Test at least one endpoint from the extracted router
+- [ ] **If issues found:** `bash guardrails/restore_from_backup.sh [timestamp]` to restore
 
 ### Validation Script
 
@@ -208,6 +216,69 @@ python3 -c "import main; print('✅ Import successful')"
 # 4. Check service
 curl http://127.0.0.1:8000/health
 ```
+
+---
+
+## Backup & Comparison Tools
+
+### Creating Backups
+
+**Before any refactoring:**
+```bash
+# Backup main.py and all route files
+bash guardrails/backup_before_refactor.sh
+
+# Or backup specific files
+bash guardrails/backup_before_refactor.sh main.py app/routes/admin.py
+```
+
+Backups are saved to `.refactor_backups/[timestamp]/` with full directory structure preserved.
+
+### Comparing Refactored Code
+
+**After refactoring, compare with original:**
+```bash
+# Compare with most recent backup
+bash guardrails/compare_refactor.sh
+
+# Or specify backup timestamp
+bash guardrails/compare_refactor.sh 20250115_143022
+```
+
+This shows:
+- ✅ Unchanged files
+- 🔀 Modified files (with line counts)
+- ❌ Missing files (deleted during refactor)
+- ✨ New files (added during refactor)
+
+**To see detailed diffs:**
+```bash
+# View diff for specific file
+diff -u .refactor_backups/[timestamp]/main.py main.py
+
+# Side-by-side comparison
+diff -y .refactor_backups/[timestamp]/main.py main.py | less
+
+# Find what broke - compare function definitions
+grep -E '^(def |async def )' .refactor_backups/[timestamp]/main.py main.py
+```
+
+### Restoring from Backup
+
+**If refactoring broke something:**
+```bash
+# Restore all files from backup
+bash guardrails/restore_from_backup.sh [timestamp]
+
+# Or restore specific files
+bash guardrails/restore_from_backup.sh [timestamp] main.py app/routes/admin.py
+```
+
+**Why backups matter:**
+- Fastest way to diff old monolith vs new refactor
+- Track code snippets to find why things broke
+- Compare function definitions, imports, router includes
+- Restore quickly if refactoring goes wrong
 
 ---
 

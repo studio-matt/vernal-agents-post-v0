@@ -351,13 +351,18 @@ fi
 3. Fix missing modules or import paths
 
 ### **After Refactoring**
-1. ✅ Step 5: Syntax check
-2. ✅ Step 6: Import validation
-3. ✅ Step 7: Structure validation
-4. ✅ Step 8: Router inclusion check
-5. ✅ Step 9: Endpoint health check
-6. **Route to:** `guardrails/REFACTORING.md` → Complete refactoring guide
-7. **Route to:** `REFACTORING_TESTING_CHECKLIST.md` → Testing procedures
+1. **CRITICAL:** Compare with backup: `bash guardrails/compare_refactor.sh`
+   - Shows what changed (added/removed/modified)
+   - Fastest way to diff old monolith vs new refactor
+   - Track code snippets to find why things broke
+2. ✅ Step 5: Syntax check
+3. ✅ Step 6: Import validation
+4. ✅ Step 7: Structure validation
+5. ✅ Step 8: Router inclusion check
+6. ✅ Step 9: Endpoint health check
+7. **Route to:** `guardrails/REFACTORING.md` → Complete refactoring guide
+8. **Route to:** `REFACTORING_TESTING_CHECKLIST.md` → Testing procedures
+9. **If issues found:** `bash guardrails/restore_from_backup.sh [timestamp]` to restore
 
 ### **After Deployment**
 1. ✅ All Phase 1 steps (Service Health)
@@ -368,11 +373,12 @@ fi
 6. ✅ Step 14: Recent errors
 
 ### **Before Deployment**
-1. ✅ Step 5: Syntax check
-2. ✅ Step 6: Import validation
-3. ✅ Step 7: Structure validation
-4. ✅ Step 8: Router inclusion
-5. **Route to:** `guardrails/REFACTORING.md` → Pre-deployment checklist
+1. **If refactoring:** Create backup: `bash guardrails/backup_before_refactor.sh`
+2. ✅ Step 5: Syntax check
+3. ✅ Step 6: Import validation
+4. ✅ Step 7: Structure validation
+5. ✅ Step 8: Router inclusion
+6. **Route to:** `guardrails/REFACTORING.md` → Pre-deployment checklist
 
 ---
 
