@@ -30,11 +30,8 @@ def get_db():
     finally:
         db.close()
 
-# Import get_openai_api_key from main (TODO: move to app/utils in future refactor)
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from main import get_openai_api_key
+# Import get_openai_api_key from utils (moved from main to avoid circular import)
+from app.utils.openai_helpers import get_openai_api_key
 
 @platforms_router.get("/platforms/{platform}/credentials")
 async def check_platform_credentials(

@@ -26,12 +26,16 @@ def get_db():
     finally:
         db.close()
 
-# Import shared utilities from main
-# TODO: Move these to app/core/config.py or app/utils/helpers.py in future refactor
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from main import ALLOWED_ORIGINS, get_openai_api_key
+# Import shared utilities
+from app.utils.openai_helpers import get_openai_api_key
+
+# ALLOWED_ORIGINS - define locally or import from config if needed
+ALLOWED_ORIGINS = [
+    "https://machine.vernalcontentum.com",
+    "https://themachine.vernalcontentum.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
 
 # Author Personalities endpoints
 @author_personalities_router.get("/author_personalities")
@@ -950,3 +954,6 @@ def delete_brand_personality(personality_id: str, current_user = Depends(get_cur
         logger.error(f"Traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete brand personality: {str(e)}"
+        )

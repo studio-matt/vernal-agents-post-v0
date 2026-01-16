@@ -23,11 +23,8 @@ def get_db():
     finally:
         db.close()
 
-# Import get_openai_api_key from main (TODO: move to app/utils in future refactor)
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from main import get_openai_api_key
+# Import get_openai_api_key from utils (moved from main to avoid circular import)
+from app.utils.openai_helpers import get_openai_api_key
 
 @campaigns_research_router.get("/campaigns/{campaign_id}/research")
 def get_campaign_research(campaign_id: str, limit: int = 20, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
