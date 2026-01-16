@@ -63,6 +63,19 @@ if [ "$ROUTER_COUNT" -eq 0 ]; then
     echo "   Routes should be included via app.include_router()"
 fi
 
+# Validate all routers are included (critical check)
+echo ""
+if [ -f "$SCRIPT_DIR/validate_all_routers_included.sh" ]; then
+    echo "🔍 Validating all routers are included..."
+    if bash "$SCRIPT_DIR/validate_all_routers_included.sh" 2>/dev/null; then
+        echo "✅ All routers validation passed"
+    else
+        echo "❌ ERROR: Router validation failed - some routers may be missing"
+        echo "   Run 'bash guardrails/validate_all_routers_included.sh' for details"
+    fi
+    echo ""
+fi
+
 # Count endpoint definitions (should be minimal - only health/root)
 # This is a rough check - looks for @app.get/post/put/delete decorators
 ENDPOINT_COUNT=$(grep -cE "@app\.(get|post|put|delete|patch)" "$MAIN_PY" || echo "0")

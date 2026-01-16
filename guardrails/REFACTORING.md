@@ -85,6 +85,10 @@ When extracting routes from `main.py`:
   - Shows what changed (added/removed/modified)
   - Helps identify lost functionality
   - Fast way to diff old monolith vs new refactor
+- [ ] **CRITICAL: Verify ALL routers are included in main.py**
+  - Run: `bash guardrails/validate_all_routers_included.sh`
+  - This checks that every `*_router = APIRouter()` in `app/routes/` is imported and included in `main.py`
+  - **This prevents 404 errors from missing routers** ⚠️
 - [ ] Run syntax check: `bash find_all_syntax_errors.sh`
 - [ ] Verify `main.py` is < 200 lines
 - [ ] Verify `main.py` only has:
@@ -118,6 +122,18 @@ bash guardrails/validate_main_structure.sh
 **Symptom:** Service starts but endpoints return 404.
 
 **Fix:** Add `app.include_router({feature}_router)` to `main.py`.
+
+**Prevention:** Run `bash guardrails/validate_all_routers_included.sh` after refactoring to ensure all routers are included.
+
+### 2b. Missing Routers When Recreating `main.py`
+**Symptom:** Service starts but some endpoints return 404. This happens when `main.py` is recreated and not all existing routers are included.
+
+**Fix:** 
+1. List all routers: `grep -r "_router = APIRouter()" app/routes/`
+2. Verify each is imported and included in `main.py`
+3. Run: `bash guardrails/validate_all_routers_included.sh`
+
+**Prevention:** Always run router validation script after recreating `main.py`.
 
 ### 3. Breaking Import Paths
 **Symptom:** `ImportError` or `ModuleNotFoundError` when starting service.
