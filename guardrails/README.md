@@ -20,3 +20,7 @@ What this is NOT:
 - **[SYNTAX_CHECKING.md](./SYNTAX_CHECKING.md)** - Comprehensive syntax error detection tools and procedures. **CRITICAL**: Always run these tools before deployment and after refactoring to catch ALL syntax errors at once.
 
 - **[REFACTORING.md](./REFACTORING.md)** - Refactoring guardrails and best practices. **CRITICAL**: Read this before extracting routes or refactoring `main.py`. Includes checklist, validation script, and common mistakes to avoid.
+
+- **[CORS_EMERGENCY_NET.md](./CORS_EMERGENCY_NET.md)** - Complete CORS fix documentation and emergency procedures. **CRITICAL**: When frontend shows CORS errors, start here. Documents the exact fix (specific origins with credentials), diagnostic checklist, common issues, and quick fix procedures.
+
+- **[CORS_QUICK_REFERENCE.md](./CORS_QUICK_REFERENCE.md)** - Quick reference for CORS issues. One-page cheat sheet for diagnosing and fixing CORS problems.
