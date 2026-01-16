@@ -638,7 +638,26 @@ def trigger_code_health_scan(admin_user = Depends(get_admin_user)):
         import os
         
         # Get root directory (backend repo root)
-        root_dir = os.path.dirname(os.path.abspath(__file__))
+        # __file__ is app/routes/admin.py, so we need to go up 3 levels:
+        # app/routes/admin.py -> app/routes/ -> app/ -> repo_root/
+        admin_py_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(admin_py_dir)))
+        
+        # Verify we're in the right place (should have main.py)
+        main_py_path = os.path.join(root_dir, "main.py")
+        if not os.path.exists(main_py_path):
+            # Fallback: try going up one more level
+            root_dir = os.path.dirname(root_dir)
+            main_py_path = os.path.join(root_dir, "main.py")
+        
+        if not os.path.exists(main_py_path):
+            logger.warning(f"⚠️  Could not find main.py at {main_py_path}, using {root_dir} as root")
+        else:
+            # Verify main.py is reasonable size (should be < 200 lines after refactoring)
+            with open(main_py_path, 'r') as f:
+                main_py_lines = len(f.readlines())
+            if main_py_lines > 500:
+                logger.warning(f"⚠️  main.py has {main_py_lines} lines - may be scanning wrong directory")
         
         # Run scan
         logger.info(f"🔍 Starting code health scan in {root_dir}")
