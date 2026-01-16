@@ -664,6 +664,64 @@ def trigger_code_health_scan(admin_user = Depends(get_admin_user)):
             detail=f"Failed to run code health scan: {str(e)}"
         )
 
+@admin_router.post("/admin/code-health/refactor-prompt")
+def generate_refactor_prompt_endpoint(
+    file_path: str,
+    lines: Optional[int] = None,
+    threshold: Optional[int] = None,
+    admin_user = Depends(get_admin_user)
+):
+    """Generate refactor prompt for a specific file - ADMIN ONLY"""
+    try:
+        from code_health.scanner import generate_refactor_prompt, scan_file, DEFAULT_LOC_THRESHOLD
+        from pathlib import Path
+        
+        # If lines/threshold not provided, scan the file
+        if lines is None or threshold is None:
+            file_path_obj = Path(file_path)
+            if not file_path_obj.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"File not found: {file_path}"
+                )
+            
+            threshold = threshold or DEFAULT_LOC_THRESHOLD
+            violation = scan_file(file_path_obj, threshold)
+            
+            if violation:
+                lines = violation['lines']
+                threshold = violation['threshold']
+            else:
+                # File doesn't exceed threshold, but generate prompt anyway
+                from code_health.scanner import count_lines
+                lines = count_lines(file_path_obj)
+                threshold = threshold or DEFAULT_LOC_THRESHOLD
+        
+        # Generate the prompt
+        prompt = generate_refactor_prompt(
+            file_path=file_path,
+            lines=lines,
+            threshold=threshold
+        )
+        
+        return {
+            "status": "success",
+            "prompt": prompt,
+            "file_path": file_path,
+            "lines": lines,
+            "threshold": threshold,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating refactor prompt: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate refactor prompt: {str(e)}"
+        )
+
 @admin_router.post("/admin/plugins/api-keys")
 def create_plugin_api_key(
     name: Optional[str] = None,

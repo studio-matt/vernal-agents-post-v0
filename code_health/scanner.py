@@ -165,6 +165,179 @@ def run_pylint(file_path: str) -> Dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
+def generate_refactor_prompt(file_path: str, lines: int, threshold: int, constraints: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Generate a refactor prompt with backup procedures and constraints.
+    
+    Args:
+        file_path: Path to the file that needs refactoring
+        lines: Current line count
+        threshold: Maximum allowed lines
+        constraints: Optional constraints dictionary
+        
+    Returns:
+        Formatted refactor prompt string
+    """
+    excess = lines - threshold
+    file_name = os.path.basename(file_path)
+    
+    prompt = f"""# Refactor Task: {file_name}
+
+## File Information
+- **File:** `{file_path}`
+- **Current Lines:** {lines}
+- **Threshold:** {threshold}
+- **Excess:** +{excess} lines
+
+## CRITICAL: Backup Before Refactoring
+
+**STEP 1: Create Backup (REQUIRED)**
+```bash
+cd /home/ubuntu/vernal-agents-post-v0
+bash guardrails/backup_before_refactor.sh {file_path}
+```
+
+This saves the original file to `.refactor_backups/[timestamp]/` for comparison later.
+
+## Refactoring Constraints
+
+### Non-Negotiable Constraints:
+1. **API contracts must remain identical** - All endpoints must work exactly the same
+2. **Runtime configuration unchanged** - No changes to how the app starts or configures
+3. **Entrypoint behavior preserved** - If this is `main.py`, it must remain a thin entry point (see `guardrails/REFACTORING.md`)
+4. **No rewrites, only move/split/refactor** - Move code, don't rewrite logic
+5. **CRITICAL: Never delete `main.py`** - It must remain as a thin entry point with router includes
+
+### Do NOT Modify:
+- Authentication/authorization logic
+- Scheduler configuration  
+- Database connection lifecycle
+- System settings semantics
+- Guardrails behavior/thresholds
+- CORS middleware configuration (if in main.py)
+
+### STOP Condition:
+- **HALT immediately** if refactor would touch protected areas listed above
+- **HALT** if refactor would break API contracts
+- **HALT** if refactor would change entrypoint behavior
+
+## Refactoring Strategy
+
+1. **Create `app/` package structure** (if not exists):
+   - `app/routes/` for route modules
+   - `app/schemas/` for Pydantic models
+   - `app/services/` for business logic
+   - `app/utils/` for helper functions
+
+2. **One module at a time:**
+   - Extract one logical group of functions
+   - Test after each extraction
+   - Don't extract multiple features at once
+
+3. **Package boundary pinning:**
+   - Maintain clear separation between routes, services, schemas
+   - Use proper imports: `from app.routes.{feature} import {feature}_router`
+
+4. **Router parity checks:**
+   - Ensure all routes are included in `main.py`
+   - Verify route decorators match original endpoints
+   - Test each endpoint after extraction
+
+## Step-by-Step Refactoring Process
+
+### Before Starting:
+1. ✅ **Create backup:** `bash guardrails/backup_before_refactor.sh {file_path}`
+2. ✅ Run syntax check: `bash find_all_syntax_errors.sh`
+3. ✅ Verify service is running: `curl http://127.0.0.1:8000/health`
+
+### During Refactoring:
+1. Extract functions to appropriate module (routes/services/utils)
+2. Create router if extracting routes: `{feature}_router = APIRouter()`
+3. Add route decorators: `@{feature}_router.get/post/put/delete`
+4. Import router in `main.py`: `from app.routes.{feature} import {feature}_router`
+5. Include router: `app.include_router({feature}_router)`
+6. **Remove duplicate code from original file** ⚠️
+
+### After Refactoring:
+1. ✅ **Compare with backup:** `bash guardrails/compare_refactor.sh`
+   - Shows what changed (added/removed/modified)
+   - Fastest way to diff old monolith vs new refactor
+   - Track code snippets to find why things broke
+2. ✅ Run syntax check: `bash find_all_syntax_errors.sh`
+3. ✅ Verify structure: `bash guardrails/validate_main_structure.sh`
+4. ✅ Test import: `python3 -c "import main; print('✅ Import successful')"`
+5. ✅ Restart service: `sudo systemctl restart vernal-agents`
+6. ✅ Verify health: `curl http://127.0.0.1:8000/health`
+7. ✅ Test endpoints from extracted router
+
+### If Issues Found:
+- **Compare with backup:** `bash guardrails/compare_refactor.sh [timestamp]`
+- **See detailed diff:** `diff -u .refactor_backups/[timestamp]/{file_path} {file_path}`
+- **Restore if needed:** `bash guardrails/restore_from_backup.sh [timestamp] {file_path}`
+
+## Verification Steps
+
+1. **Compile check:**
+   ```bash
+   python3 -m py_compile {file_path}
+   ```
+
+2. **Import test:**
+   ```bash
+   python3 -c "import sys; sys.path.insert(0, '.'); import {file_name.replace('.py', '')}"
+   ```
+
+3. **Route table verification:**
+   - Check all routes are included in `main.py`
+   - Verify no duplicate endpoint definitions
+
+4. **Service boot test:**
+   ```bash
+   sudo systemctl restart vernal-agents
+   sudo systemctl status vernal-agents
+   curl http://127.0.0.1:8000/health
+   ```
+
+## Deliverable
+
+- ✅ Reduce file below {threshold} lines
+- ✅ Add migration map at top of extracted file showing what was moved
+- ✅ All tests pass
+- ✅ Service starts successfully
+- ✅ All endpoints work identically to before
+
+## Documentation References
+
+- **Refactoring Guide:** `guardrails/REFACTORING.md` - Complete refactoring procedures
+- **Syntax Checking:** `guardrails/SYNTAX_CHECKING.md` - Fix syntax errors
+- **Master Diagnostic:** `docs/MASTER_DIAGNOSTIC_ROUTER.md` - Complete system check
+- **Backup Tools:** 
+  - `guardrails/backup_before_refactor.sh` - Create backup
+  - `guardrails/compare_refactor.sh` - Compare old vs new
+  - `guardrails/restore_from_backup.sh` - Restore from backup
+
+## Important Notes
+
+- **Always backup first** - Enables fast debugging by comparing old vs new
+- **One module at a time** - Don't extract multiple features simultaneously  
+- **Test after each step** - Catch issues early
+- **Use comparison tools** - Fastest way to find what broke
+- **Follow guardrails** - Prevents common mistakes
+
+---
+
+**Ready to refactor? Start with the backup command above, then proceed step-by-step.**
+"""
+    
+    # Add custom constraints if provided
+    if constraints:
+        prompt += "\n## Additional Constraints\n\n"
+        for key, value in constraints.items():
+            prompt += f"- **{key}:** {value}\n"
+    
+    return prompt
+
+
 def generate_reports(scan_results: Dict[str, Any], output_dir: str = "reports") -> Dict[str, str]:
     """
     Generate JSON and Markdown reports from scan results.
