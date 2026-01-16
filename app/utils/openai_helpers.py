@@ -60,3 +60,4 @@ def get_openai_api_key(current_user=None, db: Session = None) -> Optional[str]:
     return None
 
 
+
