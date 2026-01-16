@@ -258,3 +258,4 @@ mysql -u [user] -p [database] -e "SELECT id, title FROM content WHERE campaign_i
 - Database must be accessible
 - Browser DevTools helpful for debugging
 
+

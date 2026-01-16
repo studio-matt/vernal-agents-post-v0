@@ -571,5 +571,3 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
             detail="Failed to delete campaign"
         )
 
-
-

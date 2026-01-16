@@ -10,7 +10,6 @@ import requests
 from datetime import datetime
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, status, Request
-from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from auth_api import get_current_user

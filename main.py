@@ -67,11 +67,25 @@ except Exception as e:
     logger.error(f"❌ Failed to include content router: {e}")
 
 try:
+    from app.routes.campaigns import campaigns_router
+    app.include_router(campaigns_router)
+    logger.info("✅ Campaigns router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include campaigns router: {e}")
+
+try:
     from app.routes.campaigns_research import campaigns_research_router
     app.include_router(campaigns_research_router)
     logger.info("✅ Campaigns research router included successfully")
 except Exception as e:
     logger.error(f"❌ Failed to include campaigns research router: {e}")
+
+try:
+    from app.routes.author_personalities import author_personalities_router
+    app.include_router(author_personalities_router)
+    logger.info("✅ Author personalities router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include author personalities router: {e}")
 
 try:
     from app.routes.brand_personalities import brand_personalities_router
