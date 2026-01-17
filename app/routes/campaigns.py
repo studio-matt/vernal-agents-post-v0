@@ -506,6 +506,156 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
             detail=f"Failed to update campaign: {str(e)}"
         )
 
+@campaigns_router.post("/campaigns/{campaign_id}/duplicate")
+def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Duplicate a campaign with all processed data - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
+    
+    This endpoint:
+    1. Creates a new campaign with all settings from the original
+    2. Copies all CampaignRawData entries (processed posts, entities, etc.)
+    3. Copies all research insights and research data
+    4. Does NOT trigger new processing - duplicate has all original data
+    
+    The duplicate campaign will have the same processed data as the original,
+    so "Build Campaign Base" is not needed unless you want to re-process.
+    """
+    try:
+        from models import Campaign, CampaignRawData, CampaignResearchInsights, CampaignResearchData
+        
+        # Get original campaign
+        original_campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not original_campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Campaign not found or access denied"
+            )
+        
+        # Generate new campaign ID
+        new_campaign_id = str(uuid.uuid4())
+        new_campaign_name = f"{original_campaign.campaign_name} Duplicate"
+        
+        logger.info(f"Duplicating campaign {campaign_id} -> {new_campaign_id} for user {current_user.id}")
+        
+        # Create new campaign with all settings from original
+        new_campaign = Campaign(
+            campaign_id=new_campaign_id,
+            campaign_name=new_campaign_name,
+            description=original_campaign.description,
+            query=original_campaign.query,
+            type=original_campaign.type,
+            keywords=original_campaign.keywords,
+            urls=original_campaign.urls,
+            trending_topics=original_campaign.trending_topics,
+            topics=original_campaign.topics,  # Copy processed topics
+            status=original_campaign.status,  # Copy status (if READY_TO_ACTIVATE, duplicate is also ready)
+            user_id=current_user.id,
+            extraction_settings_json=original_campaign.extraction_settings_json,
+            preprocessing_settings_json=original_campaign.preprocessing_settings_json,
+            entity_settings_json=original_campaign.entity_settings_json,
+            modeling_settings_json=original_campaign.modeling_settings_json,
+            scheduling_settings_json=original_campaign.scheduling_settings_json,
+            campaign_plan_json=original_campaign.campaign_plan_json,
+            content_queue_items_json=original_campaign.content_queue_items_json,
+            research_selections_json=original_campaign.research_selections_json,
+            custom_keywords_json=original_campaign.custom_keywords_json,
+            personality_settings_json=original_campaign.personality_settings_json,
+            site_base_url=_safe_getattr(original_campaign, 'site_base_url'),
+            target_keywords_json=_safe_get_json(original_campaign, 'target_keywords_json'),
+            gap_analysis_results_json=_safe_get_json(original_campaign, 'gap_analysis_results_json'),
+            top_ideas_count=_safe_getattr(original_campaign, 'top_ideas_count') or 10,
+        )
+        
+        db.add(new_campaign)
+        db.flush()  # Flush to get the new campaign ID without committing
+        
+        # Copy all CampaignRawData entries (processed posts, entities, etc.)
+        original_raw_data = db.query(CampaignRawData).filter(
+            CampaignRawData.campaign_id == campaign_id
+        ).all()
+        
+        raw_data_count = 0
+        for raw_data in original_raw_data:
+            new_raw_data = CampaignRawData(
+                campaign_id=new_campaign_id,
+                source_url=raw_data.source_url,
+                fetched_at=raw_data.fetched_at,
+                raw_html=raw_data.raw_html,
+                extracted_text=raw_data.extracted_text,
+                meta_json=raw_data.meta_json,
+                content_hash=raw_data.content_hash,
+            )
+            db.add(new_raw_data)
+            raw_data_count += 1
+        
+        # Copy all CampaignResearchInsights
+        original_insights = db.query(CampaignResearchInsights).filter(
+            CampaignResearchInsights.campaign_id == campaign_id
+        ).all()
+        
+        insights_count = 0
+        for insight in original_insights:
+            new_insight = CampaignResearchInsights(
+                campaign_id=new_campaign_id,
+                agent_name=insight.agent_name,
+                insight_type=insight.insight_type,
+                insight_data_json=insight.insight_data_json,
+                created_at=insight.created_at,
+            )
+            db.add(new_insight)
+            insights_count += 1
+        
+        # Copy all CampaignResearchData
+        original_research_data = db.query(CampaignResearchData).filter(
+            CampaignResearchData.campaign_id == campaign_id
+        ).all()
+        
+        research_data_count = 0
+        for research_data in original_research_data:
+            new_research_data = CampaignResearchData(
+                campaign_id=new_campaign_id,
+                data_type=research_data.data_type,
+                data_json=research_data.data_json,
+                created_at=research_data.created_at,
+            )
+            db.add(new_research_data)
+            research_data_count += 1
+        
+        db.commit()
+        
+        logger.info(f"✅ Campaign duplicated successfully: {new_campaign_id} (copied {raw_data_count} raw data entries, {insights_count} insights, {research_data_count} research data)")
+        
+        return {
+            "status": "success",
+            "message": {
+                "campaign_id": new_campaign_id,
+                "id": new_campaign_id,
+                "name": new_campaign_name,
+                "status": new_campaign.status,
+                "copied_data": {
+                    "raw_data_entries": raw_data_count,
+                    "research_insights": insights_count,
+                    "research_data": research_data_count,
+                }
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"Error duplicating campaign: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to duplicate campaign: {str(e)}"
+        )
+
 @campaigns_router.delete("/campaigns/{campaign_id}")
 def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete campaign - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION (or admin)
