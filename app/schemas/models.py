@@ -29,9 +29,11 @@ class CampaignUpdate(BaseModel):
     """Schema for updating an existing campaign"""
     name: Optional[str] = None
     description: Optional[str] = None
+    query: Optional[str] = None
     type: Optional[str] = None
     keywords: Optional[List[str]] = None
     urls: Optional[List[str]] = None
+    trendingTopics: Optional[List[str]] = None
     topics: Optional[List[str]] = None
     status: Optional[str] = None
     extractionSettings: Optional[Dict[str, Any]] = None

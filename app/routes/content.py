@@ -1874,9 +1874,25 @@ async def generate_ideas_endpoint(
         
         # Generate ideas - pass num_ideas and recommendations context
         ideas = await agent.generate_ideas(topics_list, posts_list, days_list, num_ideas=num_ideas, recommendations=recommendations)
+        
+        if not ideas or len(ideas) == 0:
+            return {"status": "error", "message": "Failed to generate ideas"}
+        
+        logger.info(f"✅ Generated {len(ideas)} content ideas")
+        
+        return {
+            "status": "success",
+            "ideas": ideas,
+            "num_ideas": len(ideas),
+            "topics": topics_list
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting content generation status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error generating content ideas: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to generate ideas: {str(e)}")
 
 @content_router.post("/campaigns/{campaign_id}/generate-content/force-complete/{task_id}")
 async def force_complete_content_generation(
