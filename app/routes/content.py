@@ -2723,12 +2723,29 @@ async def post_content_now(
                     detail="Instagram not connected. Please connect your Instagram account first."
                 )
             
+            # Validate platform_user_id - must be numeric Instagram Business Account ID
+            if not connection.platform_user_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Instagram Business Account ID is missing. Please reconnect your Instagram account."
+                )
+            
+            # Check if platform_user_id is numeric (Instagram Business Account IDs are numeric)
+            if not connection.platform_user_id.isdigit():
+                logger.error(f"❌ Invalid Instagram Business Account ID: '{connection.platform_user_id}' (expected numeric ID, got display name)")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid Instagram Business Account ID. The stored ID '{connection.platform_user_id}' appears to be a display name instead of a numeric ID. Please reconnect your Instagram account in Account Settings > Platform Connections."
+                )
+            
             # Instagram requires image, so check if we have one
             if not image_url:
                 raise HTTPException(
                     status_code=400,
                     detail="Instagram posts require an image. Please generate an image first."
                 )
+            
+            logger.info(f"📸 Posting to Instagram Business Account ID: {connection.platform_user_id}")
             
             # Create media container
             container_url = f"https://graph.facebook.com/v18.0/{connection.platform_user_id}/media"
@@ -2741,9 +2758,23 @@ async def post_content_now(
             container_response = requests.post(container_url, params=container_params, timeout=30)
             
             if container_response.status_code not in [200, 201]:
+                error_text = container_response.text
+                # Parse error for better user message
+                try:
+                    error_json = container_response.json()
+                    error_message = error_json.get("error", {}).get("message", error_text)
+                    error_code = error_json.get("error", {}).get("code", "")
+                    if "does not exist" in error_message or "missing permissions" in error_message:
+                        user_friendly_error = f"Instagram Business Account ID '{connection.platform_user_id}' is invalid or you don't have permissions. Please reconnect your Instagram account in Account Settings > Platform Connections."
+                    else:
+                        user_friendly_error = f"Instagram API error: {error_message}"
+                except:
+                    user_friendly_error = f"Instagram API error: {error_text[:200]}"
+                
+                logger.error(f"❌ Instagram container creation failed: {error_text}")
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Instagram container creation error: {container_response.status_code} - {container_response.text}"
+                    detail=user_friendly_error
                 )
             
             creation_id = container_response.json().get("id")
