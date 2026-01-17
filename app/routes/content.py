@@ -2462,6 +2462,308 @@ async def schedule_campaign_content(
             detail=f"Failed to schedule content: {str(e)}"
         )
 
+@content_router.post("/campaigns/{campaign_id}/post-now")
+async def post_content_now(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Post content immediately (skip scheduling) - uses same posting workflow as scheduled posts.
+    This endpoint is for testing purposes to post content immediately without waiting for schedule_time.
+    """
+    try:
+        from models import Content, Campaign, PlatformConnection, PlatformEnum
+        from datetime import datetime
+        import requests
+        
+        # Verify campaign exists and belongs to user
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(
+                status_code=404,
+                detail="Campaign not found"
+            )
+        
+        # Get content item from request
+        content_id = request_data.get("content_id")
+        content_item = request_data.get("content_item")
+        
+        # If content_id provided, fetch from database
+        if content_id:
+            content = db.query(Content).filter(
+                Content.id == content_id,
+                Content.campaign_id == campaign_id,
+                Content.user_id == current_user.id
+            ).first()
+            
+            if not content:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Content not found"
+                )
+            
+            content_text = content.content or ""
+            title = content.title or ""
+            platform = content.platform or "linkedin"
+            image_url = content.image_url
+        elif content_item:
+            # Use provided content item (for articles not yet saved to DB)
+            content_text = content_item.get("description") or content_item.get("content", "")
+            title = content_item.get("title", "")
+            platform = content_item.get("platform", "linkedin").lower()
+            image_url = content_item.get("image") or content_item.get("image_url")
+            content_id = None
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Either content_id or content_item is required"
+            )
+        
+        if not content_text or not content_text.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Content text is required"
+            )
+        
+        # Route to appropriate platform posting function
+        platform_lower = platform.lower()
+        
+        if platform_lower == "linkedin":
+            # Call LinkedIn posting logic
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.LINKEDIN
+            ).first()
+            
+            if not connection or not connection.access_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="LinkedIn not connected. Please connect your LinkedIn account first."
+                )
+            
+            api_url = "https://api.linkedin.com/v2/ugcPosts"
+            headers = {
+                "Authorization": f"Bearer {connection.access_token}",
+                "Content-Type": "application/json",
+                "X-Restli-Protocol-Version": "2.0.0"
+            }
+            
+            post_data = {
+                "author": f"urn:li:person:{current_user.id}",
+                "lifecycleState": "PUBLISHED",
+                "specificContent": {
+                    "com.linkedin.ugc.ShareContent": {
+                        "shareCommentary": {"text": content_text},
+                        "shareMediaCategory": "NONE"
+                    }
+                },
+                "visibility": {"com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"}
+            }
+            
+            if image_url:
+                post_data["specificContent"]["com.linkedin.ugc.ShareContent"]["media"] = [{
+                    "status": "READY",
+                    "media": image_url
+                }]
+            
+            response = requests.post(api_url, json=post_data, headers=headers, timeout=30)
+            
+            if response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"LinkedIn API error: {response.status_code} - {response.text}"
+                )
+            
+            post_id = response.json().get("id")
+            platform_name = "LinkedIn"
+            
+        elif platform_lower == "twitter" or platform_lower == "x":
+            # Call Twitter posting logic
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.TWITTER
+            ).first()
+            
+            if not connection or not connection.access_token or not connection.refresh_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Twitter not connected. Please connect your Twitter account first."
+                )
+            
+            from requests_oauthlib import OAuth1Session
+            from dotenv import load_dotenv
+            import os
+            load_dotenv()
+            
+            oauth = OAuth1Session(
+                os.getenv("TWITTER_API_KEY"),
+                client_secret=os.getenv("TWITTER_API_SECRET"),
+                resource_owner_key=connection.access_token,
+                resource_owner_secret=connection.refresh_token
+            )
+            
+            api_url = "https://api.twitter.com/2/tweets"
+            tweet_data = {"text": content_text[:280]}
+            
+            if image_url:
+                media_url = "https://upload.twitter.com/1.1/media/upload.json"
+                media_response = oauth.post(media_url, files={"media": requests.get(image_url).content})
+                if media_response.status_code == 200:
+                    media_id = media_response.json().get("media_id_string")
+                    tweet_data["media"] = {"media_ids": [media_id]}
+            
+            response = oauth.post(api_url, json=tweet_data, timeout=30)
+            
+            if response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Twitter API error: {response.status_code} - {response.text}"
+                )
+            
+            post_id = response.json().get("data", {}).get("id")
+            platform_name = "Twitter"
+            
+        elif platform_lower == "instagram":
+            # Call Instagram posting logic
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.INSTAGRAM
+            ).first()
+            
+            if not connection or not connection.access_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Instagram not connected. Please connect your Instagram account first."
+                )
+            
+            # Instagram requires image, so check if we have one
+            if not image_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Instagram posts require an image. Please generate an image first."
+                )
+            
+            # Create media container
+            container_url = f"https://graph.facebook.com/v18.0/{connection.platform_user_id}/media"
+            container_params = {
+                "image_url": image_url,
+                "caption": content_text,
+                "access_token": connection.access_token
+            }
+            
+            container_response = requests.post(container_url, params=container_params, timeout=30)
+            
+            if container_response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Instagram container creation error: {container_response.status_code} - {container_response.text}"
+                )
+            
+            creation_id = container_response.json().get("id")
+            
+            # Publish the media
+            publish_url = f"https://graph.facebook.com/v18.0/{connection.platform_user_id}/media_publish"
+            publish_params = {
+                "creation_id": creation_id,
+                "access_token": connection.access_token
+            }
+            
+            publish_response = requests.post(publish_url, params=publish_params, timeout=30)
+            
+            if publish_response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Instagram publish error: {publish_response.status_code} - {publish_response.text}"
+                )
+            
+            post_id = publish_response.json().get("id")
+            platform_name = "Instagram"
+            
+        elif platform_lower == "wordpress":
+            # Call WordPress posting logic
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.WORDPRESS
+            ).first()
+            
+            if not connection or not connection.platform_user_id or not connection.access_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="WordPress not connected. Please connect your WordPress site first."
+                )
+            
+            from requests.auth import HTTPBasicAuth
+            
+            site_url = connection.platform_user_id
+            api_url = f"{site_url}/wp-json/wp/v2/posts"
+            
+            post_data = {
+                "title": title or "Untitled Post",
+                "content": content_text,
+                "status": "publish"
+            }
+            
+            if image_url:
+                post_data["featured_media"] = image_url
+            
+            response = requests.post(
+                api_url,
+                json=post_data,
+                auth=HTTPBasicAuth(connection.platform_user_id, connection.access_token),
+                timeout=30
+            )
+            
+            if response.status_code not in [200, 201]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"WordPress API error: {response.status_code} - {response.text}"
+                )
+            
+            post_id = response.json().get("id")
+            platform_name = "WordPress"
+            
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported platform: {platform}. Supported platforms: linkedin, twitter, instagram, wordpress"
+            )
+        
+        # Update content status if content_id exists
+        if content_id:
+            content = db.query(Content).filter(Content.id == content_id).first()
+            if content:
+                content.status = "posted"
+                content.date_upload = datetime.now().replace(tzinfo=None)
+                db.commit()
+                logger.info(f"✅ Updated content {content_id} status to 'posted'")
+        
+        logger.info(f"✅ Posted to {platform_name} immediately for user {current_user.id}")
+        
+        return {
+            "status": "success",
+            "message": f"Content posted to {platform_name} successfully",
+            "post_id": post_id,
+            "platform": platform_name
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error posting content immediately: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to post content: {str(e)}"
+        )
+
 @content_router.post("/campaigns/{campaign_id}/save-content-item")
 async def save_content_item(
     campaign_id: str,
