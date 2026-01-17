@@ -195,7 +195,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             task_id = str(uuid.uuid4())
             logger.info(f"🔍 Generated task_id: {task_id}")
             
-            TASKS[task_id] = {
+            CONTENT_GEN_TASKS[task_id] = {
                 "campaign_id": campaign_id,
                 "campaign_name": campaign_name,
                 "started_at": datetime.utcnow().isoformat(),
@@ -203,10 +203,10 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 "current_step": "initializing",
                 "progress_message": "Starting analysis",
             }
-            logger.info(f"🔍 Created TASKS entry for task_id: {task_id}")
+            logger.info(f"🔍 Created CONTENT_GEN_TASKS entry for task_id: {task_id}")
             
-            CAMPAIGN_TASK_INDEX[campaign_id] = task_id
-            logger.info(f"🔍 Created CAMPAIGN_TASK_INDEX entry: {campaign_id} -> {task_id}")
+            CONTENT_GEN_TASK_INDEX[campaign_id] = task_id
+            logger.info(f"🔍 Created CONTENT_GEN_TASK_INDEX entry: {campaign_id} -> {task_id}")
             
             logger.info(f"✅ Analysis task created (stub): task_id={task_id}, campaign_id={campaign_id}, user_id={user_id}")
         except Exception as task_creation_error:
@@ -254,9 +254,9 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 
                 # Helper to update task atomically
                 def set_task(step: str, prog: int, msg: str):
-                    task = TASKS.get(tid)
+                    task = CONTENT_GEN_TASKS.get(tid)
                     if not task:
-                        logger.warning(f"⚠️ Task {tid} not found in TASKS dict")
+                        logger.warning(f"⚠️ Task {tid} not found in CONTENT_GEN_TASKS dict")
                         return
                     task["current_step"] = step
                     task["progress"] = prog
@@ -1558,11 +1558,11 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             logger.error(f"❌ CRITICAL: Failed to start background thread: {thread_error}")
             import traceback
             logger.error(f"❌ Thread start traceback: {traceback.format_exc()}")
-            # Remove task from TASKS since thread failed to start
-            if task_id in TASKS:
-                del TASKS[task_id]
-            if campaign_id in CAMPAIGN_TASK_INDEX:
-                del CAMPAIGN_TASK_INDEX[campaign_id]
+            # Remove task from CONTENT_GEN_TASKS since thread failed to start
+            if task_id in CONTENT_GEN_TASKS:
+                del CONTENT_GEN_TASKS[task_id]
+            if campaign_id in CONTENT_GEN_TASK_INDEX:
+                del CONTENT_GEN_TASK_INDEX[campaign_id]
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to start analysis thread: {str(thread_error)}"
@@ -1621,8 +1621,8 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
     REQUIRES AUTHENTICATION
     """
     # Verify task belongs to user (check campaign ownership)
-    if task_id in TASKS:
-        task_campaign_id = TASKS[task_id].get("campaign_id")
+    if task_id in CONTENT_GEN_TASKS:
+        task_campaign_id = CONTENT_GEN_TASKS[task_id].get("campaign_id")
         if task_campaign_id:
             from models import Campaign
             from database import SessionLocal
@@ -1640,7 +1640,7 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
             finally:
                 session.close()
     
-    if task_id not in TASKS:
+    if task_id not in CONTENT_GEN_TASKS:
         # Be resilient across restarts: report pending instead of 404 so UI keeps polling
         return {
             "status": "pending",
@@ -1650,7 +1650,7 @@ def get_analyze_status(task_id: str, current_user = Depends(get_current_user)):
             "campaign_id": None,
         }
     
-    task = TASKS[task_id]
+    task = CONTENT_GEN_TASKS[task_id]
     
     # CRITICAL: Return REAL progress if it's been set (from scraping, etc.)
     # Only use time-based simulation if real progress hasn't been set yet
@@ -1753,10 +1753,10 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
     active_task_progress = -1
     
     # First check the index (most recent task)
-    task_id_from_index = CAMPAIGN_TASK_INDEX.get(campaign_id)
+    task_id_from_index = CONTENT_GEN_TASK_INDEX.get(campaign_id)
     
     # Check all tasks to find the one that's actually running
-    for tid, task in TASKS.items():
+    for tid, task in CONTENT_GEN_TASKS.items():
         if task.get("campaign_id") == campaign_id:
             task_progress = task.get("progress", 0)
             # Prefer tasks that are actively running (progress > 0 and < 100)
@@ -1772,7 +1772,7 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
     if not active_task_id:
         active_task_id = task_id_from_index
     
-    if not active_task_id or active_task_id not in TASKS:
+    if not active_task_id or active_task_id not in CONTENT_GEN_TASKS:
         # Task doesn't exist - return a clear status instead of 404
         # This happens if server restarted or analysis never started
         return {
