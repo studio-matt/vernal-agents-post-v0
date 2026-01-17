@@ -1880,11 +1880,10 @@ async def generate_ideas_endpoint(
         
         logger.info(f"✅ Generated {len(ideas)} content ideas")
         
+        # Return same format as original implementation
         return {
             "status": "success",
-            "ideas": ideas,
-            "num_ideas": len(ideas),
-            "topics": topics_list
+            "ideas": ideas
         }
     except HTTPException:
         raise
