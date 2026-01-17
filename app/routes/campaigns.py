@@ -601,9 +601,8 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
         for insight in original_insights:
             new_insight = CampaignResearchInsights(
                 campaign_id=new_campaign_id,
-                agent_name=insight.agent_name,
-                insight_type=insight.insight_type,
-                insight_data_json=insight.insight_data_json,
+                agent_type=insight.agent_type,
+                insights_text=insight.insights_text,
                 created_at=insight.created_at,
             )
             db.add(new_insight)
