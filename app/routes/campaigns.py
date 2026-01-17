@@ -662,21 +662,23 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
             db.add(new_insight)
             insights_count += 1
         
-        # Copy all CampaignResearchData
+        # Copy CampaignResearchData (only one record per campaign due to unique constraint)
         original_research_data = db.query(CampaignResearchData).filter(
             CampaignResearchData.campaign_id == campaign_id
-        ).all()
+        ).first()
         
         research_data_count = 0
-        for research_data in original_research_data:
+        if original_research_data:
             new_research_data = CampaignResearchData(
                 campaign_id=new_campaign_id,
-                data_type=research_data.data_type,
-                data_json=research_data.data_json,
-                created_at=research_data.created_at,
+                word_cloud_json=original_research_data.word_cloud_json,
+                topics_json=original_research_data.topics_json,
+                hashtags_json=original_research_data.hashtags_json,
+                entities_json=original_research_data.entities_json,
+                created_at=original_research_data.created_at,
             )
             db.add(new_research_data)
-            research_data_count += 1
+            research_data_count = 1
         
         db.commit()
         
