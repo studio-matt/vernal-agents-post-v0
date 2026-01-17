@@ -1954,3 +1954,186 @@ def get_knowledge_graph_visualization(
         )
 
 # Research Agent Recommendations endpoint
+@campaigns_research_router.post("/campaigns/{campaign_id}/research-agent-recommendations")
+def get_research_agent_recommendations(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate LLM-based recommendations for research agents (Keyword, Micro Sentiment, Topical Map, Knowledge Graph, Hashtag Generator).
+    Uses prompts from system_settings table.
+    REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION
+    """
+    try:
+        from models import CampaignRawData, Campaign, SystemSettings, CampaignResearchInsights
+        
+        # Parse request data (can be Dict or Pydantic model)
+        if isinstance(request_data, dict):
+            agent_type = request_data.get("agent_type")
+            force_refresh = request_data.get("force_refresh", False)
+        else:
+            agent_type = request_data.agent_type
+            force_refresh = getattr(request_data, 'force_refresh', False)
+        
+        if not agent_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="agent_type is required"
+            )
+        
+        # Verify campaign ownership
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id
+        ).first()
+        
+        if not campaign:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Campaign not found or access denied"
+            )
+        
+        # Check for cached insights (unless force_refresh is True)
+        if not force_refresh:
+            cached_insight = db.query(CampaignResearchInsights).filter(
+                CampaignResearchInsights.campaign_id == campaign_id,
+                CampaignResearchInsights.agent_type == agent_type
+            ).first()
+            
+            if cached_insight:
+                logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id}")
+                return {
+                    "status": "success",
+                    "recommendations": cached_insight.insights_text,
+                    "agent_type": agent_type,
+                    "cached": True
+                }
+        
+        # Get raw data for context
+        rows = db.query(CampaignRawData).filter(
+            CampaignRawData.campaign_id == campaign_id
+        ).all()
+        
+        texts = [
+            r.extracted_text for r in rows 
+            if r.extracted_text and len(r.extracted_text.strip()) > 10 
+            and (not r.source_url or not r.source_url.startswith(("error:", "placeholder:")))
+        ]
+        
+        if not texts:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid scraped data available. Please build the campaign base first."
+            )
+        
+        # Get research data for context
+        from text_processing import extract_keywords, extract_topics
+        keywords_data = extract_keywords(texts, num_keywords=20)
+        topics_data = extract_topics(
+            texts, 
+            topic_tool="system", 
+            num_topics=10, 
+            iterations=25, 
+            query=campaign.query or "", 
+            keywords=campaign.keywords.split(",") if campaign.keywords else [], 
+            urls=[]
+        )
+        
+        # Get prompt from system settings
+        prompt_setting = db.query(SystemSettings).filter(
+            SystemSettings.setting_key == f"research_agent_{agent_type}_prompt"
+        ).first()
+        
+        if not prompt_setting or not prompt_setting.setting_value:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Prompt not configured for {agent_type} agent. Please configure it in admin settings."
+            )
+        
+        prompt_template = prompt_setting.setting_value
+        
+        # Prepare context
+        keywords_list = campaign.keywords.split(",") if campaign.keywords else []
+        top_keywords = [k if isinstance(k, str) else k.get('term', '') for k in keywords_data[:10]] if keywords_data else []
+        topics_list = topics_data[:10] if topics_data else []
+        
+        context = f"""
+Campaign Query: {campaign.query or 'N/A'}
+Keywords: {', '.join(keywords_list) if keywords_list else 'N/A'}
+Top Keywords Found: {', '.join(top_keywords) if top_keywords else 'N/A'}
+Topics Identified: {', '.join(topics_list) if topics_list else 'N/A'}
+Number of Scraped Texts: {len(texts)}
+Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
+"""
+        
+        # Format prompt with context
+        prompt = prompt_template.format(context=context)
+        
+        # Call LLM
+        api_key = get_openai_api_key(current_user.id, db)
+        if not api_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OPENAI_API_KEY not configured"
+            )
+        
+        try:
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(
+                model="gpt-4o-mini", 
+                api_key=api_key, 
+                temperature=0.4, 
+                max_tokens=1000
+            )
+            response = llm.invoke(prompt)
+            recommendations_text = response.content if hasattr(response, 'content') else str(response)
+        except Exception as e:
+            logger.error(f"Error calling LLM for {agent_type} recommendations: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"LLM call failed: {str(e)}"
+            )
+        
+        # Cache the insights in database
+        existing_insight = db.query(CampaignResearchInsights).filter(
+            CampaignResearchInsights.campaign_id == campaign_id,
+            CampaignResearchInsights.agent_type == agent_type
+        ).first()
+        
+        if existing_insight:
+            existing_insight.insights_text = recommendations_text
+            existing_insight.updated_at = datetime.utcnow()
+        else:
+            new_insight = CampaignResearchInsights(
+                campaign_id=campaign_id,
+                agent_type=agent_type,
+                insights_text=recommendations_text
+            )
+            db.add(new_insight)
+        
+        db.commit()
+        
+        logger.info(f"✅ Generated {agent_type} recommendations for campaign {campaign_id}")
+        
+        return {
+            "status": "success",
+            "recommendations": recommendations_text,
+            "agent_type": agent_type,
+            "cached": False
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating {agent_type} recommendations: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate recommendations: {str(e)}"
+        )
