@@ -2025,16 +2025,36 @@ async def generate_image_machine_content_endpoint(
         additional_creative_agent_prompt = ""
         if image_settings:
             additional_agent_id = image_settings.get("additionalCreativeAgentId")
+            logger.info(f"🎨 Image settings received: {image_settings}")
+            logger.info(f"🎨 Additional Creative Agent ID: {additional_agent_id}")
             if additional_agent_id:
                 try:
                     from models import SystemSettings
+                    setting_key = f"creative_agent_{additional_agent_id}_prompt"
+                    logger.info(f"🔍 Looking for creative agent prompt with key: {setting_key}")
                     additional_agent_setting = db.query(SystemSettings).filter(
-                        SystemSettings.setting_key == f"creative_agent_{additional_agent_id}_prompt"
+                        SystemSettings.setting_key == setting_key
                     ).first()
-                    if additional_agent_setting and additional_agent_setting.setting_value:
-                        additional_creative_agent_prompt = additional_agent_setting.setting_value
+                    if additional_agent_setting:
+                        logger.info(f"✅ Found creative agent setting: {setting_key}")
+                        if additional_agent_setting.setting_value:
+                            additional_creative_agent_prompt = additional_agent_setting.setting_value
+                            logger.info(f"✅ Creative agent prompt loaded ({len(additional_creative_agent_prompt)} chars): {additional_creative_agent_prompt[:200]}...")
+                        else:
+                            logger.warning(f"⚠️ Creative agent setting found but setting_value is empty for {setting_key}")
+                    else:
+                        logger.warning(f"⚠️ Creative agent setting NOT FOUND for key: {setting_key}")
+                        # Log all available creative agent settings for debugging
+                        all_creative_agents = db.query(SystemSettings).filter(
+                            SystemSettings.setting_key.like("creative_agent_%_prompt")
+                        ).all()
+                        logger.info(f"📋 Available creative agent prompts: {[s.setting_key for s in all_creative_agents]}")
                 except Exception as e:
-                    logger.warning(f"Could not fetch additional creative agent prompt: {e}")
+                    logger.error(f"❌ Could not fetch additional creative agent prompt: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            else:
+                logger.info("ℹ️ No additionalCreativeAgentId provided in image_settings")
         
         # Build style components from image settings
         style_components = []
@@ -2059,6 +2079,9 @@ async def generate_image_machine_content_endpoint(
         # Add Additional Creative Agent prompt if available
         if additional_creative_agent_prompt:
             prompt_parts.append(f"Additional creative direction: {additional_creative_agent_prompt}")
+            logger.info(f"✅ Custom creative agent prompt INCLUDED in final prompt")
+        else:
+            logger.info(f"ℹ️ No custom creative agent prompt to include")
         
         # Add style components
         if style_components:
@@ -2068,7 +2091,14 @@ async def generate_image_machine_content_endpoint(
         
         final_prompt = ". ".join(prompt_parts) + "."
         
-        logger.info(f"🖼️ Generating image with prompt: {final_prompt[:200]}...")
+        logger.info(f"🖼️ Generating image with FULL prompt ({len(final_prompt)} chars): {final_prompt}")
+        logger.info(f"🖼️ Prompt breakdown:")
+        logger.info(f"   - Article summary: {article_summary[:100]}...")
+        logger.info(f"   - Global agent prompt: {global_image_agent_prompt[:100]}...")
+        if additional_creative_agent_prompt:
+            logger.info(f"   - Custom agent prompt: {additional_creative_agent_prompt[:100]}...")
+        if style_components:
+            logger.info(f"   - Style components: {', '.join(style_components)}")
         
         # Get API key for image generation
         api_key = get_openai_api_key(current_user=current_user, db=db)
