@@ -2071,17 +2071,22 @@ async def generate_image_machine_content_endpoint(
                 style_components.append(additional_prompt)
         
         # Combine: Article content (what) + Global Image Agent prompt + Additional Creative Agent prompt + Image settings (how)
-        prompt_parts = [article_summary]
+        # IMPORTANT: Custom creative agent prompt should be prominent and early in the prompt
+        prompt_parts = []
+        
+        # Start with article summary (what the image should show)
+        prompt_parts.append(article_summary)
+        
+        # Add Additional Creative Agent prompt EARLY and PROMINENTLY if available
+        # This ensures DALL-E pays attention to the custom agent's instructions
+        if additional_creative_agent_prompt:
+            prompt_parts.append(f"IMPORTANT: Apply this creative direction: {additional_creative_agent_prompt}")
+            logger.info(f"✅ Custom creative agent prompt INCLUDED prominently in final prompt")
+        else:
+            logger.info(f"ℹ️ No custom creative agent prompt to include")
         
         # ALWAYS add Global Image Agent prompt (it has a fallback default if not configured)
         prompt_parts.append(f"Follow these guidelines: {global_image_agent_prompt}")
-        
-        # Add Additional Creative Agent prompt if available
-        if additional_creative_agent_prompt:
-            prompt_parts.append(f"Additional creative direction: {additional_creative_agent_prompt}")
-            logger.info(f"✅ Custom creative agent prompt INCLUDED in final prompt")
-        else:
-            logger.info(f"ℹ️ No custom creative agent prompt to include")
         
         # Add style components
         if style_components:
