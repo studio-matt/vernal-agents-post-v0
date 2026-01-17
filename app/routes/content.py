@@ -2157,6 +2157,46 @@ async def generate_image_machine_content_get(
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+# Image Serving Endpoint
+@content_router.get("/images/{filename}")
+async def serve_image(filename: str):
+    """
+    Serve images from the uploads/images directory.
+    Images are saved here by generate_image function in tools.py
+    """
+    try:
+        import os
+        from fastapi.responses import FileResponse
+        from pathlib import Path
+        
+        # Get the directory where content.py is located
+        current_dir = Path(__file__).parent.parent.parent
+        upload_dir = current_dir / "uploads" / "images"
+        file_path = upload_dir / filename
+        
+        # Security: Validate filename (prevent path traversal)
+        if ".." in filename or "/" in filename or "\\" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        # Check if file exists
+        if not file_path.exists():
+            logger.warning(f"Image not found: {file_path}")
+            raise HTTPException(status_code=404, detail="Image not found")
+        
+        # Return the image file
+        return FileResponse(
+            path=str(file_path),
+            media_type="image/png",  # Default to PNG, but could detect from extension
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving image {filename}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to serve image: {str(e)}")
+
 # Scheduled Posts Endpoints
 @content_router.get("/scheduled-posts")
 def get_scheduled_posts(
