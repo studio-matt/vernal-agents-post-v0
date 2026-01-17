@@ -428,6 +428,10 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
                 detail="Campaign not found or access denied"
             )
         
+        # Track if processing-related fields are being modified
+        # If so, set status to INCOMPLETE so "Build Campaign Base" appears
+        processing_fields_changed = False
+        
         # Update fields if provided
         if campaign_data.status is not None:
             campaign.status = campaign_data.status
@@ -436,26 +440,56 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
         if campaign_data.description is not None:
             campaign.description = campaign_data.description
         if campaign_data.type is not None:
+            if campaign.type != campaign_data.type:
+                processing_fields_changed = True
             campaign.type = campaign_data.type
         if campaign_data.keywords is not None:
-            campaign.keywords = ",".join(campaign_data.keywords) if campaign_data.keywords else None
+            new_keywords = ",".join(campaign_data.keywords) if campaign_data.keywords else None
+            if campaign.keywords != new_keywords:
+                processing_fields_changed = True
+            campaign.keywords = new_keywords
         if campaign_data.urls is not None:
-            campaign.urls = ",".join(campaign_data.urls) if campaign_data.urls else None
+            new_urls = ",".join(campaign_data.urls) if campaign_data.urls else None
+            if campaign.urls != new_urls:
+                processing_fields_changed = True
+            campaign.urls = new_urls
+        if campaign_data.query is not None:
+            if campaign.query != campaign_data.query:
+                processing_fields_changed = True
+            campaign.query = campaign_data.query
+        if campaign_data.trendingTopics is not None:
+            new_trending = ",".join(campaign_data.trendingTopics) if campaign_data.trendingTopics else None
+            if campaign.trending_topics != new_trending:
+                processing_fields_changed = True
+            campaign.trending_topics = new_trending
         if campaign_data.topics is not None:
             campaign.topics = ",".join(campaign_data.topics) if campaign_data.topics else None
         
         # Save settings as JSON strings in Text columns
+        # These are processing-related fields - changes require re-processing
         if campaign_data.extractionSettings is not None:
+            old_extraction = campaign.extraction_settings_json
             campaign.extraction_settings_json = json.dumps(campaign_data.extractionSettings)
+            if old_extraction != campaign.extraction_settings_json:
+                processing_fields_changed = True
             logger.info(f"Saved extractionSettings for campaign {campaign_id}: {campaign_data.extractionSettings}")
         if campaign_data.preprocessingSettings is not None:
+            old_preprocessing = campaign.preprocessing_settings_json
             campaign.preprocessing_settings_json = json.dumps(campaign_data.preprocessingSettings)
+            if old_preprocessing != campaign.preprocessing_settings_json:
+                processing_fields_changed = True
             logger.info(f"Saved preprocessingSettings for campaign {campaign_id}: {campaign_data.preprocessingSettings}")
         if campaign_data.entitySettings is not None:
+            old_entity = campaign.entity_settings_json
             campaign.entity_settings_json = json.dumps(campaign_data.entitySettings)
+            if old_entity != campaign.entity_settings_json:
+                processing_fields_changed = True
             logger.info(f"Saved entitySettings for campaign {campaign_id}: {campaign_data.entitySettings}")
         if campaign_data.modelingSettings is not None:
+            old_modeling = campaign.modeling_settings_json
             campaign.modeling_settings_json = json.dumps(campaign_data.modelingSettings)
+            if old_modeling != campaign.modeling_settings_json:
+                processing_fields_changed = True
             logger.info(f"Saved modelingSettings for campaign {campaign_id}: {campaign_data.modelingSettings}")
         if campaign_data.custom_keywords is not None:
             campaign.custom_keywords_json = json.dumps(campaign_data.custom_keywords)
