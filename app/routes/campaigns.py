@@ -514,6 +514,26 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
             campaign.research_selections_json = campaign_data.research_selections_json
             logger.info(f"Saved research_selections_json for campaign {campaign_id}")
         
+        # Site Builder specific fields - changes require re-processing
+        if hasattr(campaign_data, 'site_base_url') and campaign_data.site_base_url is not None:
+            old_site_base_url = _safe_getattr(campaign, 'site_base_url')
+            if old_site_base_url != campaign_data.site_base_url:
+                processing_fields_changed = True
+            campaign.site_base_url = campaign_data.site_base_url
+        
+        if hasattr(campaign_data, 'target_keywords') and campaign_data.target_keywords is not None:
+            old_target_keywords = _safe_get_json(campaign, 'target_keywords_json')
+            new_target_keywords_json = json.dumps(campaign_data.target_keywords)
+            if old_target_keywords != new_target_keywords_json:
+                processing_fields_changed = True
+            campaign.target_keywords_json = new_target_keywords_json
+        
+        # If processing-related fields changed, set status to INCOMPLETE
+        # This ensures "Build Campaign Base" button appears so user can re-process
+        if processing_fields_changed and campaign.status in ["READY_TO_ACTIVATE", "ACTIVE", "NO_CHANGES"]:
+            campaign.status = "INCOMPLETE"
+            logger.info(f"Campaign {campaign_id} processing fields changed - set status to INCOMPLETE for re-processing")
+        
         campaign.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(campaign)
