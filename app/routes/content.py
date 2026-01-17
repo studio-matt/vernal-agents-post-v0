@@ -2569,6 +2569,8 @@ async def post_content_now(
         content_id = request_data.get("content_id")
         content_item = request_data.get("content_item")
         
+        logger.info(f"📤 Post Now request received: content_id={content_id}, has_content_item={bool(content_item)}")
+        
         # If content_id provided, fetch from database
         if content_id:
             content = db.query(Content).filter(
@@ -2595,12 +2597,16 @@ async def post_content_now(
             image_url = content_item.get("image") or content_item.get("image_url")
             content_id = None
         else:
+            logger.error(f"❌ Post Now: Neither content_id nor content_item provided. Request data: {request_data}")
             raise HTTPException(
                 status_code=400,
                 detail="Either content_id or content_item is required"
             )
         
+        logger.info(f"📤 Post Now: content_text length={len(content_text) if content_text else 0}, platform={platform}, has_image={bool(image_url)}")
+        
         if not content_text or not content_text.strip():
+            logger.error(f"❌ Post Now: Content text is empty or missing")
             raise HTTPException(
                 status_code=400,
                 detail="Content text is required"
