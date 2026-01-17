@@ -86,6 +86,10 @@ When extracting routes from `main.py`:
   - Helps identify lost functionality
   - Fast way to diff old monolith vs new refactor
   - **Automatically validates all routers are included** (prevents 404 errors) ⚠️
+- [ ] **Validate endpoints in correct router:** `bash guardrails/validate_endpoints_in_correct_router.sh`
+  - Ensures endpoints are in the correct router file (prevents import errors)
+  - Catches cross-contamination like brand_personalities endpoints in author_personalities.py
+  - **CRITICAL:** Prevents `name 'X' is not defined` errors when endpoints reference schemas not imported in that router ⚠️
 - [ ] Run syntax check: `bash find_all_syntax_errors.sh`
 - [ ] Verify `main.py` is < 200 lines
 - [ ] Verify `main.py` only has:
@@ -151,6 +155,38 @@ bash guardrails/validate_main_structure.sh
 **Symptom:** Frontend gets CORS errors after refactoring.
 
 **Fix:** Ensure CORS middleware is in `main.py` (not in router files).
+
+### 6. Endpoints in Wrong Router File
+**Symptom:** Service fails to start with import errors like `name 'BrandPersonalityCreate' is not defined` in `author_personalities.py`, or endpoints work but are in the wrong router file.
+
+**What Happened:**
+During refactoring, brand personality endpoints were accidentally left in `author_personalities.py` when they should have been in `brand_personalities.py`. This caused import errors because `BrandPersonalityCreate` wasn't imported in the author personalities router.
+
+**Fix:**
+1. Identify which router file the endpoint belongs to by checking the route path:
+   - `/author_personalities/*` → `app/routes/author_personalities.py`
+   - `/brand_personalities/*` → `app/routes/brand_personalities.py`
+   - `/campaigns/*` → `app/routes/campaigns.py`
+   - etc.
+2. Move the endpoint to the correct router file
+3. Remove duplicate endpoints from the wrong router file
+4. Ensure all required imports are in the correct router file
+
+**Prevention:**
+- Run validation script: `bash guardrails/validate_endpoints_in_correct_router.sh`
+- Check for cross-contamination: `grep -r "@.*_router\.(get|post|put|delete)\(\"/brand_personalities" app/routes/author_personalities.py`
+- Verify router file names match endpoint paths
+
+**Validation Command:**
+```bash
+# Check for endpoints in wrong router files
+for router_file in app/routes/*.py; do
+    router_name=$(basename "$router_file" .py)
+    echo "Checking $router_name router..."
+    # Check if file contains endpoints for other routers
+    grep -E "@.*_router\.(get|post|put|delete)\(\"/(author|brand|campaign)" "$router_file" | grep -v "$router_name" && echo "⚠️  Found endpoints for other routers in $router_file"
+done
+```
 
 ---
 
