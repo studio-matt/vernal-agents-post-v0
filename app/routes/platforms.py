@@ -1424,10 +1424,32 @@ async def facebook_callback(
         asec = as_s.setting_value if as_s and as_s.setting_value else os.getenv("FACEBOOK_APP_SECRET")
         ru = ru_s.setting_value if ru_s and ru_s.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://themachine.vernalcontentum.com/facebook/callback")
         if not aid or not asec:
+            logger.error("❌ Facebook OAuth credentials not configured")
             return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=facebook_not_configured")
-        st = db.query(StateToken).filter(StateToken.platform == PlatformEnum.FACEBOOK, StateToken.state == state).first()
+        
+        # Log state for debugging
+        logger.info(f"🔍 Facebook callback - Looking for state token: {state[:20]}...")
+        
+        # Check for state token - also check if it was recently created (within last 10 minutes)
+        from datetime import timedelta
+        ten_minutes_ago = datetime.now() - timedelta(minutes=10)
+        
+        st = db.query(StateToken).filter(
+            StateToken.platform == PlatformEnum.FACEBOOK,
+            StateToken.state == state,
+            StateToken.created_at >= ten_minutes_ago
+        ).first()
+        
         if not st:
-            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=invalid_state")
+            # Log all recent state tokens for debugging
+            all_states = db.query(StateToken).filter(
+                StateToken.platform == PlatformEnum.FACEBOOK,
+                StateToken.created_at >= ten_minutes_ago
+            ).all()
+            logger.warning(f"⚠️ State token not found. Received state: {state[:20]}... Found {len(all_states)} recent state tokens")
+            if all_states:
+                logger.warning(f"⚠️ Recent state tokens: {[s.state[:20] + '...' for s in all_states[:3]]}")
+            return RedirectResponse(url=f"https://machine.vernalcontentum.com/account-settings?error=invalid_state&message=State token expired or not found. Please try connecting again.")
         uid = st.user_id
         db.delete(st)
         r = requests.get("https://graph.facebook.com/v18.0/oauth/access_token", params={"client_id": aid, "client_secret": asec, "redirect_uri": ru, "code": code})
