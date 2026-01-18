@@ -2732,11 +2732,70 @@ async def post_content_now(
             
             # Check if platform_user_id is numeric (Instagram Business Account IDs are numeric)
             if not connection.platform_user_id.isdigit():
-                logger.error(f"❌ Invalid Instagram Business Account ID: '{connection.platform_user_id}' (expected numeric ID, got display name)")
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Instagram Business Account ID. The stored ID '{connection.platform_user_id}' appears to be a display name instead of a numeric ID. Please reconnect your Instagram account in Account Settings > Platform Connections."
-                )
+                logger.warning(f"⚠️ Invalid Instagram Business Account ID detected: '{connection.platform_user_id}' (expected numeric ID, got display name). Attempting to auto-fix...")
+                
+                # Try to auto-fix by fetching the Instagram Business Account ID from existing access token
+                try:
+                    # Get user's Facebook Pages (Instagram Business Accounts are linked to Pages)
+                    pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+                    pages_params = {"access_token": connection.access_token}
+                    pages_response = requests.get(pages_url, params=pages_params, timeout=30)
+                    
+                    instagram_business_account_id = None
+                    page_access_token = None
+                    
+                    if pages_response.status_code == 200:
+                        pages_data = pages_response.json()
+                        pages = pages_data.get("data", [])
+                        
+                        logger.info(f"🔍 Found {len(pages)} Facebook Pages, searching for Instagram Business Account...")
+                        
+                        # Find the first page with an Instagram Business Account
+                        for page in pages:
+                            page_id = page.get("id")
+                            page_access_token = page.get("access_token")
+                            
+                            if not page_id or not page_access_token:
+                                continue
+                            
+                            # Get Instagram Business Account for this page
+                            instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                            instagram_params = {
+                                "fields": "instagram_business_account",
+                                "access_token": page_access_token
+                            }
+                            instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
+                            
+                            if instagram_response.status_code == 200:
+                                instagram_data = instagram_response.json()
+                                if instagram_data.get("instagram_business_account"):
+                                    instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
+                                    logger.info(f"✅ Auto-fixed: Found Instagram Business Account ID: {instagram_business_account_id}")
+                                    # Update the connection with the correct ID and page access token
+                                    connection.platform_user_id = instagram_business_account_id
+                                    connection.access_token = page_access_token  # Use page access token for Instagram API
+                                    db.commit()
+                                    logger.info(f"✅ Updated Instagram connection with correct Business Account ID")
+                                    break
+                    
+                    if not instagram_business_account_id:
+                        logger.error(f"❌ Could not auto-fix Instagram Business Account ID. No Instagram Business Account found linked to Facebook Pages.")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid Instagram Business Account ID. The stored ID '{connection.platform_user_id}' appears to be a display name instead of a numeric ID. Please reconnect your Instagram account in Account Settings > Platform Connections. Make sure your Instagram account is linked to a Facebook Page."
+                        )
+                except requests.exceptions.RequestException as e:
+                    logger.error(f"❌ Error auto-fixing Instagram Business Account ID: {e}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid Instagram Business Account ID. The stored ID '{connection.platform_user_id}' appears to be a display name instead of a numeric ID. Please reconnect your Instagram account in Account Settings > Platform Connections."
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Unexpected error auto-fixing Instagram Business Account ID: {e}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid Instagram Business Account ID. The stored ID '{connection.platform_user_id}' appears to be a display name instead of a numeric ID. Please reconnect your Instagram account in Account Settings > Platform Connections."
+                    )
             
             # Instagram requires image, so check if we have one
             if not image_url:
