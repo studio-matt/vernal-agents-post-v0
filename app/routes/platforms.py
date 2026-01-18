@@ -1304,6 +1304,22 @@ async def remove_platform_credentials(
         ).all()
         
         if connections:
+            # For Facebook/Instagram, revoke the access token on Facebook's side before deleting
+            if platform_enum in [PlatformEnum.FACEBOOK, PlatformEnum.INSTAGRAM]:
+                for connection in connections:
+                    if connection.access_token:
+                        try:
+                            # Revoke the token on Facebook's side
+                            revoke_url = "https://graph.facebook.com/me/permissions"
+                            revoke_params = {"access_token": connection.access_token}
+                            revoke_response = requests.delete(revoke_url, params=revoke_params, timeout=10)
+                            if revoke_response.status_code == 200:
+                                logger.info(f"✅ Revoked {platform} access token for user {current_user.id}")
+                            else:
+                                logger.warning(f"⚠️ Failed to revoke {platform} token: {revoke_response.text[:200]}")
+                        except Exception as revoke_error:
+                            logger.warning(f"⚠️ Error revoking {platform} token: {revoke_error}")
+            
             # DELETE all connection records (permanent removal)
             for connection in connections:
                 db.delete(connection)
@@ -1565,12 +1581,15 @@ async def instagram_auth_v2(
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
         # Scopes: instagram_basic, instagram_content_publish for Instagram posting
         # Also need pages_manage_posts, pages_read_engagement, pages_show_list for Facebook Pages (Instagram Business Accounts are linked to Pages)
+        # auth_type=rerequest forces Facebook to re-request declined permissions
+        # auth_type=reauthorize forces full re-authorization
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish&"
+            f"auth_type=rerequest"
         )
         
         logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
