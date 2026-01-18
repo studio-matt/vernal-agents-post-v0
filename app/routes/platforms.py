@@ -1689,27 +1689,45 @@ async def instagram_callback(
             logger.info(f"🔍 Checking page '{page_name}' (ID: {page_id}) for Instagram Business Account...")
             
             # Get Instagram Business Account for this page
+            # Try with more fields to get better error messages
             instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
             instagram_params = {
-                "fields": "instagram_business_account",
+                "fields": "id,name,instagram_business_account",
                 "access_token": page_access_token
             }
             instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
             
             if instagram_response.status_code == 200:
                 instagram_data = instagram_response.json()
+                logger.info(f"📄 Page data for '{page_name}': {instagram_data}")
+                
                 if instagram_data.get("instagram_business_account"):
-                    instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
-                    logger.info(f"✅ Found Instagram Business Account ID: {instagram_business_account_id} for page '{page_name}' (ID: {page_id})")
-                    # Use the page access token for Instagram API calls (not the user access token)
-                    access_token = page_access_token
-                    break
+                    instagram_account = instagram_data["instagram_business_account"]
+                    if isinstance(instagram_account, dict):
+                        instagram_business_account_id = instagram_account.get("id")
+                    else:
+                        instagram_business_account_id = instagram_account
+                    
+                    if instagram_business_account_id:
+                        logger.info(f"✅ Found Instagram Business Account ID: {instagram_business_account_id} for page '{page_name}' (ID: {page_id})")
+                        # Use the page access token for Instagram API calls (not the user access token)
+                        access_token = page_access_token
+                        break
+                    else:
+                        logger.warning(f"⚠️ Page '{page_name}' has instagram_business_account field but no ID: {instagram_account}")
                 else:
                     logger.info(f"ℹ️ Page '{page_name}' (ID: {page_id}) does not have an Instagram Business Account linked")
+                    logger.info(f"💡 To link Instagram: Go to Facebook Page Settings > Instagram > Connect Account")
             else:
                 error_data = instagram_response.json() if instagram_response.text else {}
+                error_message = error_data.get("error", {}).get("message", "") if isinstance(error_data, dict) else str(error_data)
                 logger.warning(f"⚠️ Failed to check Instagram Business Account for page '{page_name}' (ID: {page_id}): {instagram_response.status_code}")
-                logger.warning(f"⚠️ Error: {error_data}")
+                logger.warning(f"⚠️ Error: {error_message}")
+                logger.warning(f"⚠️ Full error data: {error_data}")
+                
+                # Check if it's a permissions issue
+                if "permission" in error_message.lower() or "access" in error_message.lower():
+                    logger.error(f"❌ Permission issue accessing page '{page_name}'. User may need to grant 'pages_show_list' and 'pages_read_engagement' permissions.")
         
         if not instagram_business_account_id:
             logger.warning(f"⚠️ No Instagram Business Account found for user {user_id} across {len(pages)} Facebook Pages")
