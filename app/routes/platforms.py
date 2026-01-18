@@ -1682,43 +1682,30 @@ async def instagram_callback(
     """
     # If there's an error from Facebook, redirect to error page with all details
     if error:
-        # Get all query parameters for debugging
-        query_params = dict(request.query_params) if request else {}
-        
-        # Build comprehensive error URL with all debug info
-        error_params = {
-            "error": error,
-            "error_code": error_code or "",
-            "error_description": error_description or "",
-            "error_reason": error_reason or "",
-            "state": state or "",
-            "platform": "instagram",
-            "debug_info": json.dumps({
-                "all_query_params": query_params,
-                "error": error,
-                "error_code": error_code,
-                "error_description": error_description,
-                "error_reason": error_reason,
-                "state": state,
-                "timestamp": datetime.now().isoformat(),
-                "user_agent": request.headers.get("user-agent", "") if request else "",
-                "referer": request.headers.get("referer", "") if request else "",
-            }, indent=2)
-        }
-        
-        return RedirectResponse(url=build_oauth_error_url(
-            error=error,
-            error_description=error_description or "",
-            error_code=error_code or "",
-            error_reason=error_reason or "",
-            state=state or "",
-            platform="instagram",
-            additional_debug={
-                "all_query_params": dict(request.query_params) if request else {},
-                "user_agent": request.headers.get("user-agent", "") if request else "",
-                "referer": request.headers.get("referer", "") if request else "",
-            }
-        ))
+        try:
+            # Get all query parameters for debugging
+            query_params = dict(request.query_params) if request else {}
+            
+            return RedirectResponse(url=build_oauth_error_url(
+                error=error,
+                error_description=error_description or "",
+                error_code=error_code or "",
+                error_reason=error_reason or "",
+                state=state or "",
+                platform="instagram",
+                additional_debug={
+                    "all_query_params": query_params,
+                    "user_agent": request.headers.get("user-agent", "") if request else "",
+                    "referer": request.headers.get("referer", "") if request else "",
+                }
+            ))
+        except Exception as e:
+            logger.error(f"❌ Error building OAuth error URL: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Fallback to simple error redirect
+            safe_error_desc = (error_description or "OAuth error occurred").replace(" ", "%20")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?error={error}&error_description={safe_error_desc}&error_code={error_code or ''}&error_reason={error_reason or ''}&platform=instagram&state={state or ''}")
     
     # If no code, that's also an error
     if not code:
