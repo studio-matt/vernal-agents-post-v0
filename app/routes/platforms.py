@@ -1508,7 +1508,13 @@ async def instagram_auth_v2(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Initiate Instagram OAuth connection - uses Facebook OAuth (Instagram is part of Facebook)"""
+    """Initiate Instagram OAuth connection - uses Facebook OAuth (Instagram is part of Facebook)
+    
+    Architecture:
+    - Uses APPLICATION credentials from Admin Settings (SystemSettings) for OAuth
+    - Stores USER's Instagram Business Account ID in PlatformConnection (user account settings)
+    - Each user connects their personal Instagram account via /account-settings
+    """
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
@@ -1516,6 +1522,8 @@ async def instagram_auth_v2(
         
         load_dotenv()
         
+        # Get APPLICATION credentials from admin settings (SystemSettings)
+        # These are the app-level credentials used for OAuth, stored in /admin
         app_id_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_id").first()
         app_secret_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "facebook_app_secret").first()
         redirect_uri_setting = db.query(SystemSettings).filter(SystemSettings.setting_key == "instagram_redirect_uri").first()
@@ -1525,10 +1533,13 @@ async def instagram_auth_v2(
         redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://machine.vernalcontentum.com/instagram/callback")
         
         if not app_id or not app_secret:
+            logger.error("❌ Instagram OAuth: Application credentials not configured in Admin Settings")
             raise HTTPException(
                 status_code=500,
                 detail="Instagram OAuth credentials not configured. Please configure Facebook App credentials in Admin Settings > System > Platform Keys > Facebook (Instagram uses Facebook OAuth)."
             )
+        
+        logger.info(f"🔑 Using APPLICATION credentials (App ID: {app_id[:10]}...) from Admin Settings for user {current_user.id}'s OAuth flow")
         
         import secrets
         state = secrets.token_urlsafe(32)
