@@ -1718,10 +1718,13 @@ async def instagram_callback(
             
             if instagram_response.status_code == 200:
                 instagram_data = instagram_response.json()
-                logger.info(f"📄 Page data for '{page_name}': {instagram_data}")
+                logger.info(f"📄 Page data for '{page_name}': {json.dumps(instagram_data, indent=2)}")
                 
+                # Check for instagram_business_account field
                 if instagram_data.get("instagram_business_account"):
                     instagram_account = instagram_data["instagram_business_account"]
+                    logger.info(f"📋 Found instagram_business_account field: {json.dumps(instagram_account, indent=2) if isinstance(instagram_account, dict) else instagram_account}")
+                    
                     if isinstance(instagram_account, dict):
                         instagram_business_account_id = instagram_account.get("id")
                     else:
@@ -1734,8 +1737,24 @@ async def instagram_callback(
                         break
                     else:
                         logger.warning(f"⚠️ Page '{page_name}' has instagram_business_account field but no ID: {instagram_account}")
+                
+                # Also check for connected_instagram_account (alternative field name)
+                elif instagram_data.get("connected_instagram_account"):
+                    connected_account = instagram_data["connected_instagram_account"]
+                    logger.info(f"📋 Found connected_instagram_account field: {json.dumps(connected_account, indent=2) if isinstance(connected_account, dict) else connected_account}")
+                    
+                    if isinstance(connected_account, dict):
+                        instagram_business_account_id = connected_account.get("id")
+                    else:
+                        instagram_business_account_id = connected_account
+                    
+                    if instagram_business_account_id:
+                        logger.info(f"✅ Found Instagram Account ID via connected_instagram_account: {instagram_business_account_id}")
+                        access_token = page_access_token
+                        break
                 else:
                     logger.info(f"ℹ️ Page '{page_name}' (ID: {page_id}) does not have an Instagram Business Account linked")
+                    logger.info(f"💡 Available fields in page data: {list(instagram_data.keys())}")
                     logger.info(f"💡 To link Instagram: Go to Facebook Page Settings > Instagram > Connect Account")
             else:
                 error_data = instagram_response.json() if instagram_response.text else {}
