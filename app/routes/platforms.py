@@ -1659,40 +1659,62 @@ async def instagram_callback(
         instagram_business_account_id = None
         page_access_token = None
         
-        if pages_response.status_code == 200:
-            pages_data = pages_response.json()
-            pages = pages_data.get("data", [])
+        # Log pages API response for debugging
+        if pages_response.status_code != 200:
+            error_data = pages_response.json() if pages_response.text else {}
+            logger.error(f"❌ Failed to fetch Facebook Pages for user {user_id}: {pages_response.status_code}")
+            logger.error(f"❌ Pages API error: {error_data}")
+            logger.error(f"❌ Response text: {pages_response.text[:500]}")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=pages_api_failed&message=Failed to fetch Facebook Pages. Please ensure you have granted the required permissions and that you manage at least one Facebook Page.")
+        
+        pages_data = pages_response.json()
+        pages = pages_data.get("data", [])
+        
+        logger.info(f"🔍 Found {len(pages)} Facebook Pages for user {user_id}")
+        
+        if len(pages) == 0:
+            logger.warning(f"⚠️ User {user_id} has no Facebook Pages. Instagram Business Accounts must be linked to a Facebook Page.")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_pages&message=You don't have any Facebook Pages. Instagram Business Accounts must be linked to a Facebook Page. Please create a Facebook Page and link your Instagram account to it.")
+        
+        # Find the first page with an Instagram Business Account
+        for page in pages:
+            page_id = page.get("id")
+            page_name = page.get("name", "Unknown")
+            page_access_token = page.get("access_token")
             
-            logger.info(f"🔍 Found {len(pages)} Facebook Pages for user {user_id}")
+            if not page_id or not page_access_token:
+                logger.warning(f"⚠️ Page {page_id} missing ID or access token, skipping")
+                continue
             
-            # Find the first page with an Instagram Business Account
-            for page in pages:
-                page_id = page.get("id")
-                page_access_token = page.get("access_token")
-                
-                if not page_id or not page_access_token:
-                    continue
-                
-                # Get Instagram Business Account for this page
-                instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
-                instagram_params = {
-                    "fields": "instagram_business_account",
-                    "access_token": page_access_token
-                }
-                instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
-                
-                if instagram_response.status_code == 200:
-                    instagram_data = instagram_response.json()
-                    if instagram_data.get("instagram_business_account"):
-                        instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
-                        logger.info(f"✅ Found Instagram Business Account ID: {instagram_business_account_id} for page {page_id}")
-                        # Use the page access token for Instagram API calls (not the user access token)
-                        access_token = page_access_token
-                        break
+            logger.info(f"🔍 Checking page '{page_name}' (ID: {page_id}) for Instagram Business Account...")
+            
+            # Get Instagram Business Account for this page
+            instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+            instagram_params = {
+                "fields": "instagram_business_account",
+                "access_token": page_access_token
+            }
+            instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
+            
+            if instagram_response.status_code == 200:
+                instagram_data = instagram_response.json()
+                if instagram_data.get("instagram_business_account"):
+                    instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
+                    logger.info(f"✅ Found Instagram Business Account ID: {instagram_business_account_id} for page '{page_name}' (ID: {page_id})")
+                    # Use the page access token for Instagram API calls (not the user access token)
+                    access_token = page_access_token
+                    break
+                else:
+                    logger.info(f"ℹ️ Page '{page_name}' (ID: {page_id}) does not have an Instagram Business Account linked")
+            else:
+                error_data = instagram_response.json() if instagram_response.text else {}
+                logger.warning(f"⚠️ Failed to check Instagram Business Account for page '{page_name}' (ID: {page_id}): {instagram_response.status_code}")
+                logger.warning(f"⚠️ Error: {error_data}")
         
         if not instagram_business_account_id:
-            logger.warning(f"⚠️ No Instagram Business Account found for user {user_id}. User may need to link Instagram to a Facebook Page.")
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_instagram_account&message=No Instagram Business Account found. Please ensure your Instagram account is linked to a Facebook Page.")
+            logger.warning(f"⚠️ No Instagram Business Account found for user {user_id} across {len(pages)} Facebook Pages")
+            logger.warning(f"⚠️ User needs to: 1) Have a Facebook Page, 2) Link their Instagram account to that Page")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_instagram_account&message=No Instagram Business Account found. Please ensure your Instagram account is linked to a Facebook Page. Go to your Facebook Page settings and connect your Instagram account.")
         
         # Store or update connection with the Instagram Business Account ID
         conn = db.query(PlatformConnection).filter(
