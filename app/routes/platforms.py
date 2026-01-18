@@ -1651,6 +1651,27 @@ async def instagram_callback(
         if not access_token:
             return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_access_token")
         
+        # First, check what permissions the token has
+        logger.info(f"🔍 Checking access token permissions for user {user_id}...")
+        debug_token_url = "https://graph.facebook.com/v18.0/debug_token"
+        debug_params = {
+            "input_token": access_token,
+            "access_token": access_token
+        }
+        debug_response = requests.get(debug_token_url, params=debug_params, timeout=30)
+        if debug_response.status_code == 200:
+            debug_data = debug_response.json()
+            token_info = debug_data.get("data", {})
+            scopes = token_info.get("scopes", [])
+            logger.info(f"📋 Token scopes: {scopes}")
+            logger.info(f"📋 Token info: {json.dumps(token_info, indent=2)}")
+            
+            # Check if we have the required scopes
+            required_scopes = ["pages_show_list", "pages_read_engagement"]
+            missing_scopes = [s for s in required_scopes if s not in scopes]
+            if missing_scopes:
+                logger.warning(f"⚠️ Missing required scopes: {missing_scopes}")
+        
         # Get user's Facebook Pages (Instagram Business Accounts are linked to Pages)
         pages_url = "https://graph.facebook.com/v18.0/me/accounts"
         pages_params = {"access_token": access_token}
@@ -1663,18 +1684,40 @@ async def instagram_callback(
         if pages_response.status_code != 200:
             error_data = pages_response.json() if pages_response.text else {}
             logger.error(f"❌ Failed to fetch Facebook Pages for user {user_id}: {pages_response.status_code}")
-            logger.error(f"❌ Pages API error: {error_data}")
+            logger.error(f"❌ Pages API error: {json.dumps(error_data, indent=2)}")
             logger.error(f"❌ Response text: {pages_response.text[:500]}")
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=pages_api_failed&message=Failed to fetch Facebook Pages. Please ensure you have granted the required permissions and that you manage at least one Facebook Page.")
+            
+            error_message = error_data.get("error", {}).get("message", "") if isinstance(error_data, dict) else str(error_data)
+            if "permission" in error_message.lower() or "access" in error_message.lower():
+                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=pages_permission&message=Permission denied. Please ensure you grant 'pages_show_list' permission when authorizing the app. Try disconnecting and reconnecting Instagram.")
+            else:
+                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=pages_api_failed&message=Failed to fetch Facebook Pages: {error_message}")
         
         pages_data = pages_response.json()
         pages = pages_data.get("data", [])
         
         logger.info(f"🔍 Found {len(pages)} Facebook Pages for user {user_id}")
+        logger.info(f"📋 Pages API response: {json.dumps(pages_data, indent=2)}")
         
         if len(pages) == 0:
-            logger.warning(f"⚠️ User {user_id} has no Facebook Pages. Instagram Business Accounts must be linked to a Facebook Page.")
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_pages&message=You don't have any Facebook Pages. Instagram Business Accounts must be linked to a Facebook Page. Please create a Facebook Page and link your Instagram account to it.")
+            logger.warning(f"⚠️ User {user_id} has no Facebook Pages returned by API")
+            logger.warning(f"⚠️ This could mean:")
+            logger.warning(f"   1. User doesn't have any Facebook Pages")
+            logger.warning(f"   2. Token doesn't have 'pages_show_list' permission")
+            logger.warning(f"   3. User needs to grant page access permissions")
+            
+            # Try alternative: check if user has pages via /me/permissions
+            try:
+                permissions_url = "https://graph.facebook.com/v18.0/me/permissions"
+                permissions_params = {"access_token": access_token}
+                permissions_response = requests.get(permissions_url, params=permissions_params, timeout=30)
+                if permissions_response.status_code == 200:
+                    permissions_data = permissions_response.json()
+                    logger.info(f"📋 User permissions: {json.dumps(permissions_data, indent=2)}")
+            except Exception as perm_error:
+                logger.warning(f"⚠️ Could not check permissions: {perm_error}")
+            
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_pages&message=No Facebook Pages found. Please ensure: 1) You have created a Facebook Page, 2) You granted 'pages_show_list' permission when authorizing, 3) Try disconnecting and reconnecting to grant all required permissions.")
         
         # Find the first page with an Instagram Business Account
         for page in pages:
