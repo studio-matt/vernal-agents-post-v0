@@ -1705,8 +1705,10 @@ async def instagram_callback(
             logger.warning(f"   1. User doesn't have any Facebook Pages")
             logger.warning(f"   2. Token doesn't have 'pages_show_list' permission")
             logger.warning(f"   3. User needs to grant page access permissions")
+            logger.warning(f"   4. App is in Development mode and user is not an admin/tester")
             
             # Try alternative: check if user has pages via /me/permissions
+            granted_permissions = []
             try:
                 permissions_url = "https://graph.facebook.com/v18.0/me/permissions"
                 permissions_params = {"access_token": access_token}
@@ -1714,10 +1716,48 @@ async def instagram_callback(
                 if permissions_response.status_code == 200:
                     permissions_data = permissions_response.json()
                     logger.info(f"📋 User permissions: {json.dumps(permissions_data, indent=2)}")
+                    granted_permissions = [p.get("permission") for p in permissions_data.get("data", []) if p.get("status") == "granted"]
+                    logger.info(f"📋 Granted permissions: {granted_permissions}")
             except Exception as perm_error:
                 logger.warning(f"⚠️ Could not check permissions: {perm_error}")
             
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_pages&message=No Facebook Pages found. Please ensure: 1) You have created a Facebook Page, 2) You granted 'pages_show_list' permission when authorizing, 3) Try disconnecting and reconnecting to grant all required permissions.")
+            # Try alternative method: /me/accounts with different parameters
+            try:
+                logger.info(f"🔄 Trying alternative method: /me/accounts?fields=id,name,access_token")
+                alt_pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+                alt_pages_params = {
+                    "access_token": access_token,
+                    "fields": "id,name,access_token,instagram_business_account"
+                }
+                alt_pages_response = requests.get(alt_pages_url, params=alt_pages_params, timeout=30)
+                if alt_pages_response.status_code == 200:
+                    alt_pages_data = alt_pages_response.json()
+                    alt_pages = alt_pages_data.get("data", [])
+                    logger.info(f"🔄 Alternative method returned {len(alt_pages)} pages")
+                    if len(alt_pages) > 0:
+                        pages = alt_pages
+                        logger.info(f"✅ Using alternative method results")
+            except Exception as alt_error:
+                logger.warning(f"⚠️ Alternative method failed: {alt_error}")
+            
+            # If still no pages, return error
+            if len(pages) == 0:
+                missing_perms = []
+                if "pages_show_list" not in granted_permissions:
+                    missing_perms.append("pages_show_list")
+                if "pages_read_engagement" not in granted_permissions:
+                    missing_perms.append("pages_read_engagement")
+                
+                error_msg = "No Facebook Pages found. "
+                if missing_perms:
+                    error_msg += f"Missing permissions: {', '.join(missing_perms)}. "
+                error_msg += "Please: 1) Create a Facebook Page at facebook.com/pages/create, 2) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts, 3) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions."
+                
+                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_pages&message={error_msg.replace(' ', '%20')}")
+        
+        # If we got here, we have pages - reset the pages variable if we used alternative method
+        if len(pages) > 0:
+            logger.info(f"✅ Successfully found {len(pages)} Facebook Pages")
         
         # Find the first page with an Instagram Business Account
         for page in pages:
@@ -1883,3 +1923,93 @@ async def instagram_callback(
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         db.rollback()
         return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
+
+@platforms_router.get("/instagram/debug")
+async def instagram_debug(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Debug endpoint to check Instagram connection status and token permissions"""
+    try:
+        from models import PlatformConnection, PlatformEnum
+        import requests
+        
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.INSTAGRAM
+        ).first()
+        
+        if not connection:
+            return JSONResponse(content={
+                "status": "error",
+                "message": "No Instagram connection found",
+                "has_connection": False
+            })
+        
+        access_token = connection.access_token
+        platform_user_id = connection.platform_user_id
+        
+        debug_info = {
+            "has_connection": True,
+            "platform_user_id": platform_user_id,
+            "connected_at": connection.connected_at.isoformat() if connection.connected_at else None,
+            "token_preview": access_token[:20] + "..." if access_token else None
+        }
+        
+        # Check token permissions
+        if access_token:
+            try:
+                debug_token_url = "https://graph.facebook.com/v18.0/debug_token"
+                debug_params = {
+                    "input_token": access_token,
+                    "access_token": access_token
+                }
+                debug_response = requests.get(debug_token_url, params=debug_params, timeout=30)
+                if debug_response.status_code == 200:
+                    debug_data = debug_response.json()
+                    token_info = debug_data.get("data", {})
+                    debug_info["token_scopes"] = token_info.get("scopes", [])
+                    debug_info["token_expires_at"] = token_info.get("expires_at")
+                    debug_info["token_is_valid"] = token_info.get("is_valid", False)
+            except Exception as e:
+                debug_info["token_debug_error"] = str(e)
+            
+            # Try to get pages
+            try:
+                pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+                pages_params = {"access_token": access_token}
+                pages_response = requests.get(pages_url, params=pages_params, timeout=30)
+                if pages_response.status_code == 200:
+                    pages_data = pages_response.json()
+                    pages = pages_data.get("data", [])
+                    debug_info["pages_count"] = len(pages)
+                    debug_info["pages"] = [{"id": p.get("id"), "name": p.get("name")} for p in pages[:5]]  # Limit to 5
+                else:
+                    debug_info["pages_error"] = pages_response.text[:500]
+            except Exception as e:
+                debug_info["pages_error"] = str(e)
+            
+            # Check permissions
+            try:
+                permissions_url = "https://graph.facebook.com/v18.0/me/permissions"
+                permissions_params = {"access_token": access_token}
+                permissions_response = requests.get(permissions_url, params=permissions_params, timeout=30)
+                if permissions_response.status_code == 200:
+                    permissions_data = permissions_response.json()
+                    granted = [p.get("permission") for p in permissions_data.get("data", []) if p.get("status") == "granted"]
+                    debug_info["granted_permissions"] = granted
+            except Exception as e:
+                debug_info["permissions_error"] = str(e)
+        
+        return JSONResponse(content={
+            "status": "success",
+            "debug_info": debug_info
+        })
+    except Exception as e:
+        logger.error(f"❌ Error in Instagram debug endpoint: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return JSONResponse(content={
+            "status": "error",
+            "message": str(e)
+        }, status_code=500)
