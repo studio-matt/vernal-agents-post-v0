@@ -2080,7 +2080,16 @@ async def instagram_callback(
                     "2) Your Instagram account is set up as a Business Account (not Personal), "
                     "3) Go to Facebook Page Settings > Instagram to verify the connection."
                 )
-                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_instagram_account&message={error_msg.replace(' ', '%20')}")
+                return RedirectResponse(url=build_oauth_error_url(
+                    error="no_instagram_account",
+                    error_description=error_msg,
+                    state=state or "",
+                    platform="instagram",
+                    additional_debug={
+                        "pages_count": len(pages),
+                        "pages_checked": [{"id": p.get("id"), "name": p.get("name")} for p in pages[:5]]
+                    }
+                ))
         
         # Store or update connection with the Instagram Business Account ID
         conn = db.query(PlatformConnection).filter(
