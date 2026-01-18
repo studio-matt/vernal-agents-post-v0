@@ -1688,14 +1688,33 @@ async def instagram_callback(
             
             logger.info(f"🔍 Checking page '{page_name}' (ID: {page_id}) for Instagram Business Account...")
             
-            # Get Instagram Business Account for this page
-            # Try with more fields to get better error messages
+            # First, try to get the page with instagram_business_account field
+            # Try multiple field combinations in case one works
             instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+            
+            # Try method 1: Just instagram_business_account field
             instagram_params = {
-                "fields": "id,name,instagram_business_account",
+                "fields": "instagram_business_account",
                 "access_token": page_access_token
             }
             instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
+            
+            # If that fails, try with more fields
+            if instagram_response.status_code != 200:
+                logger.warning(f"⚠️ First attempt failed ({instagram_response.status_code}), trying with more fields...")
+                instagram_params = {
+                    "fields": "id,name,instagram_business_account,connected_instagram_account",
+                    "access_token": page_access_token
+                }
+                instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
+            
+            # If still fails, try without fields (get all page data)
+            if instagram_response.status_code != 200:
+                logger.warning(f"⚠️ Second attempt failed ({instagram_response.status_code}), trying to get all page data...")
+                instagram_params = {
+                    "access_token": page_access_token
+                }
+                instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
             
             if instagram_response.status_code == 200:
                 instagram_data = instagram_response.json()
