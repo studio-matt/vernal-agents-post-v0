@@ -1628,11 +1628,83 @@ async def instagram_auth_v2(
 
 @platforms_router.get("/instagram/callback")
 async def instagram_callback(
-    code: str,
-    state: str,
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    error_code: Optional[str] = None,
+    error_description: Optional[str] = None,
+    error_reason: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Handle Instagram OAuth callback - NO AUTH REQUIRED"""
+    """Handle Instagram OAuth callback - NO AUTH REQUIRED
+    
+    Handles both success (with code) and error (with error parameters) callbacks from Facebook.
+    """
+    # If there's an error from Facebook, redirect to error page with all details
+    if error:
+        # Get all query parameters for debugging
+        query_params = dict(request.query_params) if request else {}
+        
+        # Build comprehensive error URL with all debug info
+        error_params = {
+            "error": error,
+            "error_code": error_code or "",
+            "error_description": error_description or "",
+            "error_reason": error_reason or "",
+            "state": state or "",
+            "platform": "instagram",
+            "debug_info": json.dumps({
+                "all_query_params": query_params,
+                "error": error,
+                "error_code": error_code,
+                "error_description": error_description,
+                "error_reason": error_reason,
+                "state": state,
+                "timestamp": datetime.now().isoformat(),
+                "user_agent": request.headers.get("user-agent", "") if request else "",
+                "referer": request.headers.get("referer", "") if request else "",
+            }, indent=2)
+        }
+        
+        # URL encode all parameters
+        error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items() if v])
+        
+        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?{error_query}")
+    
+    # If no code, that's also an error
+    if not code:
+        error_params = {
+            "error": "missing_code",
+            "error_description": "No authorization code received from Facebook",
+            "state": state or "",
+            "platform": "instagram",
+            "debug_info": json.dumps({
+                "error": "missing_code",
+                "error_description": "No authorization code received from Facebook",
+                "state": state,
+                "all_query_params": dict(request.query_params) if request else {},
+                "timestamp": datetime.now().isoformat(),
+            }, indent=2)
+        }
+        error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items() if v])
+        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?{error_query}")
+    
+    if not state:
+        error_params = {
+            "error": "missing_state",
+            "error_description": "No state parameter received from Facebook",
+            "platform": "instagram",
+            "debug_info": json.dumps({
+                "error": "missing_state",
+                "error_description": "No state parameter received from Facebook",
+                "all_query_params": dict(request.query_params) if request else {},
+                "timestamp": datetime.now().isoformat(),
+            }, indent=2)
+        }
+        error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items() if v])
+        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?{error_query}")
+    
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
         import os
