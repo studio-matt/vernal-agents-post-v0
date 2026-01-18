@@ -1528,12 +1528,15 @@ async def instagram_auth_v2(
         
         db.commit()
         
+        # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
+        # Scopes: instagram_basic, instagram_content_publish for Instagram posting
+        # Also need pages_manage_posts, pages_read_engagement, pages_show_list for Facebook Pages (Instagram Business Accounts are linked to Pages)
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish"
         )
         
         logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
