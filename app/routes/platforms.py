@@ -1731,8 +1731,43 @@ async def instagram_callback(
         
         if not instagram_business_account_id:
             logger.warning(f"⚠️ No Instagram Business Account found for user {user_id} across {len(pages)} Facebook Pages")
-            logger.warning(f"⚠️ User needs to: 1) Have a Facebook Page, 2) Link their Instagram account to that Page")
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_instagram_account&message=No Instagram Business Account found. Please ensure your Instagram account is linked to a Facebook Page. Go to your Facebook Page settings and connect your Instagram account.")
+            logger.warning(f"⚠️ Troubleshooting steps:")
+            logger.warning(f"   1. Ensure Instagram account is linked to Facebook Page")
+            logger.warning(f"   2. Ensure Instagram account is set up as a Business Account (not Personal)")
+            logger.warning(f"   3. Go to Facebook Page Settings > Instagram > Connect Account")
+            logger.warning(f"   4. Verify the Instagram account appears in Page Settings")
+            
+            # Try one more thing: check if we can get Instagram account directly from user token
+            # (This might work if user has direct Instagram permissions)
+            try:
+                logger.info(f"🔍 Attempting alternative: checking for Instagram account via user token...")
+                user_instagram_url = "https://graph.facebook.com/v18.0/me"
+                user_instagram_params = {
+                    "fields": "instagram_business_account",
+                    "access_token": access_token
+                }
+                user_instagram_response = requests.get(user_instagram_url, params=user_instagram_params, timeout=30)
+                if user_instagram_response.status_code == 200:
+                    user_data = user_instagram_response.json()
+                    logger.info(f"📄 User data: {user_data}")
+                    if user_data.get("instagram_business_account"):
+                        logger.info(f"✅ Found Instagram Business Account via user token!")
+                        instagram_account = user_data["instagram_business_account"]
+                        if isinstance(instagram_account, dict):
+                            instagram_business_account_id = instagram_account.get("id")
+                        else:
+                            instagram_business_account_id = instagram_account
+            except Exception as alt_error:
+                logger.warning(f"⚠️ Alternative method also failed: {alt_error}")
+            
+            if not instagram_business_account_id:
+                error_msg = (
+                    "No Instagram Business Account found. "
+                    "Please ensure: 1) Your Instagram account is linked to your Facebook Page, "
+                    "2) Your Instagram account is set up as a Business Account (not Personal), "
+                    "3) Go to Facebook Page Settings > Instagram to verify the connection."
+                )
+                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_instagram_account&message={error_msg.replace(' ', '%20')}")
         
         # Store or update connection with the Instagram Business Account ID
         conn = db.query(PlatformConnection).filter(
