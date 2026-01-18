@@ -1928,12 +1928,16 @@ async def instagram_callback(
 @platforms_router.get("/instagram/debug")
 async def instagram_debug(
     request: Request,
+    user_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """Debug endpoint to check Instagram connection status and token permissions
     
     Authentication is optional - if no token is provided, returns general connection info.
     If token is provided, returns user-specific connection info.
+    
+    Query parameters:
+    - user_id: Optional user ID to debug (for admin debugging)
     """
     try:
         from models import PlatformConnection, PlatformEnum, User
@@ -1947,11 +1951,18 @@ async def instagram_debug(
                 token = auth_header.replace("Bearer ", "")
                 from utils import verify_token
                 payload = verify_token(token)
-                user_id = payload.get("sub")
-                if user_id:
-                    current_user = db.query(User).filter(User.id == int(user_id)).first()
+                auth_user_id = payload.get("sub")
+                if auth_user_id:
+                    current_user = db.query(User).filter(User.id == int(auth_user_id)).first()
         except Exception as auth_error:
             logger.info(f"⚠️ No valid authentication provided for debug endpoint: {auth_error}")
+        
+        # If user_id query parameter is provided, use that (for debugging specific users)
+        if user_id and not current_user:
+            target_user = db.query(User).filter(User.id == user_id).first()
+            if target_user:
+                current_user = target_user
+                logger.info(f"🔍 Debugging user {user_id} via query parameter")
         
         if not current_user:
             # Return general info without user-specific data
