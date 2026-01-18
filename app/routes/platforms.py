@@ -1578,18 +1578,36 @@ async def instagram_auth_v2(
         
         db.commit()
         
+        # Before generating auth URL, revoke any existing token to force fresh authorization
+        existing_connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.INSTAGRAM
+        ).first()
+        
+        if existing_connection and existing_connection.access_token:
+            try:
+                # Revoke the existing token on Facebook's side
+                revoke_url = "https://graph.facebook.com/me/permissions"
+                revoke_params = {"access_token": existing_connection.access_token}
+                revoke_response = requests.delete(revoke_url, params=revoke_params, timeout=10)
+                if revoke_response.status_code == 200:
+                    logger.info(f"✅ Revoked existing Instagram token for user {current_user.id} before re-authorization")
+                else:
+                    logger.warning(f"⚠️ Failed to revoke existing token: {revoke_response.text[:200]}")
+            except Exception as revoke_error:
+                logger.warning(f"⚠️ Error revoking existing token: {revoke_error}")
+        
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
         # Scopes: instagram_basic, instagram_content_publish for Instagram posting
         # Also need pages_manage_posts, pages_read_engagement, pages_show_list for Facebook Pages (Instagram Business Accounts are linked to Pages)
-        # auth_type=rerequest forces Facebook to re-request declined permissions
-        # auth_type=reauthorize forces full re-authorization
+        # auth_type=reauthorize forces FULL re-authorization (not just re-requesting declined permissions)
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
             f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish&"
-            f"auth_type=rerequest"
+            f"auth_type=reauthorize"
         )
         
         logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
