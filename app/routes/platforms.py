@@ -10,6 +10,7 @@ import requests
 from datetime import datetime
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
@@ -1926,14 +1927,55 @@ async def instagram_callback(
 
 @platforms_router.get("/instagram/debug")
 async def instagram_debug(
-    current_user = Depends(get_current_user),
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Debug endpoint to check Instagram connection status and token permissions"""
+    """Debug endpoint to check Instagram connection status and token permissions
+    
+    Authentication is optional - if no token is provided, returns general connection info.
+    If token is provided, returns user-specific connection info.
+    """
     try:
-        from models import PlatformConnection, PlatformEnum
+        from models import PlatformConnection, PlatformEnum, User
         import requests
         
+        # Try to get current user (optional authentication)
+        current_user = None
+        try:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header.replace("Bearer ", "")
+                from utils import verify_token
+                payload = verify_token(token)
+                user_id = payload.get("sub")
+                if user_id:
+                    current_user = db.query(User).filter(User.id == int(user_id)).first()
+        except Exception as auth_error:
+            logger.info(f"⚠️ No valid authentication provided for debug endpoint: {auth_error}")
+        
+        if not current_user:
+            # Return general info without user-specific data
+            all_connections = db.query(PlatformConnection).filter(
+                PlatformConnection.platform == PlatformEnum.INSTAGRAM
+            ).all()
+            
+            return JSONResponse(content={
+                "status": "info",
+                "message": "No authentication provided. Showing general connection info.",
+                "total_instagram_connections": len(all_connections),
+                "note": "To see your specific connection details, include Authorization: Bearer <token> header",
+                "connections_preview": [
+                    {
+                        "user_id": conn.user_id,
+                        "has_token": bool(conn.access_token),
+                        "has_platform_user_id": bool(conn.platform_user_id),
+                        "connected_at": conn.connected_at.isoformat() if conn.connected_at else None
+                    }
+                    for conn in all_connections[:5]  # Limit to 5
+                ]
+            })
+        
+        # User is authenticated - return their specific connection info
         connection = db.query(PlatformConnection).filter(
             PlatformConnection.user_id == current_user.id,
             PlatformConnection.platform == PlatformEnum.INSTAGRAM
