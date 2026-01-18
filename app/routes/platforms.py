@@ -1626,6 +1626,45 @@ async def instagram_auth_v2(
             detail=f"Failed to generate Instagram auth URL: {str(e)}"
         )
 
+def build_oauth_error_url(
+    error: str,
+    error_description: str = "",
+    error_code: str = "",
+    error_reason: str = "",
+    state: str = "",
+    platform: str = "instagram",
+    additional_debug: dict = None
+) -> str:
+    """Build a comprehensive OAuth error URL with all debug information"""
+    query_params = dict(additional_debug) if additional_debug else {}
+    query_params.update({
+        "error": error,
+        "error_description": error_description or "",
+        "error_code": error_code or "",
+        "error_reason": error_reason or "",
+        "state": state or "",
+        "platform": platform,
+    })
+    
+    # Build debug info JSON
+    debug_info = {
+        "error": error,
+        "error_code": error_code,
+        "error_description": error_description,
+        "error_reason": error_reason,
+        "state": state,
+        "platform": platform,
+        "timestamp": datetime.now().isoformat(),
+        **query_params
+    }
+    
+    query_params["debug_info"] = json.dumps(debug_info, indent=2)
+    
+    # URL encode all parameters
+    error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in query_params.items() if v])
+    
+    return f"https://themachine.vernalcontentum.com/oauth-error?{error_query}"
+
 @platforms_router.get("/instagram/callback")
 async def instagram_callback(
     request: Request,
@@ -1667,43 +1706,41 @@ async def instagram_callback(
             }, indent=2)
         }
         
-        # URL encode all parameters
-        error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items() if v])
-        
-        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?{error_query}")
+        return RedirectResponse(url=build_oauth_error_url(
+            error=error,
+            error_description=error_description or "",
+            error_code=error_code or "",
+            error_reason=error_reason or "",
+            state=state or "",
+            platform="instagram",
+            additional_debug={
+                "all_query_params": dict(request.query_params) if request else {},
+                "user_agent": request.headers.get("user-agent", "") if request else "",
+                "referer": request.headers.get("referer", "") if request else "",
+            }
+        ))
     
     # If no code, that's also an error
     if not code:
-        error_params = {
-            "error": "missing_code",
-            "error_description": "No authorization code received from Facebook",
-            "state": state or "",
-            "platform": "instagram",
-            "debug_info": json.dumps({
-                "error": "missing_code",
-                "error_description": "No authorization code received from Facebook",
-                "state": state,
+        return RedirectResponse(url=build_oauth_error_url(
+            error="missing_code",
+            error_description="No authorization code received from Facebook",
+            state=state or "",
+            platform="instagram",
+            additional_debug={
                 "all_query_params": dict(request.query_params) if request else {},
-                "timestamp": datetime.now().isoformat(),
-            }, indent=2)
-        }
-        error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items() if v])
-        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?{error_query}")
+            }
+        ))
     
     if not state:
-        error_params = {
-            "error": "missing_state",
-            "error_description": "No state parameter received from Facebook",
-            "platform": "instagram",
-            "debug_info": json.dumps({
-                "error": "missing_state",
-                "error_description": "No state parameter received from Facebook",
+        return RedirectResponse(url=build_oauth_error_url(
+            error="missing_state",
+            error_description="No state parameter received from Facebook",
+            platform="instagram",
+            additional_debug={
                 "all_query_params": dict(request.query_params) if request else {},
-                "timestamp": datetime.now().isoformat(),
-            }, indent=2)
-        }
-        error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items() if v])
-        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?{error_query}")
+            }
+        ))
     
     try:
         from models import PlatformConnection, PlatformEnum, StateToken, SystemSettings
@@ -1725,7 +1762,12 @@ async def instagram_callback(
         redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://themachine.vernalcontentum.com/instagram/callback")
         
         if not app_id or not app_secret:
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=instagram_not_configured")
+            return RedirectResponse(url=build_oauth_error_url(
+                error="instagram_not_configured",
+                error_description="Instagram OAuth credentials are not configured. Please configure Facebook App credentials in Admin Settings.",
+                state=state or "",
+                platform="instagram"
+            ))
         
         # Verify state and get user_id from StateToken
         state_token = db.query(StateToken).filter(
@@ -1734,7 +1776,12 @@ async def instagram_callback(
         ).first()
         
         if not state_token:
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=invalid_state")
+            return RedirectResponse(url=build_oauth_error_url(
+                error="invalid_state",
+                error_description="OAuth state validation failed. This usually happens if you took too long or the connection was interrupted.",
+                state=state or "",
+                platform="instagram"
+            ))
         
         user_id = state_token.user_id
         
@@ -1753,13 +1800,25 @@ async def instagram_callback(
         
         response = requests.get(token_url, params=token_params)
         if response.status_code != 200:
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=token_exchange_failed")
+            return RedirectResponse(url=build_oauth_error_url(
+                error="token_exchange_failed",
+                error_description=f"Failed to exchange authorization code for access token: {response.text[:200]}",
+                state=state or "",
+                platform="instagram",
+                additional_debug={"response_status": response.status_code, "response_text": response.text[:500]}
+            ))
         
         token_data = response.json()
         access_token = token_data.get("access_token")
         
         if not access_token:
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_access_token")
+            return RedirectResponse(url=build_oauth_error_url(
+                error="no_access_token",
+                error_description="No access token received from Facebook in the token exchange response",
+                state=state or "",
+                platform="instagram",
+                additional_debug={"token_response": token_data}
+            ))
         
         # First, check what permissions the token has
         logger.info(f"🔍 Checking access token permissions for user {user_id}...")
@@ -1799,9 +1858,21 @@ async def instagram_callback(
             
             error_message = error_data.get("error", {}).get("message", "") if isinstance(error_data, dict) else str(error_data)
             if "permission" in error_message.lower() or "access" in error_message.lower():
-                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=pages_permission&message=Permission denied. Please ensure you grant 'pages_show_list' permission when authorizing the app. Try disconnecting and reconnecting Instagram.")
+                return RedirectResponse(url=build_oauth_error_url(
+                    error="pages_permission",
+                    error_description="Permission denied. Please ensure you grant 'pages_show_list' permission when authorizing the app. Try disconnecting and reconnecting Instagram.",
+                    state=state or "",
+                    platform="instagram",
+                    additional_debug={"pages_api_error": error_data, "response_status": pages_response.status_code}
+                ))
             else:
-                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=pages_api_failed&message=Failed to fetch Facebook Pages: {error_message}")
+                return RedirectResponse(url=build_oauth_error_url(
+                    error="pages_api_failed",
+                    error_description=f"Failed to fetch Facebook Pages: {error_message}",
+                    state=state or "",
+                    platform="instagram",
+                    additional_debug={"pages_api_error": error_data, "response_status": pages_response.status_code}
+                ))
         
         pages_data = pages_response.json()
         pages = pages_data.get("data", [])
@@ -1863,7 +1934,18 @@ async def instagram_callback(
                     error_msg += f"Missing permissions: {', '.join(missing_perms)}. "
                 error_msg += "Please: 1) Create a Facebook Page at facebook.com/pages/create, 2) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts, 3) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions."
                 
-                return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_pages&message={error_msg.replace(' ', '%20')}")
+                return RedirectResponse(url=build_oauth_error_url(
+                    error="no_pages",
+                    error_description=error_msg,
+                    state=state or "",
+                    platform="instagram",
+                    additional_debug={
+                        "missing_permissions": missing_perms,
+                        "granted_permissions": granted_permissions,
+                        "pages_count": 0,
+                        "token_scopes": scopes if 'scopes' in locals() else []
+                    }
+                ))
         
         # If we got here, we have pages - reset the pages variable if we used alternative method
         if len(pages) > 0:
@@ -2032,7 +2114,13 @@ async def instagram_callback(
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         db.rollback()
-        return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=callback_failed&message={str(e)}")
+        return RedirectResponse(url=build_oauth_error_url(
+            error="callback_failed",
+            error_description=f"OAuth callback failed: {str(e)}",
+            state=state or "",
+            platform="instagram",
+            additional_debug={"exception_type": type(e).__name__, "traceback": str(e)}
+        ))
 
 @platforms_router.get("/instagram/debug")
 async def instagram_debug(
