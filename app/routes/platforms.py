@@ -1615,40 +1615,71 @@ async def instagram_callback(
         if not access_token:
             return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_access_token")
         
-        # Fetch user profile information from Facebook (Instagram uses Facebook OAuth)
-        user_email = None
-        user_name = None
-        try:
-            profile_url = "https://graph.facebook.com/v18.0/me"
-            params = {
-                "access_token": access_token,
-                "fields": "email,name"
-            }
-            profile_response = requests.get(profile_url, params=params)
+        # Get user's Facebook Pages (Instagram Business Accounts are linked to Pages)
+        pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+        pages_params = {"access_token": access_token}
+        pages_response = requests.get(pages_url, params=pages_params, timeout=30)
+        
+        instagram_business_account_id = None
+        page_access_token = None
+        
+        if pages_response.status_code == 200:
+            pages_data = pages_response.json()
+            pages = pages_data.get("data", [])
             
-            if profile_response.status_code == 200:
-                profile_data = profile_response.json()
-                user_email = profile_data.get("email")
-                user_name = profile_data.get("name")
-                logger.info(f"✅ Fetched Instagram profile: email={user_email}, name={user_name}")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not fetch Instagram profile: {e}")
-            # Continue without profile info - connection still works
+            logger.info(f"🔍 Found {len(pages)} Facebook Pages for user {user_id}")
+            
+            # Find the first page with an Instagram Business Account
+            for page in pages:
+                page_id = page.get("id")
+                page_access_token = page.get("access_token")
+                
+                if not page_id or not page_access_token:
+                    continue
+                
+                # Get Instagram Business Account for this page
+                instagram_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                instagram_params = {
+                    "fields": "instagram_business_account",
+                    "access_token": page_access_token
+                }
+                instagram_response = requests.get(instagram_url, params=instagram_params, timeout=30)
+                
+                if instagram_response.status_code == 200:
+                    instagram_data = instagram_response.json()
+                    if instagram_data.get("instagram_business_account"):
+                        instagram_business_account_id = instagram_data["instagram_business_account"]["id"]
+                        logger.info(f"✅ Found Instagram Business Account ID: {instagram_business_account_id} for page {page_id}")
+                        # Use the page access token for Instagram API calls (not the user access token)
+                        access_token = page_access_token
+                        break
         
-        # Use email if available, otherwise use name, otherwise use a generic identifier
-        platform_user_identifier = user_email or user_name or "Instagram User"
+        if not instagram_business_account_id:
+            logger.warning(f"⚠️ No Instagram Business Account found for user {user_id}. User may need to link Instagram to a Facebook Page.")
+            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/account-settings?error=no_instagram_account&message=No Instagram Business Account found. Please ensure your Instagram account is linked to a Facebook Page.")
         
-        conn = db.query(PlatformConnection).filter(PlatformConnection.user_id == user_id, PlatformConnection.platform == PlatformEnum.INSTAGRAM).first()
+        # Store or update connection with the Instagram Business Account ID
+        conn = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == user_id,
+            PlatformConnection.platform == PlatformEnum.INSTAGRAM
+        ).first()
+        
         if conn:
             conn.access_token = access_token
+            conn.platform_user_id = instagram_business_account_id  # Store numeric Instagram Business Account ID
             conn.connected_at = datetime.now()
-            if platform_user_identifier:
-                conn.platform_user_id = platform_user_identifier
         else:
-            conn = PlatformConnection(user_id=user_id, platform=PlatformEnum.INSTAGRAM, access_token=access_token, platform_user_id=platform_user_identifier, connected_at=datetime.now())
+            conn = PlatformConnection(
+                user_id=user_id,
+                platform=PlatformEnum.INSTAGRAM,
+                access_token=access_token,
+                platform_user_id=instagram_business_account_id,  # Store numeric Instagram Business Account ID
+                connected_at=datetime.now()
+            )
             db.add(conn)
+        
         db.commit()
-        logger.info(f"✅ Instagram connection successful for user {user_id}")
+        logger.info(f"✅ Instagram connection successful for user {user_id}, Instagram Business Account ID: {instagram_business_account_id}")
         return RedirectResponse(url="https://themachine.vernalcontentum.com/account-settings?instagram=connected")
     except HTTPException:
         raise
