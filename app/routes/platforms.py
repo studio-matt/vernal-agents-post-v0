@@ -2051,6 +2051,31 @@ async def instagram_debug(
                     permissions_data = permissions_response.json()
                     granted = [p.get("permission") for p in permissions_data.get("data", []) if p.get("status") == "granted"]
                     debug_info["granted_permissions"] = granted
+                    
+                    # Check for missing required permissions
+                    required_permissions = [
+                        "pages_show_list",
+                        "pages_read_engagement", 
+                        "pages_manage_posts",
+                        "instagram_basic",
+                        "instagram_content_publish"
+                    ]
+                    missing_permissions = [p for p in required_permissions if p not in granted]
+                    if missing_permissions:
+                        debug_info["missing_required_permissions"] = missing_permissions
+                        debug_info["diagnosis"] = (
+                            "Token is missing required permissions. This usually means: "
+                            "1) The Facebook app is in Development mode and needs App Review, "
+                            "2) You declined permissions during authorization, or "
+                            "3) You need to disconnect and reconnect, granting ALL permissions."
+                        )
+                        debug_info["fix_steps"] = [
+                            "1. Disconnect Instagram in Account Settings",
+                            "2. Reconnect Instagram",
+                            "3. When Facebook asks for permissions, click 'Edit' or 'Customize'",
+                            "4. Ensure ALL requested permissions are checked",
+                            "5. Grant access to your Facebook Pages when prompted"
+                        ]
             except Exception as e:
                 debug_info["permissions_error"] = str(e)
         
