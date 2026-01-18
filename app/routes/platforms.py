@@ -1704,7 +1704,9 @@ async def instagram_callback(
             db.add(conn)
         
         db.commit()
-        logger.info(f"✅ Instagram connection successful for user {user_id}, Instagram Business Account ID: {instagram_business_account_id}")
+        logger.info(f"✅ Instagram connection successful for user {user_id}")
+        logger.info(f"📝 Stored user's Instagram Business Account ID: {instagram_business_account_id} (numeric ID for posting)")
+        logger.info(f"📝 Note: This is the USER's Instagram Business Account ID, not the application's App ID")
         return RedirectResponse(url="https://themachine.vernalcontentum.com/account-settings?instagram=connected")
     except HTTPException:
         raise
