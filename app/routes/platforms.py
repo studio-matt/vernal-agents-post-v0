@@ -1591,18 +1591,25 @@ async def instagram_auth_v2(
                     # Revoke all permissions for this token
                     revoke_url = "https://graph.facebook.com/me/permissions"
                     revoke_params = {"access_token": existing_connection.access_token}
+                    logger.info(f"🔄 Attempting to revoke Instagram token for user {current_user.id}...")
                     revoke_response = requests.delete(revoke_url, params=revoke_params, timeout=10)
                     if revoke_response.status_code == 200:
-                        logger.info(f"✅ Revoked existing Instagram token for user {current_user.id} before re-authorization")
+                        logger.info(f"✅ Successfully revoked existing Instagram token for user {current_user.id}")
+                        logger.info(f"📋 Revoke response: {revoke_response.text[:200]}")
                     else:
-                        logger.warning(f"⚠️ Failed to revoke existing token: {revoke_response.text[:200]}")
+                        logger.warning(f"⚠️ Failed to revoke existing token (status {revoke_response.status_code}): {revoke_response.text[:200]}")
                 except Exception as revoke_error:
                     logger.warning(f"⚠️ Error revoking existing token: {revoke_error}")
+                    import traceback
+                    logger.warning(f"⚠️ Revoke traceback: {traceback.format_exc()}")
             
             # Delete the connection from database to force Facebook to treat this as a new connection
-            logger.info(f"🗑️ Deleting existing Instagram connection for user {current_user.id} to force fresh authorization")
+            logger.info(f"🗑️ Deleting existing Instagram connection (ID: {existing_connection.id}) for user {current_user.id} to force fresh authorization")
             db.delete(existing_connection)
             db.commit()
+            logger.info(f"✅ Instagram connection deleted from database for user {current_user.id}")
+        else:
+            logger.info(f"ℹ️ No existing Instagram connection found for user {current_user.id} - proceeding with fresh authorization")
         
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
         # Scopes: instagram_basic, instagram_content_publish for Instagram posting
