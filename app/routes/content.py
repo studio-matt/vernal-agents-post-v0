@@ -2877,22 +2877,59 @@ async def post_content_now(
             # First, get user's pages to find the page to post to
             pages_url = "https://graph.facebook.com/v18.0/me/accounts"
             pages_params = {"access_token": connection.access_token}
+            logger.info(f"📘 Fetching Facebook Pages for user {current_user.id}...")
             pages_response = requests.get(pages_url, params=pages_params, timeout=30)
             
             if pages_response.status_code != 200:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Failed to get Facebook Pages: {pages_response.text[:200]}"
-                )
+                error_text = pages_response.text
+                logger.error(f"❌ Facebook Pages API failed (status {pages_response.status_code}): {error_text[:500]}")
+                
+                # Try to parse error for better message
+                try:
+                    error_json = pages_response.json()
+                    error_message = error_json.get("error", {}).get("message", error_text)
+                    error_code = error_json.get("error", {}).get("code", "")
+                    
+                    # Check if it's a permissions issue
+                    if "permission" in error_message.lower() or error_code in ["200", "10"]:
+                        detail = f"Missing Facebook permissions. The error was: {error_message}. Please disconnect and reconnect your Facebook account, ensuring you grant ALL requested permissions (pages_show_list, pages_read_engagement, pages_manage_posts)."
+                    else:
+                        detail = f"Failed to get Facebook Pages: {error_message}"
+                except:
+                    detail = f"Failed to get Facebook Pages: {error_text[:200]}"
+                
+                raise HTTPException(status_code=400, detail=detail)
             
             pages_data = pages_response.json()
             pages = pages_data.get("data", [])
+            logger.info(f"📘 Facebook Pages API returned {len(pages)} pages")
             
             if not pages:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No Facebook Pages found. Please create a Facebook Page and connect it to your account."
-                )
+                # Check what permissions the token actually has
+                try:
+                    permissions_url = "https://graph.facebook.com/v18.0/me/permissions"
+                    permissions_params = {"access_token": connection.access_token}
+                    permissions_response = requests.get(permissions_url, params=permissions_params, timeout=10)
+                    
+                    if permissions_response.status_code == 200:
+                        permissions_data = permissions_response.json()
+                        granted_perms = [p.get("permission") for p in permissions_data.get("data", []) if p.get("status") == "granted"]
+                        logger.info(f"📘 Granted Facebook permissions: {granted_perms}")
+                        
+                        required_perms = ["pages_show_list", "pages_read_engagement", "pages_manage_posts"]
+                        missing_perms = [p for p in required_perms if p not in granted_perms]
+                        
+                        if missing_perms:
+                            detail = f"No Facebook Pages found. Missing required permissions: {', '.join(missing_perms)}. Please disconnect and reconnect your Facebook account, ensuring you grant ALL requested permissions when Facebook shows the permission screen."
+                        else:
+                            detail = "No Facebook Pages found. Please create a Facebook Page at facebook.com/pages/create and ensure it's connected to your account."
+                    else:
+                        detail = "No Facebook Pages found. Please create a Facebook Page at facebook.com/pages/create and ensure it's connected to your account."
+                except Exception as perm_error:
+                    logger.warning(f"⚠️ Could not check permissions: {perm_error}")
+                    detail = "No Facebook Pages found. Please create a Facebook Page at facebook.com/pages/create and ensure it's connected to your account."
+                
+                raise HTTPException(status_code=400, detail=detail)
             
             # Use the first page (or could let user select)
             page = pages[0]
