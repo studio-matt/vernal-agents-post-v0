@@ -1620,13 +1620,15 @@ async def instagram_auth_v2(
         #   - instagram_basic: Basic Instagram access
         #   - instagram_content_publish: To publish to Instagram
         # 
-        # IMPORTANT: If Facebook only grants 'public_profile', it means:
-        #   1. User didn't see/click through the permission screen
-        #   2. Facebook App is in Development mode and user is not an admin/tester
-        #   3. Facebook is using cached permissions
+        # IMPORTANT: Facebook caches permissions on their side. Even if we delete our DB record
+        # and revoke the token, Facebook may still show "You previously logged in" and only grant
+        # basic permissions. The user MUST manually revoke permissions in Facebook Settings:
+        # Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook > 
+        # Find "Vernal Contentum" > Remove
         # 
         # auth_type=reauthorize should force permission screen, but Facebook may still cache
         # If user sees "You previously logged in", they MUST click "Continue" to see permission screen
+        # AND ensure they grant ALL requested permissions (especially pages_show_list and pages_read_engagement)
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
@@ -1638,8 +1640,13 @@ async def instagram_auth_v2(
         )
         
         logger.info(f"🔗 Instagram OAuth URL generated with scopes: pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish")
-        logger.info(f"⚠️ IMPORTANT: User must click 'Continue' on 'You previously logged in' dialog to see permission screen")
-        logger.info(f"⚠️ If only 'public_profile' is granted, check: 1) App mode (Dev vs Live), 2) User is admin/tester, 3) User clicked through permission screen")
+        logger.warning(f"⚠️ CRITICAL: If Facebook shows 'You previously logged in' and only grants 'public_profile':")
+        logger.warning(f"   1. User must manually revoke permissions in Facebook Settings:")
+        logger.warning(f"      Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook")
+        logger.warning(f"      Find 'Vernal Contentum' > Remove")
+        logger.warning(f"   2. Then try connecting again")
+        logger.warning(f"   3. When Facebook shows permission screen, ensure ALL permissions are granted")
+        logger.warning(f"   4. Check Facebook App is in correct mode (Dev vs Live) and user is admin/tester")
         
         if existing_connection:
             logger.info(f"🗑️ Connection deleted and auth URL generated for user {current_user.id} (Facebook may still show 'previously logged in' due to their caching)")

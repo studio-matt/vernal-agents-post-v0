@@ -2856,6 +2856,84 @@ async def post_content_now(
             post_id = publish_response.json().get("id")
             platform_name = "Instagram"
             
+        elif platform_lower == "facebook":
+            # Call Facebook posting logic (posts to Facebook Page)
+            connection = db.query(PlatformConnection).filter(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == PlatformEnum.FACEBOOK
+            ).first()
+            
+            if not connection or not connection.access_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Facebook not connected. Please connect your Facebook account first."
+                )
+            
+            # Facebook requires a Page ID to post to
+            # First, get user's pages to find the page to post to
+            pages_url = "https://graph.facebook.com/v18.0/me/accounts"
+            pages_params = {"access_token": connection.access_token}
+            pages_response = requests.get(pages_url, params=pages_params, timeout=30)
+            
+            if pages_response.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to get Facebook Pages: {pages_response.text[:200]}"
+                )
+            
+            pages_data = pages_response.json()
+            pages = pages_data.get("data", [])
+            
+            if not pages:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No Facebook Pages found. Please create a Facebook Page and connect it to your account."
+                )
+            
+            # Use the first page (or could let user select)
+            page = pages[0]
+            page_id = page.get("id")
+            page_access_token = page.get("access_token")
+            
+            if not page_id or not page_access_token:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Failed to get Facebook Page access token"
+                )
+            
+            logger.info(f"📘 Posting to Facebook Page ID: {page_id}")
+            
+            # Post to Facebook Page
+            post_url = f"https://graph.facebook.com/v18.0/{page_id}/feed"
+            post_params = {
+                "message": content_text,
+                "access_token": page_access_token
+            }
+            
+            # Add image if available
+            if image_url:
+                post_params["link"] = image_url
+            
+            post_response = requests.post(post_url, params=post_params, timeout=30)
+            
+            if post_response.status_code not in [200, 201]:
+                error_text = post_response.text
+                try:
+                    error_json = post_response.json()
+                    error_message = error_json.get("error", {}).get("message", error_text)
+                    user_friendly_error = f"Facebook API error: {error_message}"
+                except:
+                    user_friendly_error = f"Facebook API error: {error_text[:200]}"
+                
+                logger.error(f"❌ Facebook post failed: {error_text}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=user_friendly_error
+                )
+            
+            post_id = post_response.json().get("id")
+            platform_name = "Facebook"
+            
         elif platform_lower == "wordpress":
             # Call WordPress posting logic
             connection = db.query(PlatformConnection).filter(
@@ -2902,7 +2980,7 @@ async def post_content_now(
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported platform: {platform}. Supported platforms: linkedin, twitter, instagram, wordpress"
+                detail=f"Unsupported platform: {platform}. Supported platforms: linkedin, twitter, instagram, facebook, wordpress"
             )
         
         # Update content status if content_id exists
