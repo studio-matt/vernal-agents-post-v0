@@ -2858,12 +2858,16 @@ async def post_content_now(
             
         elif platform_lower == "facebook":
             # Call Facebook posting logic (posts to Facebook Page)
+            logger.info(f"📘 Facebook posting requested for user {current_user.id}")
             connection = db.query(PlatformConnection).filter(
                 PlatformConnection.user_id == current_user.id,
                 PlatformConnection.platform == PlatformEnum.FACEBOOK
             ).first()
             
+            logger.info(f"📘 Facebook connection found: {connection is not None}, has_token: {connection.access_token is not None if connection else False}")
+            
             if not connection or not connection.access_token:
+                logger.error(f"❌ Facebook not connected for user {current_user.id}")
                 raise HTTPException(
                     status_code=400,
                     detail="Facebook not connected. Please connect your Facebook account first."
