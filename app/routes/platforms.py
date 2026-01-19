@@ -1395,16 +1395,74 @@ async def facebook_auth_v2(
         
         db.commit()
         
+        # Check for existing Facebook connection and revoke/delete it to force fresh authorization
+        # This helps prevent Facebook from showing "You previously logged in" and only granting basic permissions
+        existing_connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == PlatformEnum.FACEBOOK
+        ).first()
+        
+        if existing_connection:
+            # First, try to revoke the token on Facebook's side
+            if existing_connection.access_token:
+                try:
+                    # Revoke all permissions for this token
+                    revoke_url = "https://graph.facebook.com/me/permissions"
+                    revoke_params = {"access_token": existing_connection.access_token}
+                    logger.info(f"🔄 Attempting to revoke Facebook token for user {current_user.id}...")
+                    revoke_response = requests.delete(revoke_url, params=revoke_params, timeout=10)
+                    if revoke_response.status_code == 200:
+                        logger.info(f"✅ Successfully revoked existing Facebook token for user {current_user.id}")
+                        logger.info(f"📋 Revoke response: {revoke_response.text[:200]}")
+                    else:
+                        logger.warning(f"⚠️ Failed to revoke existing token (status {revoke_response.status_code}): {revoke_response.text[:200]}")
+                except Exception as revoke_error:
+                    logger.warning(f"⚠️ Error revoking existing token: {revoke_error}")
+                    import traceback
+                    logger.warning(f"⚠️ Revoke traceback: {traceback.format_exc()}")
+            
+            # Delete the connection from database to force Facebook to treat this as a new connection
+            logger.info(f"🗑️ Deleting existing Facebook connection (ID: {existing_connection.id}) for user {current_user.id} to force fresh authorization")
+            db.delete(existing_connection)
+            db.commit()
+            logger.info(f"✅ Facebook connection deleted from database for user {current_user.id}")
+        else:
+            logger.info(f"ℹ️ No existing Facebook connection found for user {current_user.id} - proceeding with fresh authorization")
+        
         # Build Facebook OAuth URL
+        # CRITICAL: Facebook Pages permissions required for posting
+        # Scopes needed:
+        #   - pages_show_list: To list user's Facebook Pages
+        #   - pages_read_engagement: To read page engagement data
+        #   - pages_manage_posts: To post to Facebook Pages
+        # 
+        # IMPORTANT: Facebook caches permissions on their side. Even if we delete our DB record
+        # and revoke the token, Facebook may still show "You previously logged in" and only grant
+        # basic permissions. The user MUST manually revoke permissions in Facebook Settings:
+        # Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook > 
+        # Find "Vernal Contentum" > Remove
+        # 
+        # auth_type=reauthorize should force permission screen, but Facebook may still cache
+        # If user sees "You previously logged in", they MUST click "Continue" to see permission screen
+        # AND ensure they grant ALL requested permissions (especially pages_show_list, pages_read_engagement, pages_manage_posts)
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list"
+            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list&"
+            f"auth_type=reauthorize&"
+            f"response_type=code"
         )
         
-        logger.info(f"✅ Facebook auth URL generated for user {current_user.id}")
+        logger.info(f"✅ Facebook auth URL generated with scopes: pages_manage_posts,pages_read_engagement,pages_show_list")
+        logger.warning(f"⚠️ CRITICAL: If Facebook shows 'You previously logged in' and only grants 'public_profile':")
+        logger.warning(f"   1. User must manually revoke permissions in Facebook Settings:")
+        logger.warning(f"      Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook")
+        logger.warning(f"      Find 'Vernal Contentum' > Remove")
+        logger.warning(f"   2. Then try connecting again")
+        logger.warning(f"   3. When Facebook shows permission screen, ensure ALL permissions are granted")
+        logger.warning(f"   4. Check Facebook App is in correct mode (Dev vs Live) and user is admin/tester")
         return {
             "status": "success",
             "auth_url": auth_url
