@@ -1607,9 +1607,10 @@ async def instagram_auth_v2(
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
         # Scopes: instagram_basic, instagram_content_publish for Instagram posting
         # Also need pages_manage_posts, pages_read_engagement, pages_show_list for Facebook Pages (Instagram Business Accounts are linked to Pages)
-        # auth_type=reauthorize forces FULL re-authorization (Facebook doesn't support prompt=consent)
-        # Note: Even with reauthorize, Facebook may show "You previously logged in" if user is logged into Facebook
-        # The connection deletion above helps, but Facebook caches connections on their side
+        # auth_type=reauthorize forces FULL re-authorization
+        # Note: Facebook may show "You previously logged in" dialog even with reauthorize
+        # This is Facebook's internal caching. When user clicks "Continue", they should see permission screen
+        # The connection deletion above ensures our DB is clean, but Facebook caches on their side
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
@@ -1620,7 +1621,10 @@ async def instagram_auth_v2(
             f"response_type=code"
         )
         
-        logger.info(f"🔗 Generated auth URL (connection deleted: {existing_connection is not None})")
+        if existing_connection:
+            logger.info(f"🗑️ Connection deleted and auth URL generated for user {current_user.id} (Facebook may still show 'previously logged in' due to their caching)")
+        else:
+            logger.info(f"✅ Auth URL generated for user {current_user.id} (no existing connection to delete)")
         
         logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
         return {
