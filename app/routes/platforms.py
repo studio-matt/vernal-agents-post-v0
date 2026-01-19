@@ -1962,7 +1962,13 @@ async def instagram_callback(
                 error_msg = "No Facebook Pages found. "
                 if missing_perms:
                     error_msg += f"Missing permissions: {', '.join(missing_perms)}. "
-                error_msg += "Please: 1) Create a Facebook Page at facebook.com/pages/create, 2) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts, 3) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions."
+                error_msg += "CRITICAL: Facebook is only granting 'public_profile' instead of pages permissions. "
+                error_msg += "This happens because Facebook caches permissions on their side. "
+                error_msg += "SOLUTION: 1) Go to Facebook Settings > Apps and Websites > Logged in with Facebook, "
+                error_msg += "2) Find 'Vernal Contentum' and click 'Remove' to revoke all permissions, "
+                error_msg += "3) Create a Facebook Page at facebook.com/pages/create (if you don't have one), "
+                error_msg += "4) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts, "
+                error_msg += "5) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions when Facebook shows the permission screen."
                 
                 return RedirectResponse(url=build_oauth_error_url(
                     error="no_pages",
