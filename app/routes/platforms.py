@@ -1607,7 +1607,9 @@ async def instagram_auth_v2(
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
         # Scopes: instagram_basic, instagram_content_publish for Instagram posting
         # Also need pages_manage_posts, pages_read_engagement, pages_show_list for Facebook Pages (Instagram Business Accounts are linked to Pages)
-        # auth_type=reauthorize + prompt=consent forces FULL re-authorization with consent screen
+        # auth_type=reauthorize forces FULL re-authorization (Facebook doesn't support prompt=consent)
+        # Note: Even with reauthorize, Facebook may show "You previously logged in" if user is logged into Facebook
+        # The connection deletion above helps, but Facebook caches connections on their side
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
@@ -1615,9 +1617,10 @@ async def instagram_auth_v2(
             f"state={state}&"
             f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish&"
             f"auth_type=reauthorize&"
-            f"response_type=code&"
-            f"prompt=consent"
+            f"response_type=code"
         )
+        
+        logger.info(f"🔗 Generated auth URL (connection deleted: {existing_connection is not None})")
         
         logger.info(f"✅ Instagram auth URL generated for user {current_user.id}")
         return {
