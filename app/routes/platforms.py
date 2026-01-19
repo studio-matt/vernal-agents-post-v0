@@ -1612,12 +1612,21 @@ async def instagram_auth_v2(
             logger.info(f"ℹ️ No existing Instagram connection found for user {current_user.id} - proceeding with fresh authorization")
         
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
-        # Scopes: instagram_basic, instagram_content_publish for Instagram posting
-        # Also need pages_manage_posts, pages_read_engagement, pages_show_list for Facebook Pages (Instagram Business Accounts are linked to Pages)
-        # auth_type=reauthorize forces FULL re-authorization
-        # Note: Facebook may show "You previously logged in" dialog even with reauthorize
-        # This is Facebook's internal caching. When user clicks "Continue", they should see permission screen
-        # The connection deletion above ensures our DB is clean, but Facebook caches on their side
+        # CRITICAL: Instagram Business Accounts require Facebook Pages permissions
+        # Scopes needed:
+        #   - pages_show_list: To list user's Facebook Pages
+        #   - pages_read_engagement: To read page engagement data
+        #   - pages_manage_posts: To post to Facebook Pages (required for Instagram)
+        #   - instagram_basic: Basic Instagram access
+        #   - instagram_content_publish: To publish to Instagram
+        # 
+        # IMPORTANT: If Facebook only grants 'public_profile', it means:
+        #   1. User didn't see/click through the permission screen
+        #   2. Facebook App is in Development mode and user is not an admin/tester
+        #   3. Facebook is using cached permissions
+        # 
+        # auth_type=reauthorize should force permission screen, but Facebook may still cache
+        # If user sees "You previously logged in", they MUST click "Continue" to see permission screen
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
@@ -1627,6 +1636,10 @@ async def instagram_auth_v2(
             f"auth_type=reauthorize&"
             f"response_type=code"
         )
+        
+        logger.info(f"🔗 Instagram OAuth URL generated with scopes: pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish")
+        logger.info(f"⚠️ IMPORTANT: User must click 'Continue' on 'You previously logged in' dialog to see permission screen")
+        logger.info(f"⚠️ If only 'public_profile' is granted, check: 1) App mode (Dev vs Live), 2) User is admin/tester, 3) User clicked through permission screen")
         
         if existing_connection:
             logger.info(f"🗑️ Connection deleted and auth URL generated for user {current_user.id} (Facebook may still show 'previously logged in' due to their caching)")
