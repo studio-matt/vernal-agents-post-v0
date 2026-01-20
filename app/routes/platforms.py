@@ -2413,3 +2413,68 @@ async def instagram_debug(
             "status": "error",
             "message": str(e)
         }, status_code=500)
+
+@platforms_router.get("/platforms/{platform}/token")
+async def get_platform_token(
+    platform: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the full access token for a platform (for debugging in Meta Graph API Explorer)
+    
+    Returns the complete access token stored in the database so you can:
+    1. Copy it to Meta's Graph API Explorer: https://developers.facebook.com/tools/explorer/
+    2. Use it with Meta's Token Debugger: https://developers.facebook.com/tools/debug/accesstoken/
+    3. Check permissions and scopes directly
+    
+    Requires authentication.
+    """
+    try:
+        from models import PlatformConnection, PlatformEnum
+        
+        # Convert platform name to enum
+        try:
+            platform_enum = PlatformEnum[platform.upper()]
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"Invalid platform: {platform}")
+        
+        # Get connection for current user
+        connection = db.query(PlatformConnection).filter(
+            PlatformConnection.user_id == current_user.id,
+            PlatformConnection.platform == platform_enum
+        ).first()
+        
+        if not connection:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No {platform} connection found for your account"
+            )
+        
+        if not connection.access_token:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No access token stored for {platform} connection"
+            )
+        
+        return JSONResponse(content={
+            "status": "success",
+            "platform": platform,
+            "access_token": connection.access_token,
+            "platform_user_id": connection.platform_user_id,
+            "connected_at": connection.connected_at.isoformat() if connection.connected_at else None,
+            "expires_at": connection.expires_at.isoformat() if connection.expires_at else None,
+            "debug_urls": {
+                "graph_api_explorer": "https://developers.facebook.com/tools/explorer/",
+                "token_debugger": "https://developers.facebook.com/tools/debug/accesstoken/",
+                "permissions_check": f"https://graph.facebook.com/v18.0/me/permissions?access_token={connection.access_token}",
+                "debug_token": f"https://graph.facebook.com/v18.0/debug_token?input_token={connection.access_token}&access_token={connection.access_token}"
+            },
+            "note": "Copy the access_token above and paste it into Meta's Token Debugger or Graph API Explorer to check permissions and scopes."
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error retrieving {platform} token: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve token: {str(e)}")
