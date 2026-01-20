@@ -1678,15 +1678,29 @@ async def instagram_auth_v2(
         #   - instagram_basic: Basic Instagram access
         #   - instagram_content_publish: To publish to Instagram
         # 
-        # IMPORTANT: Facebook caches permissions on their side. Even if we delete our DB record
-        # and revoke the token, Facebook may still show "You previously logged in" and only grant
-        # basic permissions. The user MUST manually revoke permissions in Facebook Settings:
-        # Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook > 
-        # Find "Vernal Contentum" > Remove
+        # CRITICAL ISSUE: If Facebook only grants 'public_profile', it's likely because:
+        #   1. Facebook App is in Development mode - only admins/testers get full permissions
+        #   2. Permissions are not approved by Facebook App Review
+        #   3. User is not an admin/tester of the Facebook App
+        #   4. Facebook caches permissions server-side (even with auth_type=reauthorize)
         # 
-        # auth_type=reauthorize should force permission screen, but Facebook may still cache
-        # If user sees "You previously logged in", they MUST click "Continue" to see permission screen
-        # AND ensure they grant ALL requested permissions (especially pages_show_list and pages_read_engagement)
+        # SOLUTION:
+        #   A. Check Facebook App Dashboard:
+        #      - Go to developers.facebook.com/apps
+        #      - Select your app
+        #      - Check "App Review" > "Permissions and Features"
+        #      - Ensure pages_show_list, pages_read_engagement, pages_manage_posts are APPROVED
+        #      - If in Development mode, add user as Admin or Tester in "Roles" > "Roles"
+        #   
+        #   B. Manually revoke permissions (if cached):
+        #      - Facebook Settings > Apps and Websites > Logged in with Facebook
+        #      - Find "Vernal Contentum" > Remove
+        #      - Then reconnect
+        # 
+        #   C. When connecting, ensure:
+        #      - User clicks "Continue" on "You previously logged in" dialog
+        #      - User grants ALL requested permissions
+        #      - User has Admin/Editor role on the Facebook Page
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
@@ -1975,6 +1989,8 @@ async def instagram_callback(
             logger.warning(f"   2. Token doesn't have 'pages_show_list' permission")
             logger.warning(f"   3. User needs to grant page access permissions")
             logger.warning(f"   4. App is in Development mode and user is not an admin/tester")
+            logger.warning(f"   5. Permissions are not approved in Facebook App Review")
+            logger.warning(f"   6. User is not Admin/Editor on the Facebook Page")
             
             # Try alternative: check if user has pages via /me/permissions
             granted_permissions = []
@@ -2021,12 +2037,18 @@ async def instagram_callback(
                 if missing_perms:
                     error_msg += f"Missing permissions: {', '.join(missing_perms)}. "
                 error_msg += "CRITICAL: Facebook is only granting 'public_profile' instead of pages permissions. "
-                error_msg += "This happens because Facebook caches permissions on their side. "
-                error_msg += "SOLUTION: 1) Go to Facebook Settings > Apps and Websites > Logged in with Facebook, "
-                error_msg += "2) Find 'Vernal Contentum' and click 'Remove' to revoke all permissions, "
-                error_msg += "3) Create a Facebook Page at facebook.com/pages/create (if you don't have one), "
-                error_msg += "4) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts, "
-                error_msg += "5) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions when Facebook shows the permission screen."
+                error_msg += "This usually means: 1) Facebook App is in Development mode (only admins/testers get full permissions), "
+                error_msg += "2) Permissions are not approved in Facebook App Review, "
+                error_msg += "3) User is not an admin/tester of the Facebook App, "
+                error_msg += "4) Facebook caches permissions server-side. "
+                error_msg += "SOLUTION: A) Check Facebook App Dashboard (developers.facebook.com/apps): "
+                error_msg += "Go to App Review > Permissions and Features, ensure pages_show_list, pages_read_engagement, pages_manage_posts are APPROVED. "
+                error_msg += "If in Development mode, add user as Admin or Tester in Roles > Roles. "
+                error_msg += "B) Manually revoke permissions: Facebook Settings > Apps and Websites > Logged in with Facebook, "
+                error_msg += "Find 'Vernal Contentum' > Remove. "
+                error_msg += "C) Create a Facebook Page at facebook.com/pages/create (if you don't have one). "
+                error_msg += "D) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts. "
+                error_msg += "E) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions when Facebook shows the permission screen."
                 
                 return RedirectResponse(url=build_oauth_error_url(
                     error="no_pages",
