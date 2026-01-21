@@ -742,17 +742,21 @@ def create_content_generation_crew(
                     formatted = template_str.format(**kwargs)
                     return formatted
                 except KeyError as e:
-                    # Handle special case: {context} should use context_string if not in kwargs
+                    # When format() fails with KeyError, it fails on the FIRST missing variable
+                    # This means NO variables are replaced, even ones that ARE in kwargs
+                    # So we must manually replace ALL variables (both known and unknown)
                     result = template_str
                     for var in matches:
-                        if var not in kwargs:
-                            if var == 'context':
-                                # Replace {context} with actual context from text parameter
-                                # This includes content queue, brand guidelines, parent idea, etc.
-                                result = result.replace(f'{{{var}}}', context_string)
-                            else:
-                                # For other unknown variables, remove them (already warned above)
-                                result = result.replace(f'{{{var}}}', '')
+                        if var in kwargs:
+                            # Replace known variables first
+                            result = result.replace(f'{{{var}}}', str(kwargs[var]))
+                        elif var == 'context':
+                            # Replace {context} with actual context from text parameter
+                            # This includes content queue, brand guidelines, parent idea, etc.
+                            result = result.replace(f'{{{var}}}', context_string)
+                        else:
+                            # For other unknown variables, remove them (already warned above)
+                            result = result.replace(f'{{{var}}}', '')
                     return result
             
             # Use admin panel configuration if available, otherwise fall back to database task
