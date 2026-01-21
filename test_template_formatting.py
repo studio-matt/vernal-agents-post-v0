@@ -53,17 +53,19 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
         return formatted
     except KeyError as e:
         # If formatting fails, handle manually - this is the fallback path
+        # This matches the real implementation exactly
         result = template_str
         for var in matches:
-            if var in kwargs:
-                # Replace known variables
-                result = result.replace(f'{{{var}}}', str(kwargs[var]))
-            elif var == 'context':
-                # Handle context specially - use context_string parameter
-                result = result.replace(f'{{{var}}}', context_string)
+            if var not in kwargs:
+                if var == 'context':
+                    # Replace {context} with actual context from text parameter
+                    result = result.replace(f'{{{var}}}', context_string)
+                else:
+                    # For other unknown variables, remove them (already warned above)
+                    result = result.replace(f'{{{var}}}', '')
             else:
-                # For other unknown variables, remove them
-                result = result.replace(f'{{{var}}}', '')
+                # Replace known variables that ARE in kwargs
+                result = result.replace(f'{{{var}}}', str(kwargs[var]))
         return result
 
 
