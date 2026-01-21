@@ -85,11 +85,13 @@ def test_fallback_path_template_safety():
     context_string = "Campaign query: test query\nKeywords: test, keywords\nTopics: topic1, topic2"
     
     # Call the formatting function (simulating fallback path)
+    # Note: In the actual implementation, context is passed as context=context_string in kwargs
     result = format_template_string_fallback(
         platform_task_desc_description,
         context_string=context_string,
         week=week,
-        platform=platform
+        platform=platform,
+        context=context_string  # Also pass as context in kwargs (matches actual implementation)
     )
     
     print(f"\nInput template: {platform_task_desc_description}")
