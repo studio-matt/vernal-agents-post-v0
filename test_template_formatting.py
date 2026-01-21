@@ -55,21 +55,27 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
         return formatted
     except KeyError as e:
         # If formatting fails, handle manually - this is the fallback path
-        # IMPORTANT: When format() fails with KeyError, it means at least one variable is missing
-        # But format() processes ALL variables before raising, so known vars ARE replaced
-        # However, Python's format() raises KeyError immediately on first missing var
-        # So we need to manually replace ALL variables (both known and unknown)
+        # IMPORTANT: When format() fails with KeyError, it fails IMMEDIATELY on first missing var
+        # This means NO variables are replaced, not even ones that ARE in kwargs
+        # So we must manually replace ALL variables (both known and unknown)
         result = template_str
+        print(f"DEBUG: format() failed with KeyError: {e}")
+        print(f"DEBUG: Processing {len(matches)} variables: {matches}")
         for var in matches:
             if var in kwargs:
                 # Replace known variables first
-                result = result.replace(f'{{{var}}}', str(kwargs[var]))
-            elif var == 'context':
+                replacement = str(kwargs[var])
+                result = result.replace(f'{{{var}}}', replacement)
+                print(f"DEBUG: Replaced {{{var}}} with: {replacement[:50]}...")
+            elif var == 'context' and context_string:
                 # Replace {context} with actual context from text parameter
                 result = result.replace(f'{{{var}}}', context_string)
+                print(f"DEBUG: Replaced {{{var}}} with context_string (length: {len(context_string)})")
             else:
                 # For other unknown variables, remove them (already warned above)
                 result = result.replace(f'{{{var}}}', '')
+                print(f"DEBUG: Removed unknown variable {{{var}}}")
+        print(f"DEBUG: Final result: {result[:100]}...")
         return result
 
 
