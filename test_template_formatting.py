@@ -19,20 +19,20 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
     """
     Test version of format_template_string that simulates the fallback path.
     This mirrors the logic in crewai_workflows.py format_template_string function.
+    
+    IMPORTANT: This must match the actual implementation exactly.
+    In the real code, context is passed as context=context_string in kwargs.
     """
     if not template_str:
         return ""
+    
+    import os
     
     # Find all template variables
     pattern = r'\{([^}]+)\}'
     matches = re.findall(pattern, template_str)
     
-    # Add context to kwargs if it's not already there (context is handled specially)
-    # This matches the actual implementation where context is passed separately
-    if 'context' not in kwargs:
-        kwargs['context'] = context_string
-    
-    # Detect unknown variables (after adding context to kwargs)
+    # Detect unknown variables BEFORE trying to format
     unknown_vars = []
     for var in matches:
         if var not in kwargs:
@@ -41,23 +41,25 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
     # In test mode, we'll warn but not raise (simulating prod behavior)
     if unknown_vars:
         print(f"WARNING: Unresolved template vars would be removed: {unknown_vars}")
+        print(f"DEBUG: Available kwargs keys: {list(kwargs.keys())}")
+        print(f"DEBUG: Template variables found: {matches}")
     
-    # Try to format with provided variables (now including context)
+    # Try to format with provided variables
     try:
         formatted = template_str.format(**kwargs)
-        # Remove any remaining unknown variables that weren't caught
+        # If format succeeded, remove any unknown variables that were detected
         for var in unknown_vars:
             formatted = formatted.replace(var, '')
         return formatted
     except KeyError as e:
-        # If formatting still fails, handle manually
+        # If formatting fails, handle manually - this is the fallback path
         result = template_str
         for var in matches:
             if var in kwargs:
                 # Replace known variables
                 result = result.replace(f'{{{var}}}', str(kwargs[var]))
             elif var == 'context':
-                # Handle context specially
+                # Handle context specially - use context_string parameter
                 result = result.replace(f'{{{var}}}', context_string)
             else:
                 # For other unknown variables, remove them
@@ -85,17 +87,17 @@ def test_fallback_path_template_safety():
     context_string = "Campaign query: test query\nKeywords: test, keywords\nTopics: topic1, topic2"
     
     # Call the formatting function (simulating fallback path)
-    # Note: In the actual implementation, context is passed as context=context_string in kwargs
-    # We pass both context_string (for the function logic) and context in kwargs (for formatting)
+    # IMPORTANT: In the actual implementation, context is passed as context=context_string in kwargs
+    # The context_string parameter is only used in the exception handler fallback
     result = format_template_string_fallback(
         platform_task_desc_description,
-        context_string=context_string,  # Separate param for function logic
+        context_string=context_string,  # Used only if format() fails and context not in kwargs
         week=week,
         platform=platform,
-        context=context_string  # Also in kwargs for template formatting
+        context=context_string  # This is how it's actually passed in the real code
     )
     
-    print(f"DEBUG: kwargs passed: week={week}, platform={platform}, context={context_string[:30]}...")
+    print(f"DEBUG: kwargs passed: week={week}, platform={platform}, context present={('context' in {'week': week, 'platform': platform, 'context': context_string})}")
     
     print(f"\nInput template: {platform_task_desc_description}")
     print(f"Context string: {context_string[:50]}...")
