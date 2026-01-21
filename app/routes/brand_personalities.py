@@ -19,6 +19,92 @@ logger = logging.getLogger(__name__)
 
 brand_personalities_router = APIRouter()
 
+def extract_wordpress_fields(text: str) -> Dict[str, Optional[str]]:
+    """
+    Extract WordPress-specific fields (post_title, post_excerpt, permalink) from generated text.
+    Handles multiple formats:
+    - Separate sections: "Post Title: ...", "Excerpt: ...", "Permalink: ..."
+    - JSON blocks: {"post_title": "...", "post_excerpt": "...", "permalink": "..."}
+    - Markdown sections: ## Post Title\n...\n## Excerpt\n...
+    - Variable format: {post_title: "...", post_excerpt: "...", permalink: "..."}
+    """
+    import re
+    
+    result = {
+        "post_title": None,
+        "post_excerpt": None,
+        "permalink": None
+    }
+    
+    if not text:
+        return result
+    
+    # Try to extract from JSON-like format first
+    json_patterns = [
+        r'\{[^{}]*"post_title"\s*:\s*"([^"]+)"[^{}]*"post_excerpt"\s*:\s*"([^"]+)"[^{}]*"permalink"\s*:\s*"([^"]+)"[^{}]*\}',
+        r'\{[^{}]*post_title\s*:\s*"([^"]+)"[^{}]*post_excerpt\s*:\s*"([^"]+)"[^{}]*permalink\s*:\s*"([^"]+)"[^{}]*\}',
+    ]
+    
+    for pattern in json_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if match:
+            result["post_title"] = match.group(1).strip()
+            result["post_excerpt"] = match.group(2).strip()
+            result["permalink"] = match.group(3).strip()
+            return result
+    
+    # Try separate field extraction patterns
+    # Post Title patterns
+    title_patterns = [
+        r'Post Title\s*:?\s*(.+?)(?:\n|$|Excerpt|Permalink)',
+        r'##\s*Post Title\s*\n(.+?)(?:\n##|$)',
+        r'post_title\s*:?\s*"([^"]+)"',
+        r'post_title\s*:?\s*([^\n]+)',
+    ]
+    for pattern in title_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            result["post_title"] = match.group(1).strip()
+            break
+    
+    # Post Excerpt patterns
+    excerpt_patterns = [
+        r'Post Excerpt\s*:?\s*(.+?)(?:\n|$|Permalink|Post Title)',
+        r'Excerpt\s*:?\s*(.+?)(?:\n|$|Permalink|Post Title)',
+        r'##\s*Post Excerpt\s*\n(.+?)(?:\n##|$)',
+        r'##\s*Excerpt\s*\n(.+?)(?:\n##|$)',
+        r'post_excerpt\s*:?\s*"([^"]+)"',
+        r'post_excerpt\s*:?\s*(.+?)(?:\n|$|permalink)',
+    ]
+    for pattern in excerpt_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        if match:
+            excerpt = match.group(1).strip()
+            # Limit excerpt length (WordPress excerpts are typically 150-300 chars)
+            if len(excerpt) > 500:
+                excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
+            result["post_excerpt"] = excerpt
+            break
+    
+    # Permalink patterns
+    permalink_patterns = [
+        r'Permalink\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
+        r'Slug\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
+        r'##\s*Permalink\s*\n(.+?)(?:\n##|$)',
+        r'permalink\s*:?\s*"([^"]+)"',
+        r'permalink\s*:?\s*([^\n\s]+)',
+    ]
+    for pattern in permalink_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            permalink = match.group(1).strip()
+            # Clean permalink (remove special chars, make lowercase)
+            permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
+            result["permalink"] = permalink
+            break
+    
+    return result
+
 def get_db():
     """Get database session"""
     db = SessionLocal()
@@ -868,6 +954,12 @@ Generate content for {platform} based on the content queue items and campaign co
                                             update_task_status(progress=100, status="completed", task="Content generation completed")
                                             return
                                     
+                                    # Extract WordPress fields if platform is WordPress
+                                    wordpress_fields = {}
+                                    if platform.lower() == "wordpress":
+                                        wordpress_fields = extract_wordpress_fields(generated_text)
+                                        logger.info(f"📝 Extracted WordPress fields: {wordpress_fields}")
+                                    
                                     # Return author voice content directly
                                     response_data = {
                                         "content": generated_text,
@@ -877,6 +969,9 @@ Generate content for {platform} based on the content queue items and campaign co
                                         "author_voice_metadata": metadata,
                                         "platform": platform
                                     }
+                                    # Add WordPress fields if extracted
+                                    if wordpress_fields:
+                                        response_data.update(wordpress_fields)
                                     if validation_result:
                                         response_data["validation"] = validation_result
                                     CONTENT_GEN_TASKS[tid]["result"] = {
@@ -1026,9 +1121,19 @@ Generate content for {platform} based on the content queue items and campaign co
                             agent_status="completed"
                         )
                         
+                        # Extract WordPress fields from CrewAI result if platform is WordPress
+                        crew_data = crew_result.get("data", {})
+                        if platform.lower() == "wordpress":
+                            # Get content from crew result (could be in different fields)
+                            content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
+                            wordpress_fields = extract_wordpress_fields(content_text)
+                            if wordpress_fields:
+                                logger.info(f"📝 Extracted WordPress fields from CrewAI result: {wordpress_fields}")
+                                crew_data.update(wordpress_fields)
+                        
                         CONTENT_GEN_TASKS[tid]["result"] = {
                             "status": "success",
-                            "data": crew_result.get("data"),
+                            "data": crew_data,
                             "error": None
                         }
                         # Mark all agents as completed before final status update
@@ -1174,8 +1279,17 @@ Generate content for {platform} based on the content queue items above."""
                         
                         # Merge author voice metadata with CrewAI result
                         if crew_result.get("success"):
+                            crew_data = crew_result.get("data", {})
+                            # Extract WordPress fields if platform is WordPress
+                            if platform.lower() == "wordpress":
+                                content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
+                                wordpress_fields = extract_wordpress_fields(content_text)
+                                if wordpress_fields:
+                                    logger.info(f"📝 Extracted WordPress fields from CrewAI QC (sync): {wordpress_fields}")
+                                    crew_data.update(wordpress_fields)
+                            
                             response_data = {
-                                **crew_result.get("data", {}),
+                                **crew_data,
                                 "author_voice_used": True,
                                 "style_config": style_config,
                                 "author_voice_metadata": metadata
@@ -1189,6 +1303,12 @@ Generate content for {platform} based on the content queue items above."""
                                 "error": crew_result.get("error")
                             }
                     
+                    # Extract WordPress fields if platform is WordPress
+                    wordpress_fields = {}
+                    if platform.lower() == "wordpress":
+                        wordpress_fields = extract_wordpress_fields(generated_text)
+                        logger.info(f"📝 Extracted WordPress fields (sync): {wordpress_fields}")
+                    
                     # Return author voice generated content directly
                     response_data = {
                         "content": generated_text,
@@ -1198,6 +1318,9 @@ Generate content for {platform} based on the content queue items above."""
                         "author_voice_metadata": metadata,
                         "platform": platform
                     }
+                    # Add WordPress fields if extracted
+                    if wordpress_fields:
+                        response_data.update(wordpress_fields)
                     # Phase 4: Add validation results if available
                     if validation_result:
                         response_data["validation"] = validation_result
@@ -1219,9 +1342,18 @@ Generate content for {platform} based on the content queue items above."""
             author_personality=request_data.get("author_personality")
         )
         
+        # Extract WordPress fields if platform is WordPress
+        crew_data = crew_result.get("data", {})
+        if platform.lower() == "wordpress" and crew_result.get("success"):
+            content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
+            wordpress_fields = extract_wordpress_fields(content_text)
+            if wordpress_fields:
+                logger.info(f"📝 Extracted WordPress fields from CrewAI (sync fallback): {wordpress_fields}")
+                crew_data.update(wordpress_fields)
+        
         return {
             "status": "success" if crew_result.get("success") else "error",
-            "data": crew_result.get("data"),
+            "data": crew_data,
             "error": crew_result.get("error")
         }
         
