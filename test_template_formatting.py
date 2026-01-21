@@ -33,16 +33,20 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
     matches = re.findall(pattern, template_str)
     
     # Detect unknown variables BEFORE trying to format
+    # Note: context_string parameter is separate, context should be in kwargs
     unknown_vars = []
     for var in matches:
         if var not in kwargs:
-            unknown_vars.append(f"{{{var}}}")
+            # context_string is a separate parameter, not in kwargs by default
+            if var != 'context' or not context_string:
+                unknown_vars.append(f"{{{var}}}")
     
     # In test mode, we'll warn but not raise (simulating prod behavior)
     if unknown_vars:
         print(f"WARNING: Unresolved template vars would be removed: {unknown_vars}")
         print(f"DEBUG: Available kwargs keys: {list(kwargs.keys())}")
         print(f"DEBUG: Template variables found: {matches}")
+        print(f"DEBUG: context_string provided: {bool(context_string)}")
     
     # Try to format with provided variables
     try:
