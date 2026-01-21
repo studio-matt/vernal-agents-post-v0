@@ -3251,6 +3251,19 @@ async def save_content_item(
                 update_fields.append("platform = :platform")
                 update_values["platform"] = platform_db_value
             
+            # WordPress-specific fields (only update if columns exist and values provided)
+            if "post_title" in content_columns and item.get("post_title"):
+                update_fields.append("post_title = :post_title")
+                update_values["post_title"] = item.get("post_title")
+            
+            if "post_excerpt" in content_columns and item.get("post_excerpt"):
+                update_fields.append("post_excerpt = :post_excerpt")
+                update_values["post_excerpt"] = item.get("post_excerpt")
+            
+            if "permalink" in content_columns and item.get("permalink"):
+                update_fields.append("permalink = :permalink")
+                update_values["permalink"] = item.get("permalink")
+            
             if update_fields:
                 update_stmt = text(f"UPDATE content SET {', '.join(update_fields)} WHERE id = :id")
                 db.execute(update_stmt, update_values)
@@ -3328,6 +3341,16 @@ async def save_content_item(
                 
                 if "landing_page_url" in content_columns and item.get("landing_page_url"):
                     values["landing_page_url"] = item.get("landing_page_url")
+                
+                # WordPress-specific fields (only add if columns exist and values provided)
+                if "post_title" in content_columns and item.get("post_title"):
+                    values["post_title"] = item.get("post_title")
+                
+                if "post_excerpt" in content_columns and item.get("post_excerpt"):
+                    values["post_excerpt"] = item.get("post_excerpt")
+                
+                if "permalink" in content_columns and item.get("permalink"):
+                    values["permalink"] = item.get("permalink")
                 
                 if "use_without_image" in content_columns:
                     values["use_without_image"] = 1 if item.get("use_without_image", False) else 0

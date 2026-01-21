@@ -128,6 +128,10 @@ class Content(Base):
     knowledge_graph_location = Column(Text, nullable=True)  # Knowledge graph node/location this content is based on
     parent_idea = Column(Text, nullable=True)  # Parent idea this content supports
     landing_page_url = Column(String(500), nullable=True)  # Landing page URL this content drives traffic to
+    # WordPress-specific fields
+    post_title = Column(String(255), nullable=True)  # WordPress post title (SEO-optimized)
+    post_excerpt = Column(Text, nullable=True)  # WordPress post excerpt
+    permalink = Column(String(255), nullable=True)  # Optimized WordPress permalink/slug
     # NOTE: The following columns are NOT in the database schema:
     # content_processed_at, image_processed_at, content_published_at, image_published_at, use_without_image
     # If these are needed, add them via database migration first, then uncomment here
