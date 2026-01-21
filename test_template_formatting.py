@@ -47,25 +47,25 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
     # Try to format with provided variables
     try:
         formatted = template_str.format(**kwargs)
-        # If format succeeded, remove any unknown variables that were detected
-        for var in unknown_vars:
-            formatted = formatted.replace(var, '')
+        # If format succeeded, all variables in template were in kwargs, so we're done
         return formatted
     except KeyError as e:
         # If formatting fails, handle manually - this is the fallback path
-        # This matches the real implementation exactly
+        # IMPORTANT: When format() fails with KeyError, it means at least one variable is missing
+        # But format() processes ALL variables before raising, so known vars ARE replaced
+        # However, Python's format() raises KeyError immediately on first missing var
+        # So we need to manually replace ALL variables (both known and unknown)
         result = template_str
         for var in matches:
-            if var not in kwargs:
-                if var == 'context':
-                    # Replace {context} with actual context from text parameter
-                    result = result.replace(f'{{{var}}}', context_string)
-                else:
-                    # For other unknown variables, remove them (already warned above)
-                    result = result.replace(f'{{{var}}}', '')
-            else:
-                # Replace known variables that ARE in kwargs
+            if var in kwargs:
+                # Replace known variables first
                 result = result.replace(f'{{{var}}}', str(kwargs[var]))
+            elif var == 'context':
+                # Replace {context} with actual context from text parameter
+                result = result.replace(f'{{{var}}}', context_string)
+            else:
+                # For other unknown variables, remove them (already warned above)
+                result = result.replace(f'{{{var}}}', '')
         return result
 
 
