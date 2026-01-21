@@ -716,7 +716,13 @@ def create_content_generation_crew(
                 )
                 logger.info(f"✅ Using {platform.capitalize()} Writer expected_output from SystemSettings (admin panel)")
             elif platform_task_desc:
-                writing_expected_output = platform_task_desc.expected_output
+                # CRITICAL: Even fallback expected_output must be formatted to remove {context} and other template variables
+                writing_expected_output = format_template_string(
+                    platform_task_desc.expected_output,
+                    week=week,
+                    platform=platform,
+                    context=context_string
+                )
                 logger.warning(f"⚠️ Using fallback expected_output from database task (admin panel config not found)")
             else:
                 writing_expected_output = f"Create engaging {platform} content based on the research analysis."
@@ -732,7 +738,13 @@ def create_content_generation_crew(
                 )
                 logger.info(f"✅ Using {platform} Writer description from SystemSettings (admin panel)")
             elif platform_task_desc:
-                writing_description = platform_task_desc.description
+                # CRITICAL: Even fallback descriptions must be formatted to remove {context} and other template variables
+                writing_description = format_template_string(
+                    platform_task_desc.description,
+                    week=week,
+                    platform=platform,
+                    context=context_string
+                )
                 logger.warning(f"⚠️ Using fallback description from database task (admin panel config not found)")
             else:
                 writing_description = f"Create {platform}-specific content based on the research output."
@@ -1763,9 +1775,50 @@ def create_research_to_writing_crew(
             agent=script_research_agent
         )
         
+        # Format template variables in description and expected_output to prevent CrewAI errors
+        # Extract context from text if available
+        context_string = text  # Fallback to full text
+        if "Campaign Context:" in text:
+            context_start = text.find("Campaign Context:")
+            context_end = text.find("\n\nGenerate content", context_start)
+            if context_end == -1:
+                context_end = len(text)
+            context_string = text[context_start:context_end].replace("Campaign Context:", "").strip()
+        
+        def format_template_string_simple(template_str: str, **kwargs) -> str:
+            """Format template string, replacing known variables and escaping unknown ones"""
+            if not template_str:
+                return ""
+            try:
+                return template_str.format(**kwargs)
+            except (KeyError, ValueError):
+                import re
+                pattern = r'\{([^}]+)\}'
+                matches = re.findall(pattern, template_str)
+                for var in matches:
+                    if var not in kwargs:
+                        if var == 'context':
+                            template_str = template_str.replace(f'{{{var}}}', context_string)
+                        else:
+                            template_str = template_str.replace(f'{{{var}}}', '')
+                return template_str
+        
+        formatted_writing_description = format_template_string_simple(
+            platform_task_desc.description,
+            week=week,
+            platform=platform,
+            context=context_string
+        )
+        formatted_writing_expected_output = format_template_string_simple(
+            platform_task_desc.expected_output,
+            week=week,
+            platform=platform,
+            context=context_string
+        )
+        
         # Writing task
         writing_task = Task(
-            description=f"""{platform_task_desc.description}
+            description=f"""{formatted_writing_description}
             
             Create {platform}-specific content based on the research output from the previous agent.
             Platform: {platform}
@@ -1773,7 +1826,7 @@ def create_research_to_writing_crew(
             
             The research agent has analyzed the text. Use that analysis to create engaging content.
             """,
-            expected_output=platform_task_desc.expected_output,
+            expected_output=formatted_writing_expected_output,
             agent=writing_agent
         )
         
