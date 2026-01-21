@@ -86,13 +86,16 @@ def test_fallback_path_template_safety():
     
     # Call the formatting function (simulating fallback path)
     # Note: In the actual implementation, context is passed as context=context_string in kwargs
+    # We pass both context_string (for the function logic) and context in kwargs (for formatting)
     result = format_template_string_fallback(
         platform_task_desc_description,
-        context_string=context_string,
+        context_string=context_string,  # Separate param for function logic
         week=week,
         platform=platform,
-        context=context_string  # Also pass as context in kwargs (matches actual implementation)
+        context=context_string  # Also in kwargs for template formatting
     )
+    
+    print(f"DEBUG: kwargs passed: week={week}, platform={platform}, context={context_string[:30]}...")
     
     print(f"\nInput template: {platform_task_desc_description}")
     print(f"Context string: {context_string[:50]}...")
