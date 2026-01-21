@@ -19,77 +19,180 @@ logger = logging.getLogger(__name__)
 
 brand_personalities_router = APIRouter()
 
-def extract_wordpress_fields(text: str) -> Dict[str, Optional[str]]:
+def extract_wordpress_fields(text: str) -> Dict[str, Any]:
     """
     Extract WordPress-specific fields (post_title, post_excerpt, permalink) from generated text.
-    Handles multiple formats:
-    - Markdown with **Excerpt:** and **Permalink/Slug:** (most common)
-    - H1 title as post title: # Title
-    - Separate sections: "Post Title: ...", "Excerpt: ...", "Permalink: ..."
-    - JSON blocks: {"post_title": "...", "post_excerpt": "...", "permalink": "..."}
-    - Variable format: {post_title: "...", post_excerpt: "...", permalink: "..."}
+    
+    Format precedence (highest to lowest):
+    1. Canonical format: "Post Title: ...", "Post Excerpt: ...", "Permalink: ...", "Article Body: ..."
+    2. JSON format: {"post_title": "...", "post_excerpt": "...", "permalink": "..."}
+    3. Markdown fallback: # Title, **Excerpt:**, **Permalink/Slug:**
+    4. Heuristic: First H1, first paragraph, etc.
+    
+    Returns dict with fields and metadata about format detected.
     """
     import re
     
     result = {
         "post_title": None,
         "post_excerpt": None,
-        "permalink": None
+        "permalink": None,
+        "format_detected": None,
+        "extracted_title_len": 0,
+        "extracted_excerpt_len": 0,
+        "extracted_slug_len": 0,
+        "body_starts_with": None
     }
     
     if not text:
         return result
     
-    # PRIORITY 1: Extract H1 title as post title (most reliable - first heading)
-    # Match: # Title (at start of line or after whitespace)
+    # PRIORITY 1: Canonical format (Post Title: / Post Excerpt: / Permalink: / Article Body:)
+    # This is the preferred, deterministic format
+    canonical_title = re.search(r'^Post Title:\s*(.+?)(?:\n|$)', text, re.IGNORECASE | re.MULTILINE)
+    canonical_excerpt = re.search(r'^Post Excerpt:\s*(.+?)(?:\n(?:Post |Permalink|Article)|$)', text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    canonical_permalink = re.search(r'^Permalink:\s*([^\n]+)', text, re.IGNORECASE | re.MULTILINE)
+    canonical_body_marker = re.search(r'^Article Body:\s*', text, re.IGNORECASE | re.MULTILINE)
+    
+    if canonical_title or canonical_excerpt or canonical_permalink:
+        result["format_detected"] = "canonical"
+        if canonical_title:
+            title = canonical_title.group(1).strip()
+            if title and len(title) > 5:
+                result["post_title"] = title
+                result["extracted_title_len"] = len(title)
+        if canonical_excerpt:
+            excerpt = canonical_excerpt.group(1).strip()
+            # Limit excerpt length
+            if len(excerpt) > 500:
+                excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
+            if excerpt and len(excerpt) > 10:
+                result["post_excerpt"] = excerpt
+                result["extracted_excerpt_len"] = len(excerpt)
+        if canonical_permalink:
+            permalink = canonical_permalink.group(1).strip()
+            # Clean permalink
+            permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
+            permalink = re.sub(r'-+', '-', permalink).strip('-')
+            if permalink and len(permalink) > 3:
+                result["permalink"] = permalink
+                result["extracted_slug_len"] = len(permalink)
+        
+        # Extract body start if Article Body marker exists
+        if canonical_body_marker:
+            body_start = text[canonical_body_marker.end():].strip()[:60]
+            result["body_starts_with"] = body_start
+        
+        # If we got canonical format, return early (don't check fallbacks)
+        if result["post_title"] or result["post_excerpt"] or result["permalink"]:
+            return result
+    
+    # PRIORITY 2: JSON format
+    json_patterns = [
+        r'\{[^{}]*"post_title"\s*:\s*"([^"]+)"[^{}]*"post_excerpt"\s*:\s*"([^"]+)"[^{}]*"permalink"\s*:\s*"([^"]+)"[^{}]*\}',
+        r'\{[^{}]*post_title\s*:\s*"([^"]+)"[^{}]*post_excerpt\s*:\s*"([^"]+)"[^{}]*permalink\s*:\s*"([^"]+)"[^{}]*\}',
+    ]
+    
+    for pattern in json_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if match:
+            result["format_detected"] = "json"
+            if match.group(1):
+                result["post_title"] = match.group(1).strip()
+                result["extracted_title_len"] = len(result["post_title"])
+            if match.group(2):
+                result["post_excerpt"] = match.group(2).strip()
+                result["extracted_excerpt_len"] = len(result["post_excerpt"])
+            if match.group(3):
+                permalink = match.group(3).strip()
+                permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
+                permalink = re.sub(r'-+', '-', permalink).strip('-')
+                result["permalink"] = permalink
+                result["extracted_slug_len"] = len(permalink)
+            return result
+    
+    # PRIORITY 3: Markdown fallback (# Title, **Excerpt:**, **Permalink/Slug:**)
     h1_title = re.search(r'^#\s+(.+?)(?:\n|$)', text, re.MULTILINE)
-    if h1_title:
-        title = h1_title.group(1).strip()
-        # Remove markdown formatting but keep the title
-        title = re.sub(r'\*\*|__', '', title).strip()
-        if title and len(title) > 5:  # Must be meaningful
-            result["post_title"] = title
-    
-    # PRIORITY 2: Extract from markdown format with **Excerpt:** and **Permalink/Slug:**
-    # Format: **Excerpt:** ...\n\n**Permalink/Slug:** ...
-    # Match excerpt that ends at next ** or --- or double newline
     excerpt_markdown = re.search(r'\*\*Excerpt:\*\*\s*(.+?)(?:\n\n|\n\*\*|\n---|$)', text, re.IGNORECASE | re.DOTALL)
-    if excerpt_markdown:
-        excerpt = excerpt_markdown.group(1).strip()
-        # Remove markdown formatting
-        excerpt = re.sub(r'\*\*|__|#+', '', excerpt).strip()
-        # Remove trailing periods if it's a sentence
-        excerpt = excerpt.rstrip('.')
-        # Stop at first sentence if it's too long (excerpts should be concise)
-        sentences = re.split(r'[.!?]\s+', excerpt)
-        if sentences and len(sentences[0]) < 300:
-            excerpt = sentences[0].rstrip('.')
-        # Limit excerpt length (WordPress excerpts are typically 150-300 chars)
-        if len(excerpt) > 500:
-            excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
-        if excerpt and len(excerpt) > 10:  # Must be meaningful
-            result["post_excerpt"] = excerpt
-    
-    # Extract permalink - can be "Permalink/Slug:" or just "Permalink:"
-    # Match: **Permalink/Slug:** slug-text (single line)
     permalink_markdown = re.search(r'\*\*Permalink/Slug:\*\*\s*([^\n]+)', text, re.IGNORECASE)
     if not permalink_markdown:
         permalink_markdown = re.search(r'\*\*Permalink:\*\*\s*([^\n]+)', text, re.IGNORECASE)
-    if permalink_markdown:
-        permalink = permalink_markdown.group(1).strip()
-        # Clean permalink (remove special chars except hyphens, make lowercase)
-        # But first, if it already looks like a slug, use it as-is
-        if re.match(r'^[a-z0-9-]+$', permalink.lower()):
-            result["permalink"] = permalink.lower()
-        else:
-            # Clean it - remove everything except alphanumeric and hyphens
-            permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
-            # Remove multiple consecutive hyphens
-            permalink = re.sub(r'-+', '-', permalink)
-            # Remove leading/trailing hyphens
-            permalink = permalink.strip('-')
-            if permalink and len(permalink) > 3:  # Must be meaningful
-                result["permalink"] = permalink
+    
+    if h1_title or excerpt_markdown or permalink_markdown:
+        result["format_detected"] = "markdown_fallback"
+        
+        if h1_title:
+            title = h1_title.group(1).strip()
+            title = re.sub(r'\*\*|__', '', title).strip()
+            if title and len(title) > 5:
+                result["post_title"] = title
+                result["extracted_title_len"] = len(title)
+        
+        if excerpt_markdown:
+            excerpt = excerpt_markdown.group(1).strip()
+            excerpt = re.sub(r'\*\*|__|#+', '', excerpt).strip().rstrip('.')
+            sentences = re.split(r'[.!?]\s+', excerpt)
+            if sentences and len(sentences[0]) < 300:
+                excerpt = sentences[0].rstrip('.')
+            if len(excerpt) > 500:
+                excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
+            if excerpt and len(excerpt) > 10:
+                result["post_excerpt"] = excerpt
+                result["extracted_excerpt_len"] = len(excerpt)
+        
+        if permalink_markdown:
+            permalink = permalink_markdown.group(1).strip()
+            if re.match(r'^[a-z0-9-]+$', permalink.lower()):
+                result["permalink"] = permalink.lower()
+            else:
+                permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
+                permalink = re.sub(r'-+', '-', permalink).strip('-')
+                if permalink and len(permalink) > 3:
+                    result["permalink"] = permalink
+            if result["permalink"]:
+                result["extracted_slug_len"] = len(result["permalink"])
+        
+        # Extract body start (after first --- or after permalink section)
+        body_match = re.search(r'(?:---|\*\*Permalink[^\n]+\n)', text, re.IGNORECASE)
+        if body_match:
+            body_start = text[body_match.end():].strip()[:60]
+            result["body_starts_with"] = body_start
+        
+        # If we got any markdown fields, return (don't check heuristics)
+        if result["post_title"] or result["post_excerpt"] or result["permalink"]:
+            return result
+    
+    # PRIORITY 4: Heuristic fallback (last resort)
+    # Only use if nothing else matched
+    result["format_detected"] = "heuristic"
+    
+    # Try to get title from first H1 or first line
+    if not result["post_title"]:
+        h1_heuristic = re.search(r'^#\s+(.+?)(?:\n|$)', text, re.MULTILINE)
+        if h1_heuristic:
+            title = h1_heuristic.group(1).strip()
+            title = re.sub(r'\*\*|__|#+', '', title).strip()
+            if title and len(title) > 5:
+                result["post_title"] = title
+                result["extracted_title_len"] = len(title)
+    
+    # Try to get excerpt from first paragraph
+    if not result["post_excerpt"]:
+        first_para = re.search(r'^(?:[^\n]+\n){1,3}(.+?)(?:\n\n|\n#|$)', text, re.MULTILINE | re.DOTALL)
+        if first_para:
+            excerpt = first_para.group(1).strip()
+            excerpt = re.sub(r'\*\*|__|#+', '', excerpt).strip()
+            if len(excerpt) > 500:
+                excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
+            if excerpt and len(excerpt) > 10:
+                result["post_excerpt"] = excerpt
+                result["extracted_excerpt_len"] = len(excerpt)
+    
+    # Extract body start
+    if text:
+        result["body_starts_with"] = text.strip()[:60]
+    
+    return result
     
     # PRIORITY 3: Try JSON-like format
     json_patterns = [
@@ -1017,7 +1120,21 @@ Generate content for {platform} based on the content queue items and campaign co
                                     # Extract WordPress fields if platform is WordPress
                                     wordpress_fields = {}
                                     if platform.lower() == "wordpress":
-                                        wordpress_fields = extract_wordpress_fields(generated_text)
+                                        extraction_result = extract_wordpress_fields(generated_text)
+                                        format_detected = extraction_result.get("format_detected", "unknown")
+                                        
+                                        # Log contract compliance
+                                        logger.info(f"📝 WordPress fields extraction - Format: {format_detected}")
+                                        
+                                        wordpress_fields = {
+                                            "post_title": extraction_result.get("post_title"),
+                                            "post_excerpt": extraction_result.get("post_excerpt"),
+                                            "permalink": extraction_result.get("permalink"),
+                                            "format_detected": format_detected
+                                        }
+                                        
+                                        if format_detected != "canonical":
+                                            logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
                                         logger.info(f"📝 Extracted WordPress fields from generated_text (first 500 chars): {generated_text[:500]}")
                                         logger.info(f"📝 Extracted WordPress fields result: {wordpress_fields}")
                                     
@@ -1199,13 +1316,32 @@ Generate content for {platform} based on the content queue items and campaign co
                             if isinstance(content_text, dict):
                                 content_text = content_text.get("content", "") or content_text.get("text", "") or str(content_text)
                             
-                            logger.info(f"📝 Extracting WordPress fields from CrewAI. Content preview (first 500 chars): {str(content_text)[:500]}")
-                            wordpress_fields = extract_wordpress_fields(str(content_text))
-                            if wordpress_fields:
-                                logger.info(f"📝 Extracted WordPress fields from CrewAI result: {wordpress_fields}")
+                            extraction_result = extract_wordpress_fields(str(content_text))
+                            format_detected = extraction_result.get("format_detected", "unknown")
+                            
+                            # Log contract compliance
+                            logger.info(f"📝 WordPress fields extraction (CrewAI) - Format: {format_detected}")
+                            logger.info(f"📝 Extracted - Title: {extraction_result.get('extracted_title_len', 0)} chars, "
+                                      f"Excerpt: {extraction_result.get('extracted_excerpt_len', 0)} chars, "
+                                      f"Slug: {extraction_result.get('extracted_slug_len', 0)} chars")
+                            logger.info(f"📝 Body starts with: {extraction_result.get('body_starts_with', 'N/A')}")
+                            
+                            # Extract just the fields (not metadata)
+                            wordpress_fields = {
+                                "post_title": extraction_result.get("post_title"),
+                                "post_excerpt": extraction_result.get("post_excerpt"),
+                                "permalink": extraction_result.get("permalink"),
+                                "format_detected": format_detected  # Include for frontend warning
+                            }
+                            
+                            if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                                 crew_data.update(wordpress_fields)
+                                if format_detected != "canonical":
+                                    logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
+                                                 f"Consider updating writing prompt to use canonical format.")
                             else:
-                                logger.warning(f"⚠️ No WordPress fields extracted from CrewAI result. Content type: {type(content_text)}, length: {len(str(content_text))}")
+                                logger.warning(f"⚠️ No WordPress fields extracted from CrewAI result. Format: {format_detected}, "
+                                             f"Content type: {type(content_text)}, length: {len(str(content_text))}")
                         
                         CONTENT_GEN_TASKS[tid]["result"] = {
                             "status": "success",
@@ -1359,10 +1495,22 @@ Generate content for {platform} based on the content queue items above."""
                             # Extract WordPress fields if platform is WordPress
                             if platform.lower() == "wordpress":
                                 content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
-                                wordpress_fields = extract_wordpress_fields(content_text)
-                                if wordpress_fields:
-                                    logger.info(f"📝 Extracted WordPress fields from CrewAI QC (sync): {wordpress_fields}")
+                                extraction_result = extract_wordpress_fields(str(content_text))
+                                format_detected = extraction_result.get("format_detected", "unknown")
+                                
+                                # Log contract compliance
+                                logger.info(f"📝 WordPress fields extraction (CrewAI QC sync) - Format: {format_detected}")
+                                
+                                wordpress_fields = {
+                                    "post_title": extraction_result.get("post_title"),
+                                    "post_excerpt": extraction_result.get("post_excerpt"),
+                                    "permalink": extraction_result.get("permalink"),
+                                    "format_detected": format_detected
+                                }
+                                if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                                     crew_data.update(wordpress_fields)
+                                    if format_detected != "canonical":
+                                        logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
                             
                             response_data = {
                                 **crew_data,
@@ -1379,15 +1527,33 @@ Generate content for {platform} based on the content queue items above."""
                                 "error": crew_result.get("error")
                             }
                     
-                    # Extract WordPress fields if platform is WordPress
-                    wordpress_fields = {}
-                    if platform.lower() == "wordpress":
-                        logger.info(f"📝 Extracting WordPress fields from generated_text (length: {len(generated_text)})")
-                        logger.info(f"📝 First 1000 chars of generated_text: {generated_text[:1000]}")
-                        wordpress_fields = extract_wordpress_fields(generated_text)
-                        logger.info(f"📝 Extracted WordPress fields (sync): {wordpress_fields}")
-                        if not any(wordpress_fields.values()):
-                            logger.warning(f"⚠️ No WordPress fields extracted! Generated text preview: {generated_text[:500]}")
+                                    # Extract WordPress fields if platform is WordPress
+                                    wordpress_fields = {}
+                                    if platform.lower() == "wordpress":
+                                        extraction_result = extract_wordpress_fields(generated_text)
+                                        format_detected = extraction_result.get("format_detected", "unknown")
+                                        
+                                        # Log contract compliance
+                                        logger.info(f"📝 WordPress fields extraction - Format: {format_detected}")
+                                        logger.info(f"📝 Extracted - Title: {extraction_result.get('extracted_title_len', 0)} chars, "
+                                                  f"Excerpt: {extraction_result.get('extracted_excerpt_len', 0)} chars, "
+                                                  f"Slug: {extraction_result.get('extracted_slug_len', 0)} chars")
+                                        logger.info(f"📝 Body starts with: {extraction_result.get('body_starts_with', 'N/A')}")
+                                        
+                                        # Extract just the fields (not metadata)
+                                        wordpress_fields = {
+                                            "post_title": extraction_result.get("post_title"),
+                                            "post_excerpt": extraction_result.get("post_excerpt"),
+                                            "permalink": extraction_result.get("permalink"),
+                                            "format_detected": format_detected  # Include for frontend warning
+                                        }
+                                        
+                                        if format_detected != "canonical":
+                                            logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
+                                                         f"Consider updating writing prompt to use canonical format.")
+                                        if not any([wordpress_fields.get("post_title"), wordpress_fields.get("post_excerpt"), wordpress_fields.get("permalink")]):
+                                            logger.warning(f"⚠️ No WordPress fields extracted! Format: {format_detected}, "
+                                                         f"Generated text preview: {generated_text[:500]}")
                     
                     # Return author voice generated content directly
                     response_data = {
@@ -1426,10 +1592,22 @@ Generate content for {platform} based on the content queue items above."""
         crew_data = crew_result.get("data", {})
         if platform.lower() == "wordpress" and crew_result.get("success"):
             content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
-            wordpress_fields = extract_wordpress_fields(content_text)
-            if wordpress_fields:
-                logger.info(f"📝 Extracted WordPress fields from CrewAI (sync fallback): {wordpress_fields}")
+            extraction_result = extract_wordpress_fields(str(content_text))
+            format_detected = extraction_result.get("format_detected", "unknown")
+            
+            # Log contract compliance
+            logger.info(f"📝 WordPress fields extraction (sync fallback) - Format: {format_detected}")
+            
+            wordpress_fields = {
+                "post_title": extraction_result.get("post_title"),
+                "post_excerpt": extraction_result.get("post_excerpt"),
+                "permalink": extraction_result.get("permalink"),
+                "format_detected": format_detected
+            }
+            if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                 crew_data.update(wordpress_fields)
+                if format_detected != "canonical":
+                    logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
         
         return {
             "status": "success" if crew_result.get("success") else "error",
