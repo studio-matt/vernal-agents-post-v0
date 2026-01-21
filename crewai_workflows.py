@@ -678,38 +678,89 @@ def create_content_generation_crew(
                 # Fallback: use the full text if campaign context section not found
                 context_string = text
             
-            # Helper function to replace template variables with actual values or escape them
-            def format_template_string(template_str: str, **kwargs) -> str:
-                """Format template string, replacing known variables and escaping unknown ones"""
+            # Helper function to replace template variables with actual values or escape unknown ones
+            def format_template_string(template_str: str, setting_key: str = None, **kwargs) -> str:
+                """
+                Format template string, replacing known variables and escaping unknown ones.
+                
+                Args:
+                    template_str: The template string to format
+                    setting_key: Optional setting key for better error messages
+                    **kwargs: Variables to substitute in the template
+                
+                Returns:
+                    Formatted string with all template variables resolved
+                
+                Raises:
+                    ValueError: In dev mode if unknown template variables are found
+                """
                 if not template_str:
                     return ""
+                
+                import re
+                import os
+                
+                # Find all template variables
+                pattern = r'\{([^}]+)\}'
+                matches = re.findall(pattern, template_str)
+                
+                # Detect unknown variables
+                unknown_vars = []
+                for var in matches:
+                    if var not in kwargs:
+                        unknown_vars.append(f"{{{var}}}")
+                
+                # Handle unknown variables
+                if unknown_vars:
+                    # Check if we're in dev mode (ENVIRONMENT=development or DEBUG=true)
+                    is_dev = (
+                        os.getenv("ENVIRONMENT", "").lower() == "development" or
+                        os.getenv("DEBUG", "").lower() == "true"
+                    )
+                    
+                    setting_info = f" for key={setting_key}" if setting_key else ""
+                    
+                    if is_dev:
+                        # In dev mode: raise error to catch config mistakes immediately
+                        error_msg = (
+                            f"ERROR: Unresolved template variables found{setting_info}: {unknown_vars}. "
+                            f"Available variables: {list(kwargs.keys())}. "
+                            f"This is a configuration error - fix the template or add missing variables."
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                    else:
+                        # In prod mode: warn and strip
+                        logger.warning(
+                            f"WARNING: Unresolved template vars removed{setting_info}: {unknown_vars}. "
+                            f"Available variables: {list(kwargs.keys())}. "
+                            f"Consider fixing the template configuration."
+                        )
+                
+                # Try to format with provided variables
                 try:
-                    # Try to format with provided variables
                     formatted = template_str.format(**kwargs)
                     return formatted
                 except KeyError as e:
-                    # If a variable is missing, replace it with empty string or the variable name
-                    import re
-                    # Find all template variables
-                    pattern = r'\{([^}]+)\}'
-                    matches = re.findall(pattern, template_str)
+                    # Handle special case: {context} should use context_string if not in kwargs
+                    result = template_str
                     for var in matches:
                         if var not in kwargs:
-                            # Replace unknown variables with empty string or descriptive text
                             if var == 'context':
                                 # Replace {context} with actual context from text parameter
                                 # This includes content queue, brand guidelines, parent idea, etc.
-                                template_str = template_str.replace(f'{{{var}}}', context_string)
+                                result = result.replace(f'{{{var}}}', context_string)
                             else:
-                                # For other unknown variables, just remove them
-                                template_str = template_str.replace(f'{{{var}}}', '')
-                    return template_str
+                                # For other unknown variables, remove them (already warned above)
+                                result = result.replace(f'{{{var}}}', '')
+                    return result
             
             # Use admin panel configuration if available, otherwise fall back to database task
             if expected_output_setting and expected_output_setting.setting_value:
                 # Format template variables in expected_output
                 writing_expected_output = format_template_string(
                     expected_output_setting.setting_value,
+                    setting_key=expected_output_setting.setting_key,
                     week=week,
                     platform=platform,
                     context=context_string
@@ -719,6 +770,7 @@ def create_content_generation_crew(
                 # CRITICAL: Even fallback expected_output must be formatted to remove {context} and other template variables
                 writing_expected_output = format_template_string(
                     platform_task_desc.expected_output,
+                    setting_key=f"fallback_{platform}_task_expected_output",
                     week=week,
                     platform=platform,
                     context=context_string
@@ -732,6 +784,7 @@ def create_content_generation_crew(
                 # Format template variables in description
                 writing_description = format_template_string(
                     description_setting.setting_value,
+                    setting_key=description_setting.setting_key,
                     week=week,
                     platform=platform,
                     context=context_string
@@ -741,6 +794,7 @@ def create_content_generation_crew(
                 # CRITICAL: Even fallback descriptions must be formatted to remove {context} and other template variables
                 writing_description = format_template_string(
                     platform_task_desc.description,
+                    setting_key=f"fallback_{platform}_task_description",
                     week=week,
                     platform=platform,
                     context=context_string
@@ -759,6 +813,7 @@ def create_content_generation_crew(
                 # Format template variables in prompt
                 formatted_prompt = format_template_string(
                     prompt_setting.setting_value,
+                    setting_key=prompt_setting.setting_key,
                     week=week,
                     platform=platform,
                     context=context_string
@@ -1786,22 +1841,58 @@ def create_research_to_writing_crew(
             context_string = text[context_start:context_end].replace("Campaign Context:", "").strip()
         
         def format_template_string_simple(template_str: str, **kwargs) -> str:
-            """Format template string, replacing known variables and escaping unknown ones"""
+            """
+            Format template string, replacing known variables and escaping unknown ones.
+            Simplified version for the simple workflow - includes unknown variable detection.
+            """
             if not template_str:
                 return ""
+            
+            import re
+            import os
+            
+            # Find all template variables
+            pattern = r'\{([^}]+)\}'
+            matches = re.findall(pattern, template_str)
+            
+            # Detect unknown variables
+            unknown_vars = []
+            for var in matches:
+                if var not in kwargs:
+                    unknown_vars.append(f"{{{var}}}")
+            
+            # Handle unknown variables
+            if unknown_vars:
+                is_dev = (
+                    os.getenv("ENVIRONMENT", "").lower() == "development" or
+                    os.getenv("DEBUG", "").lower() == "true"
+                )
+                
+                if is_dev:
+                    error_msg = (
+                        f"ERROR: Unresolved template variables found in simple workflow: {unknown_vars}. "
+                        f"Available variables: {list(kwargs.keys())}."
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                else:
+                    logger.warning(
+                        f"WARNING: Unresolved template vars removed in simple workflow: {unknown_vars}. "
+                        f"Available variables: {list(kwargs.keys())}."
+                    )
+            
+            # Try to format
             try:
                 return template_str.format(**kwargs)
             except (KeyError, ValueError):
-                import re
-                pattern = r'\{([^}]+)\}'
-                matches = re.findall(pattern, template_str)
+                result = template_str
                 for var in matches:
                     if var not in kwargs:
                         if var == 'context':
-                            template_str = template_str.replace(f'{{{var}}}', context_string)
+                            result = result.replace(f'{{{var}}}', context_string)
                         else:
-                            template_str = template_str.replace(f'{{{var}}}', '')
-                return template_str
+                            result = result.replace(f'{{{var}}}', '')
+                return result
         
         formatted_writing_description = format_template_string_simple(
             platform_task_desc.description,
