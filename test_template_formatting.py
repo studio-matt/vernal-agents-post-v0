@@ -27,7 +27,12 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
     pattern = r'\{([^}]+)\}'
     matches = re.findall(pattern, template_str)
     
-    # Detect unknown variables
+    # Add context to kwargs if it's not already there (context is handled specially)
+    # This matches the actual implementation where context is passed separately
+    if 'context' not in kwargs:
+        kwargs['context'] = context_string
+    
+    # Detect unknown variables (after adding context to kwargs)
     unknown_vars = []
     for var in matches:
         if var not in kwargs:
@@ -37,20 +42,26 @@ def format_template_string_fallback(template_str: str, context_string: str = "",
     if unknown_vars:
         print(f"WARNING: Unresolved template vars would be removed: {unknown_vars}")
     
-    # Try to format with provided variables
+    # Try to format with provided variables (now including context)
     try:
         formatted = template_str.format(**kwargs)
+        # Remove any remaining unknown variables that weren't caught
+        for var in unknown_vars:
+            formatted = formatted.replace(var, '')
         return formatted
-    except KeyError:
-        # Handle special case: {context} should use context_string if not in kwargs
+    except KeyError as e:
+        # If formatting still fails, handle manually
         result = template_str
         for var in matches:
-            if var not in kwargs:
-                if var == 'context':
-                    result = result.replace(f'{{{var}}}', context_string)
-                else:
-                    # For other unknown variables, remove them
-                    result = result.replace(f'{{{var}}}', '')
+            if var in kwargs:
+                # Replace known variables
+                result = result.replace(f'{{{var}}}', str(kwargs[var]))
+            elif var == 'context':
+                # Handle context specially
+                result = result.replace(f'{{{var}}}', context_string)
+            else:
+                # For other unknown variables, remove them
+                result = result.replace(f'{{{var}}}', '')
         return result
 
 
