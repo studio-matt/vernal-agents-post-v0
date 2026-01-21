@@ -23,9 +23,10 @@ def extract_wordpress_fields(text: str) -> Dict[str, Optional[str]]:
     """
     Extract WordPress-specific fields (post_title, post_excerpt, permalink) from generated text.
     Handles multiple formats:
+    - Markdown with **Excerpt:** and **Permalink/Slug:** (most common)
+    - H1 title as post title: # Title
     - Separate sections: "Post Title: ...", "Excerpt: ...", "Permalink: ..."
     - JSON blocks: {"post_title": "...", "post_excerpt": "...", "permalink": "..."}
-    - Markdown sections: ## Post Title\n...\n## Excerpt\n...
     - Variable format: {post_title: "...", post_excerpt: "...", permalink: "..."}
     """
     import re
@@ -39,7 +40,58 @@ def extract_wordpress_fields(text: str) -> Dict[str, Optional[str]]:
     if not text:
         return result
     
-    # Try to extract from JSON-like format first
+    # PRIORITY 1: Extract H1 title as post title (most reliable - first heading)
+    # Match: # Title (at start of line or after whitespace)
+    h1_title = re.search(r'^#\s+(.+?)(?:\n|$)', text, re.MULTILINE)
+    if h1_title:
+        title = h1_title.group(1).strip()
+        # Remove markdown formatting but keep the title
+        title = re.sub(r'\*\*|__', '', title).strip()
+        if title and len(title) > 5:  # Must be meaningful
+            result["post_title"] = title
+    
+    # PRIORITY 2: Extract from markdown format with **Excerpt:** and **Permalink/Slug:**
+    # Format: **Excerpt:** ...\n\n**Permalink/Slug:** ...
+    # Match excerpt that ends at next ** or --- or double newline
+    excerpt_markdown = re.search(r'\*\*Excerpt:\*\*\s*(.+?)(?:\n\n|\n\*\*|\n---|$)', text, re.IGNORECASE | re.DOTALL)
+    if excerpt_markdown:
+        excerpt = excerpt_markdown.group(1).strip()
+        # Remove markdown formatting
+        excerpt = re.sub(r'\*\*|__|#+', '', excerpt).strip()
+        # Remove trailing periods if it's a sentence
+        excerpt = excerpt.rstrip('.')
+        # Stop at first sentence if it's too long (excerpts should be concise)
+        sentences = re.split(r'[.!?]\s+', excerpt)
+        if sentences and len(sentences[0]) < 300:
+            excerpt = sentences[0].rstrip('.')
+        # Limit excerpt length (WordPress excerpts are typically 150-300 chars)
+        if len(excerpt) > 500:
+            excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
+        if excerpt and len(excerpt) > 10:  # Must be meaningful
+            result["post_excerpt"] = excerpt
+    
+    # Extract permalink - can be "Permalink/Slug:" or just "Permalink:"
+    # Match: **Permalink/Slug:** slug-text (single line)
+    permalink_markdown = re.search(r'\*\*Permalink/Slug:\*\*\s*([^\n]+)', text, re.IGNORECASE)
+    if not permalink_markdown:
+        permalink_markdown = re.search(r'\*\*Permalink:\*\*\s*([^\n]+)', text, re.IGNORECASE)
+    if permalink_markdown:
+        permalink = permalink_markdown.group(1).strip()
+        # Clean permalink (remove special chars except hyphens, make lowercase)
+        # But first, if it already looks like a slug, use it as-is
+        if re.match(r'^[a-z0-9-]+$', permalink.lower()):
+            result["permalink"] = permalink.lower()
+        else:
+            # Clean it - remove everything except alphanumeric and hyphens
+            permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
+            # Remove multiple consecutive hyphens
+            permalink = re.sub(r'-+', '-', permalink)
+            # Remove leading/trailing hyphens
+            permalink = permalink.strip('-')
+            if permalink and len(permalink) > 3:  # Must be meaningful
+                result["permalink"] = permalink
+    
+    # PRIORITY 3: Try JSON-like format
     json_patterns = [
         r'\{[^{}]*"post_title"\s*:\s*"([^"]+)"[^{}]*"post_excerpt"\s*:\s*"([^"]+)"[^{}]*"permalink"\s*:\s*"([^"]+)"[^{}]*\}',
         r'\{[^{}]*post_title\s*:\s*"([^"]+)"[^{}]*post_excerpt\s*:\s*"([^"]+)"[^{}]*permalink\s*:\s*"([^"]+)"[^{}]*\}',
@@ -48,60 +100,68 @@ def extract_wordpress_fields(text: str) -> Dict[str, Optional[str]]:
     for pattern in json_patterns:
         match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
         if match:
-            result["post_title"] = match.group(1).strip()
-            result["post_excerpt"] = match.group(2).strip()
-            result["permalink"] = match.group(3).strip()
-            return result
+            if not result["post_title"]:
+                result["post_title"] = match.group(1).strip()
+            if not result["post_excerpt"]:
+                result["post_excerpt"] = match.group(2).strip()
+            if not result["permalink"]:
+                result["permalink"] = match.group(3).strip()
+            # If we got all three, return early
+            if all(result.values()):
+                return result
     
-    # Try separate field extraction patterns
-    # Post Title patterns
-    title_patterns = [
-        r'Post Title\s*:?\s*(.+?)(?:\n|$|Excerpt|Permalink)',
-        r'##\s*Post Title\s*\n(.+?)(?:\n##|$)',
-        r'post_title\s*:?\s*"([^"]+)"',
-        r'post_title\s*:?\s*([^\n]+)',
-    ]
-    for pattern in title_patterns:
-        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-        if match:
-            result["post_title"] = match.group(1).strip()
-            break
+    # PRIORITY 4: Try separate field extraction patterns (only if not already found)
+    if not result["post_title"]:
+        title_patterns = [
+            r'Post Title\s*:?\s*(.+?)(?:\n|$|Excerpt|Permalink)',
+            r'##\s*Post Title\s*\n(.+?)(?:\n##|$)',
+            r'post_title\s*:?\s*"([^"]+)"',
+            r'post_title\s*:?\s*([^\n]+)',
+        ]
+        for pattern in title_patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                result["post_title"] = match.group(1).strip()
+                break
     
-    # Post Excerpt patterns
-    excerpt_patterns = [
-        r'Post Excerpt\s*:?\s*(.+?)(?:\n|$|Permalink|Post Title)',
-        r'Excerpt\s*:?\s*(.+?)(?:\n|$|Permalink|Post Title)',
-        r'##\s*Post Excerpt\s*\n(.+?)(?:\n##|$)',
-        r'##\s*Excerpt\s*\n(.+?)(?:\n##|$)',
-        r'post_excerpt\s*:?\s*"([^"]+)"',
-        r'post_excerpt\s*:?\s*(.+?)(?:\n|$|permalink)',
-    ]
-    for pattern in excerpt_patterns:
-        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
-        if match:
-            excerpt = match.group(1).strip()
-            # Limit excerpt length (WordPress excerpts are typically 150-300 chars)
-            if len(excerpt) > 500:
-                excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
-            result["post_excerpt"] = excerpt
-            break
+    if not result["post_excerpt"]:
+        excerpt_patterns = [
+            r'Post Excerpt\s*:?\s*(.+?)(?:\n|$|Permalink|Post Title)',
+            r'Excerpt\s*:?\s*(.+?)(?:\n|$|Permalink|Post Title)',
+            r'##\s*Post Excerpt\s*\n(.+?)(?:\n##|$)',
+            r'##\s*Excerpt\s*\n(.+?)(?:\n##|$)',
+            r'post_excerpt\s*:?\s*"([^"]+)"',
+            r'post_excerpt\s*:?\s*(.+?)(?:\n|$|permalink)',
+        ]
+        for pattern in excerpt_patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+            if match:
+                excerpt = match.group(1).strip()
+                # Remove markdown formatting
+                excerpt = re.sub(r'\*\*|__|#+', '', excerpt).strip()
+                # Limit excerpt length
+                if len(excerpt) > 500:
+                    excerpt = excerpt[:500].rsplit(' ', 1)[0] + '...'
+                result["post_excerpt"] = excerpt
+                break
     
-    # Permalink patterns
-    permalink_patterns = [
-        r'Permalink\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
-        r'Slug\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
-        r'##\s*Permalink\s*\n(.+?)(?:\n##|$)',
-        r'permalink\s*:?\s*"([^"]+)"',
-        r'permalink\s*:?\s*([^\n\s]+)',
-    ]
-    for pattern in permalink_patterns:
-        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-        if match:
-            permalink = match.group(1).strip()
-            # Clean permalink (remove special chars, make lowercase)
-            permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
-            result["permalink"] = permalink
-            break
+    if not result["permalink"]:
+        permalink_patterns = [
+            r'Permalink\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
+            r'Permalink/Slug\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
+            r'Slug\s*:?\s*(.+?)(?:\n|$|Post Title|Excerpt)',
+            r'##\s*Permalink\s*\n(.+?)(?:\n##|$)',
+            r'permalink\s*:?\s*"([^"]+)"',
+            r'permalink\s*:?\s*([^\n\s]+)',
+        ]
+        for pattern in permalink_patterns:
+            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+            if match:
+                permalink = match.group(1).strip()
+                # Clean permalink (remove special chars except hyphens, make lowercase)
+                permalink = re.sub(r'[^a-z0-9-]', '', permalink.lower())
+                result["permalink"] = permalink
+                break
     
     return result
 
@@ -958,7 +1018,8 @@ Generate content for {platform} based on the content queue items and campaign co
                                     wordpress_fields = {}
                                     if platform.lower() == "wordpress":
                                         wordpress_fields = extract_wordpress_fields(generated_text)
-                                        logger.info(f"📝 Extracted WordPress fields: {wordpress_fields}")
+                                        logger.info(f"📝 Extracted WordPress fields from generated_text (first 500 chars): {generated_text[:500]}")
+                                        logger.info(f"📝 Extracted WordPress fields result: {wordpress_fields}")
                                     
                                     # Return author voice content directly
                                     response_data = {
@@ -1125,11 +1186,26 @@ Generate content for {platform} based on the content queue items and campaign co
                         crew_data = crew_result.get("data", {})
                         if platform.lower() == "wordpress":
                             # Get content from crew result (could be in different fields)
-                            content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
-                            wordpress_fields = extract_wordpress_fields(content_text)
+                            # Try multiple locations where content might be
+                            content_text = (
+                                crew_data.get("content", "") or 
+                                crew_data.get("text", "") or 
+                                crew_data.get("final_content", "") or
+                                crew_data.get("writing", "") or
+                                crew_data.get("platform_content", {}).get("content", "") or
+                                str(crew_data)
+                            )
+                            # If content_text is a dict, try to extract text from it
+                            if isinstance(content_text, dict):
+                                content_text = content_text.get("content", "") or content_text.get("text", "") or str(content_text)
+                            
+                            logger.info(f"📝 Extracting WordPress fields from CrewAI. Content preview (first 500 chars): {str(content_text)[:500]}")
+                            wordpress_fields = extract_wordpress_fields(str(content_text))
                             if wordpress_fields:
                                 logger.info(f"📝 Extracted WordPress fields from CrewAI result: {wordpress_fields}")
                                 crew_data.update(wordpress_fields)
+                            else:
+                                logger.warning(f"⚠️ No WordPress fields extracted from CrewAI result. Content type: {type(content_text)}, length: {len(str(content_text))}")
                         
                         CONTENT_GEN_TASKS[tid]["result"] = {
                             "status": "success",
@@ -1306,8 +1382,12 @@ Generate content for {platform} based on the content queue items above."""
                     # Extract WordPress fields if platform is WordPress
                     wordpress_fields = {}
                     if platform.lower() == "wordpress":
+                        logger.info(f"📝 Extracting WordPress fields from generated_text (length: {len(generated_text)})")
+                        logger.info(f"📝 First 1000 chars of generated_text: {generated_text[:1000]}")
                         wordpress_fields = extract_wordpress_fields(generated_text)
                         logger.info(f"📝 Extracted WordPress fields (sync): {wordpress_fields}")
+                        if not any(wordpress_fields.values()):
+                            logger.warning(f"⚠️ No WordPress fields extracted! Generated text preview: {generated_text[:500]}")
                     
                     # Return author voice generated content directly
                     response_data = {
