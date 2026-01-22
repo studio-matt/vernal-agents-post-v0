@@ -3310,8 +3310,18 @@ async def save_content_item(
             
             if update_fields:
                 update_stmt = text(f"UPDATE content SET {', '.join(update_fields)} WHERE id = :id")
+                logger.info(f"🔧 Executing UPDATE: {update_stmt}")
+                logger.info(f"🔧 UPDATE values: {update_values}")
                 db.execute(update_stmt, update_values)
+                db.commit()  # Explicitly commit the transaction
                 logger.info(f"✅ Updated existing content (ID: {existing_id}): week={week}, day={day}, platform={platform_db_value}, image={bool(image_url)}")
+                
+                # Verify the update by querying back
+                verify_query = text("SELECT post_title, post_excerpt, permalink FROM content WHERE id = :id")
+                verify_result = db.execute(verify_query, {"id": existing_id}).first()
+                if verify_result:
+                    verified = dict(verify_result._mapping)
+                    logger.info(f"✅ Verified WordPress fields after update: post_title='{verified.get('post_title')}', post_excerpt='{verified.get('post_excerpt')}', permalink='{verified.get('permalink')}'")
             
             # Set final_content_id for return
             final_content_id = existing_id
