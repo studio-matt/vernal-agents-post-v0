@@ -2982,7 +2982,7 @@ async def post_content_now(
                 PlatformConnection.platform == PlatformEnum.WORDPRESS
             ).first()
             
-            if not connection or not connection.platform_user_id or not connection.access_token:
+            if not connection or not connection.platform_user_id or not connection.access_token or not connection.refresh_token:
                 raise HTTPException(
                     status_code=400,
                     detail="WordPress not connected. Please connect your WordPress site first."
@@ -2990,22 +2990,58 @@ async def post_content_now(
             
             from requests.auth import HTTPBasicAuth
             
+            # For WordPress: platform_user_id = site_url, refresh_token = username, access_token = app_password
             site_url = connection.platform_user_id
+            username = connection.refresh_token  # WordPress username stored in refresh_token
+            app_password = connection.access_token  # WordPress Application Password stored in access_token
+            
             api_url = f"{site_url}/wp-json/wp/v2/posts"
             
+            # Get WordPress-specific fields from content if available
+            wordpress_title = title or "Untitled Post"
+            wordpress_excerpt = None
+            permalink_slug = None
+            
+            if content_id:
+                # Try to get WordPress fields from database
+                content_obj = db.query(Content).filter(Content.id == content_id).first()
+                if content_obj:
+                    if hasattr(content_obj, 'post_title') and content_obj.post_title:
+                        wordpress_title = content_obj.post_title
+                    if hasattr(content_obj, 'post_excerpt') and content_obj.post_excerpt:
+                        wordpress_excerpt = content_obj.post_excerpt
+                    if hasattr(content_obj, 'permalink') and content_obj.permalink:
+                        permalink_slug = content_obj.permalink
+            elif content_item:
+                # Get WordPress fields from content_item
+                if content_item.get("post_title"):
+                    wordpress_title = content_item.get("post_title")
+                if content_item.get("post_excerpt"):
+                    wordpress_excerpt = content_item.get("post_excerpt")
+                if content_item.get("permalink"):
+                    permalink_slug = content_item.get("permalink")
+            
             post_data = {
-                "title": title or "Untitled Post",
+                "title": wordpress_title,
                 "content": content_text,
                 "status": "publish"
             }
             
+            # Add WordPress-specific fields if available
+            if wordpress_excerpt:
+                post_data["excerpt"] = wordpress_excerpt
+            
+            if permalink_slug:
+                post_data["slug"] = permalink_slug
+            
             if image_url:
                 post_data["featured_media"] = image_url
             
+            # Use correct authentication: username (refresh_token) and app_password (access_token)
             response = requests.post(
                 api_url,
                 json=post_data,
-                auth=HTTPBasicAuth(connection.platform_user_id, connection.access_token),
+                auth=HTTPBasicAuth(username, app_password),
                 timeout=30
             )
             
