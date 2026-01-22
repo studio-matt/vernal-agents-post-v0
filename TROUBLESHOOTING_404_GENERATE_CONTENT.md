@@ -45,12 +45,12 @@ sudo journalctl -u vernal-backend -n 100 --no-pager | grep -i error
 ### Step 4: Restart Backend Service
 
 ```bash
-# Restart the service
-sudo systemctl restart vernal-backend
+# Restart the service (CORRECT SERVICE NAME: vernal-agents)
+sudo systemctl restart vernal-agents
 
 # Wait a few seconds, then check status
 sleep 3
-sudo systemctl status vernal-backend
+sudo systemctl status vernal-agents
 ```
 
 ### Step 5: Verify Service Started Successfully
@@ -60,7 +60,7 @@ Check the logs for:
 - ❌ Any import errors or syntax errors
 
 ```bash
-sudo journalctl -u vernal-backend -n 50 --no-pager
+sudo journalctl -u vernal-agents -n 50 --no-pager
 ```
 
 ### Step 6: Test the Endpoint Directly
@@ -88,7 +88,7 @@ curl https://themachine.vernalcontentum.com/openapi.json | grep -A 10 "generate-
 
 ### Issue 1: Service Not Restarted
 **Symptom:** Code changes are present but endpoint still returns 404
-**Solution:** Restart the service (Step 4)
+**Solution:** Restart the service: `sudo systemctl restart vernal-agents` (Note: service name is `vernal-agents`, not `vernal-backend`)
 
 ### Issue 2: Import Error Preventing Router Load
 **Symptom:** Service starts but router isn't included

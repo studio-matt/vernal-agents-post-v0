@@ -46,11 +46,11 @@ cd /home/ubuntu/vernal-agents-post-v0
 # Pull latest changes
 git pull origin main
 
-# Restart the service
-sudo systemctl restart vernal-backend
+# Restart the service (CORRECT SERVICE NAME: vernal-agents)
+sudo systemctl restart vernal-agents
 
 # Check service status
-sudo systemctl status vernal-backend
+sudo systemctl status vernal-agents
 
 # Check logs to verify it started correctly
 sudo journalctl -u vernal-backend -n 50 --no-pager
