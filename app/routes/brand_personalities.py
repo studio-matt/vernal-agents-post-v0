@@ -1529,35 +1529,27 @@ Generate content for {platform} based on the content queue items above."""
                                 "error": crew_result.get("error")
                             }
                     
-                                    # Extract WordPress fields if platform is WordPress
-                                    wordpress_fields = {}
-                                    if platform.lower() == "wordpress":
-                                        extraction_result = extract_wordpress_fields(generated_text)
-                                        format_detected = extraction_result.get("format_detected", "unknown")
-                                        
-                                        # Log contract compliance
-                                        logger.info(f"📝 WordPress fields extraction - Format: {format_detected}")
-                                        logger.info(f"📝 Extracted - Title: {extraction_result.get('extracted_title_len', 0)} chars, "
-                                                  f"Excerpt: {extraction_result.get('extracted_excerpt_len', 0)} chars, "
-                                                  f"Slug: {extraction_result.get('extracted_slug_len', 0)} chars")
-                                        logger.info(f"📝 Body starts with: {extraction_result.get('body_starts_with', 'N/A')}")
-                                        
-                                        # Extract just the fields (not metadata)
-                                        wordpress_fields = {
-                                            "post_title": extraction_result.get("post_title"),
-                                            "post_excerpt": extraction_result.get("post_excerpt"),
-                                            "permalink": extraction_result.get("permalink"),
-                                            "format_detected": format_detected  # Include for frontend warning
-                                        }
-                                        
-                                        if format_detected != "canonical":
-                                            logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
-                                                         f"Consider updating writing prompt to use canonical format.")
-                                        if not any([wordpress_fields.get("post_title"), wordpress_fields.get("post_excerpt"), wordpress_fields.get("permalink")]):
-                                            logger.warning(f"⚠️ No WordPress fields extracted! Format: {format_detected}, "
-                                                         f"Generated text preview: {generated_text[:500]}")
+                    # Return author voice generated content directly (when not using CrewAI QC)
+                    # Extract WordPress fields if platform is WordPress
+                    wordpress_fields = {}
+                    if platform.lower() == "wordpress":
+                        extraction_result = extract_wordpress_fields(generated_text)
+                        format_detected = extraction_result.get("format_detected", "unknown")
+                        
+                        # Log contract compliance
+                        logger.info(f"📝 WordPress fields extraction (Author Voice) - Format: {format_detected}")
+                        
+                        wordpress_fields = {
+                            "post_title": extraction_result.get("post_title"),
+                            "post_excerpt": extraction_result.get("post_excerpt"),
+                            "permalink": extraction_result.get("permalink"),
+                            "format_detected": format_detected
+                        }
+                        
+                        if format_detected != "canonical":
+                            logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
+                                         f"Consider updating writing prompt to use canonical format.")
                     
-                    # Return author voice generated content directly
                     response_data = {
                         "content": generated_text,
                         "title": "",  # Can be extracted or generated separately
