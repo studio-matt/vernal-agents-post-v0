@@ -2995,7 +2995,11 @@ async def post_content_now(
             username = connection.refresh_token  # WordPress username stored in refresh_token
             app_password = connection.access_token  # WordPress Application Password stored in access_token
             
+            # Ensure site_url doesn't have trailing slash for API endpoint
+            site_url = site_url.rstrip('/')
             api_url = f"{site_url}/wp-json/wp/v2/posts"
+            
+            logger.info(f"📤 WordPress Post Now: site_url={site_url}, username={username}, api_url={api_url}")
             
             # Get WordPress-specific fields from content if available
             wordpress_title = title or "Untitled Post"
