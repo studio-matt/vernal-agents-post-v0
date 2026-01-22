@@ -805,6 +805,8 @@ async def generate_campaign_content(
     Updated to accept content_queue_items and use them as context.
     Now runs in background with status tracking.
     """
+    logger.info(f"📝 generate_campaign_content called for campaign_id: {campaign_id}")
+    logger.info(f"📝 request_data keys: {list(request_data.keys()) if request_data else 'None'}")
     try:
         # Create task for status tracking
         task_id = str(uuid.uuid4())
