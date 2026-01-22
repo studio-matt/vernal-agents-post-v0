@@ -7,7 +7,7 @@ import json
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Body
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
 from database import SessionLocal
@@ -449,7 +449,7 @@ def delete_brand_personality(personality_id: str, current_user = Depends(get_cur
 @brand_personalities_router.post("/campaigns/{campaign_id}/plan")
 async def create_campaign_plan(
     campaign_id: str,
-    request_data: Dict[str, Any],
+    request_data: Dict[str, Any] = Body(...),
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -796,7 +796,7 @@ Generate content for {platform} that:
 @brand_personalities_router.post("/campaigns/{campaign_id}/generate-content")
 async def generate_campaign_content(
     campaign_id: str,
-    request_data: Dict[str, Any],
+    request_data: Dict[str, Any] = Body(...),
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
