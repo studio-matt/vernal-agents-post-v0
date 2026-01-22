@@ -41,7 +41,8 @@ def extract_wordpress_fields(text: str) -> Dict[str, Any]:
         "extracted_title_len": 0,
         "extracted_excerpt_len": 0,
         "extracted_slug_len": 0,
-        "body_starts_with": None
+        "body_starts_with": None,
+        "cleaned_body": None  # Body text with WordPress field labels removed
     }
     
     if not text:
@@ -78,10 +79,26 @@ def extract_wordpress_fields(text: str) -> Dict[str, Any]:
                 result["permalink"] = permalink
                 result["extracted_slug_len"] = len(permalink)
         
-        # Extract body start if Article Body marker exists
+        # Extract and clean body text
         if canonical_body_marker:
-            body_start = text[canonical_body_marker.end():].strip()[:60]
+            # Body starts after "Article Body:" marker
+            cleaned_body = text[canonical_body_marker.end():].strip()
+            body_start = cleaned_body[:60]
             result["body_starts_with"] = body_start
+            result["cleaned_body"] = cleaned_body
+        else:
+            # Remove field labels from text to get clean body
+            cleaned_body = text
+            # Remove "Post Title: ..." line
+            cleaned_body = re.sub(r'^Post Title:\s*.+?(?:\n|$)', '', cleaned_body, flags=re.IGNORECASE | re.MULTILINE)
+            # Remove "Post Excerpt: ..." section (may be multiline)
+            cleaned_body = re.sub(r'^Post Excerpt:\s*.+?(?=\n(?:Permalink|Article Body):|\n*$)', '', cleaned_body, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+            # Remove "Permalink: ..." line
+            cleaned_body = re.sub(r'^Permalink:\s*.+?(?:\n|$)', '', cleaned_body, flags=re.IGNORECASE | re.MULTILINE)
+            # Clean up extra newlines
+            cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body).strip()
+            result["cleaned_body"] = cleaned_body
+            result["body_starts_with"] = cleaned_body[:60] if cleaned_body else None
         
         # If we got canonical format, return early (don't check fallbacks)
         if result["post_title"] or result["post_excerpt"] or result["permalink"]:
@@ -152,11 +169,29 @@ def extract_wordpress_fields(text: str) -> Dict[str, Any]:
             if result["permalink"]:
                 result["extracted_slug_len"] = len(result["permalink"])
         
+        # Extract and clean body text (remove markdown field labels)
+        cleaned_body = text
+        # Remove H1 title
+        if h1_title:
+            cleaned_body = re.sub(r'^#\s+.+?(?:\n|$)', '', cleaned_body, flags=re.MULTILINE)
+        # Remove excerpt section
+        if excerpt_markdown:
+            cleaned_body = re.sub(r'\*\*Excerpt:\*\*\s*.+?(?=\n\n|\n\*\*|\n---|$)', '', cleaned_body, flags=re.IGNORECASE | re.DOTALL)
+        # Remove permalink section
+        if permalink_markdown:
+            cleaned_body = re.sub(r'\*\*Permalink(?:/Slug)?:\*\*\s*[^\n]+', '', cleaned_body, flags=re.IGNORECASE)
+        # Remove horizontal rules and clean up
+        cleaned_body = re.sub(r'^---+$', '', cleaned_body, flags=re.MULTILINE)
+        cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body).strip()
+        result["cleaned_body"] = cleaned_body
+        
         # Extract body start (after first --- or after permalink section)
         body_match = re.search(r'(?:---|\*\*Permalink[^\n]+\n)', text, re.IGNORECASE)
         if body_match:
             body_start = text[body_match.end():].strip()[:60]
             result["body_starts_with"] = body_start
+        elif cleaned_body:
+            result["body_starts_with"] = cleaned_body[:60]
         
         # If we got any markdown fields, return (don't check heuristics)
         if result["post_title"] or result["post_excerpt"] or result["permalink"]:
@@ -188,9 +223,10 @@ def extract_wordpress_fields(text: str) -> Dict[str, Any]:
                 result["post_excerpt"] = excerpt
                 result["extracted_excerpt_len"] = len(excerpt)
     
-    # Extract body start
+    # Extract body start and clean body (for heuristic, just use original text)
     if text:
         result["body_starts_with"] = text.strip()[:60]
+        result["cleaned_body"] = text.strip()  # For heuristic, use original text
     
     return result
     
@@ -1141,8 +1177,10 @@ Generate content for {platform} based on the content queue items and campaign co
                                         logger.info(f"📝 Extracted WordPress fields result: {wordpress_fields}")
                                     
                                     # Return author voice content directly
+                                    # Use cleaned body if WordPress fields were extracted, otherwise use original
+                                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else generated_text
                                     response_data = {
-                                        "content": generated_text,
+                                        "content": content_to_use,
                                         "title": "",
                                         "author_voice_used": True,
                                         "style_config": style_config,
@@ -1338,6 +1376,12 @@ Generate content for {platform} based on the content queue items and campaign co
                             
                             if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                                 crew_data.update(wordpress_fields)
+                                # Use cleaned body if available (removes field labels)
+                                cleaned_body = extraction_result.get("cleaned_body")
+                                if cleaned_body and "content" in crew_data:
+                                    crew_data["content"] = cleaned_body
+                                elif cleaned_body and "text" in crew_data:
+                                    crew_data["text"] = cleaned_body
                                 if format_detected != "canonical":
                                     logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
                                                  f"Consider updating writing prompt to use canonical format.")
@@ -1511,6 +1555,12 @@ Generate content for {platform} based on the content queue items above."""
                                 }
                                 if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                                     crew_data.update(wordpress_fields)
+                                    # Use cleaned body if available (removes field labels)
+                                    cleaned_body = extraction_result.get("cleaned_body")
+                                    if cleaned_body and "content" in crew_data:
+                                        crew_data["content"] = cleaned_body
+                                    elif cleaned_body and "text" in crew_data:
+                                        crew_data["text"] = cleaned_body
                                     if format_detected != "canonical":
                                         logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
                             
@@ -1550,8 +1600,10 @@ Generate content for {platform} based on the content queue items above."""
                             logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
                                          f"Consider updating writing prompt to use canonical format.")
                     
+                    # Use cleaned body if WordPress fields were extracted, otherwise use original
+                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else generated_text
                     response_data = {
-                        "content": generated_text,
+                        "content": content_to_use,
                         "title": "",  # Can be extracted or generated separately
                         "author_voice_used": True,
                         "style_config": style_config,
@@ -1600,6 +1652,12 @@ Generate content for {platform} based on the content queue items above."""
             }
             if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                 crew_data.update(wordpress_fields)
+                # Use cleaned body if available (removes field labels)
+                cleaned_body = extraction_result.get("cleaned_body")
+                if cleaned_body and "content" in crew_data:
+                    crew_data["content"] = cleaned_body
+                elif cleaned_body and "text" in crew_data:
+                    crew_data["text"] = cleaned_body
                 if format_detected != "canonical":
                     logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
         
