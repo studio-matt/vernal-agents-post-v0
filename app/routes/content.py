@@ -3579,6 +3579,11 @@ def get_campaign_content_items(
                     else:
                         created_at_str = str(date_upload)
                 
+                # WordPress-specific fields
+                post_title = item.get('post_title') or None
+                post_excerpt = item.get('post_excerpt') or None
+                permalink = item.get('permalink') or None
+                
                 items_data.append({
                     "id": f"week-{week}-{day}-{platform}-{item_id}",  # Composite ID for frontend
                     "database_id": item_id,  # Include database ID separately so frontend can use it for updates
@@ -3597,6 +3602,10 @@ def get_campaign_content_items(
                     "contentPublishedAt": None,  # Column doesn't exist in DB
                     "imagePublishedAt": None,  # Column doesn't exist in DB
                     "use_without_image": False,  # Column doesn't exist in DB
+                    # WordPress-specific fields
+                    "post_title": post_title,
+                    "post_excerpt": post_excerpt,
+                    "permalink": permalink,
                 })
                 logger.info(f"📋 Item: week={week}, day={day}, platform={platform}, status={status}, has_image={bool(image_url)}, db_id={item_id}")
             except Exception as item_error:
