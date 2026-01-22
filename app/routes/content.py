@@ -3291,18 +3291,22 @@ async def save_content_item(
                 update_fields.append("platform = :platform")
                 update_values["platform"] = platform_db_value
             
-            # WordPress-specific fields (only update if columns exist and values provided)
-            if "post_title" in content_columns and item.get("post_title"):
+            # WordPress-specific fields (only update if columns exist and key is present in item)
+            # Check if key exists (not just truthy) so we can save empty strings to clear fields
+            if "post_title" in content_columns and "post_title" in item:
                 update_fields.append("post_title = :post_title")
-                update_values["post_title"] = item.get("post_title")
+                update_values["post_title"] = item.get("post_title") or None
+                logger.info(f"💾 Updating post_title: '{item.get('post_title')}'")
             
-            if "post_excerpt" in content_columns and item.get("post_excerpt"):
+            if "post_excerpt" in content_columns and "post_excerpt" in item:
                 update_fields.append("post_excerpt = :post_excerpt")
-                update_values["post_excerpt"] = item.get("post_excerpt")
+                update_values["post_excerpt"] = item.get("post_excerpt") or None
+                logger.info(f"💾 Updating post_excerpt: '{item.get('post_excerpt')}'")
             
-            if "permalink" in content_columns and item.get("permalink"):
+            if "permalink" in content_columns and "permalink" in item:
                 update_fields.append("permalink = :permalink")
-                update_values["permalink"] = item.get("permalink")
+                update_values["permalink"] = item.get("permalink") or None
+                logger.info(f"💾 Updating permalink: '{item.get('permalink')}'")
             
             if update_fields:
                 update_stmt = text(f"UPDATE content SET {', '.join(update_fields)} WHERE id = :id")
