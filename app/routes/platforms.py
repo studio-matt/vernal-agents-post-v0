@@ -476,19 +476,47 @@ async def wordpress_auth_v2(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Connect WordPress site using application password"""
+    """Connect WordPress site using application password
+    
+    Supports two formats:
+    1. Standard format: site_url, username, password
+    2. Plugin format: website_url, admin_username, activation_key (wp_admin_url is optional)
+    """
     try:
         from models import PlatformConnection, PlatformEnum
         import requests
         from requests.auth import HTTPBasicAuth
         
         form_data = await request.form()
-        site_url = form_data.get("site_url", "").strip()
-        username = form_data.get("username", "").strip()
-        password = form_data.get("password", "").strip()
+        
+        # Try plugin format first (wp_admin_url, website_url, admin_username, activation_key)
+        website_url = form_data.get("website_url", "").strip()
+        admin_username = form_data.get("admin_username", "").strip()
+        activation_key = form_data.get("activation_key", "").strip()
+        wp_admin_url = form_data.get("wp_admin_url", "").strip()
+        
+        # Fall back to standard format if plugin format not found
+        if website_url and admin_username and activation_key:
+            # Plugin format
+            site_url = website_url
+            username = admin_username
+            password = activation_key
+            logger.info(f"📥 WordPress connection using plugin format: website_url={site_url}, admin_username={username}")
+        else:
+            # Standard format
+            site_url = form_data.get("site_url", "").strip()
+            username = form_data.get("username", "").strip()
+            password = form_data.get("password", "").strip()
+            logger.info(f"📥 WordPress connection using standard format: site_url={site_url}, username={username}")
         
         if not site_url or not username or not password:
-            raise HTTPException(status_code=400, detail="Missing required fields: site_url, username, password")
+            # Provide helpful error message showing what was received
+            received_fields = {k: bool(v) for k, v in form_data.items()}
+            logger.error(f"❌ WordPress connection failed - missing required fields. Received: {received_fields}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Missing required fields. Need either (site_url, username, password) or (website_url, admin_username, activation_key). Received: {list(form_data.keys())}"
+            )
         
         if not site_url.startswith(("http://", "https://")):
             site_url = f"https://{site_url}"
@@ -497,24 +525,38 @@ async def wordpress_auth_v2(
         
         try:
             # Try with HTTPBasicAuth first (for application passwords)
+            logger.info(f"🔐 Attempting WordPress authentication: site_url={site_url}, username={username}")
             response = requests.get(wp_api_url, auth=HTTPBasicAuth(username, password), timeout=10)
+            logger.info(f"🔐 WordPress API response: status={response.status_code}")
             
             # If that fails with 401, try with X-API-Key header (for plugin API key)
             if response.status_code == 401:
-                logger.info(f"⚠️ HTTPBasicAuth failed, trying API key authentication for user {current_user.id}")
+                logger.info(f"⚠️ HTTPBasicAuth failed (401), trying API key authentication for user {current_user.id}")
                 # Try plugin API endpoint with API key
                 plugin_api_url = f"{site_url}/wp-json/vernal-contentum/v1/categories"
                 api_response = requests.get(plugin_api_url, headers={"X-API-Key": password}, timeout=10)
+                logger.info(f"🔐 Plugin API response: status={api_response.status_code}")
                 if api_response.status_code == 200:
                     logger.info(f"✅ WordPress connection verified via API key for user {current_user.id}")
                     response = api_response  # Use successful response
                 else:
-                    raise HTTPException(status_code=400, detail=f"WordPress authentication failed: Both HTTPBasicAuth and API key authentication returned {api_response.status_code}. Please verify your credentials.")
+                    error_text = api_response.text[:500] if api_response.text else "No error message"
+                    logger.error(f"❌ WordPress API key authentication also failed: {api_response.status_code} - {error_text}")
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"WordPress authentication failed: Both HTTPBasicAuth (401) and API key authentication ({api_response.status_code}) failed. Please verify:\n1. Username is correct: '{username}'\n2. Application Password/API key is correct and not revoked\n3. The WordPress site is accessible: {site_url}\n\nError: {error_text}"
+                    )
             
             if response.status_code != 200:
-                raise HTTPException(status_code=400, detail=f"WordPress authentication failed: {response.status_code}")
+                error_text = response.text[:500] if response.text else "No error message"
+                logger.error(f"❌ WordPress authentication failed: {response.status_code} - {error_text}")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"WordPress authentication failed ({response.status_code}): {error_text}"
+                )
             logger.info(f"✅ WordPress connection verified for user {current_user.id}")
         except requests.exceptions.RequestException as e:
+            logger.error(f"❌ WordPress connection request exception: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to connect to WordPress: {str(e)}")
         
         existing_connection = db.query(PlatformConnection).filter(
@@ -1442,7 +1484,8 @@ async def facebook_auth_v2(
         # Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook > 
         # Find "Vernal Contentum" > Remove
         # 
-        # auth_type=reauthorize should force permission screen, but Facebook may still cache
+        # auth_type=rerequest forces Facebook to show permission screen again, even if user previously granted permissions
+        # This ensures we get fresh consent for all requested scopes
         # If user sees "You previously logged in", they MUST click "Continue" to see permission screen
         # AND ensure they grant ALL requested permissions (especially pages_show_list, pages_read_engagement, pages_manage_posts)
         auth_url = (
@@ -1451,7 +1494,7 @@ async def facebook_auth_v2(
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
             f"scope=pages_manage_posts,pages_read_engagement,pages_show_list&"
-            f"auth_type=reauthorize&"
+            f"auth_type=rerequest&"
             f"response_type=code"
         )
         
@@ -1682,7 +1725,7 @@ async def instagram_auth_v2(
         #   1. Facebook App is in Development mode - only admins/testers get full permissions
         #   2. Permissions are not approved by Facebook App Review
         #   3. User is not an admin/tester of the Facebook App
-        #   4. Facebook caches permissions server-side (even with auth_type=reauthorize)
+        #   4. Facebook caches permissions server-side (even with auth_type=rerequest)
         # 
         # SOLUTION:
         #   A. Check Facebook App Dashboard:
@@ -1707,7 +1750,7 @@ async def instagram_auth_v2(
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
             f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish&"
-            f"auth_type=reauthorize&"
+            f"auth_type=rerequest&"
             f"response_type=code"
         )
         
