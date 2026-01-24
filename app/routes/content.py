@@ -3042,6 +3042,9 @@ async def post_content_now(
                 post_data["featured_media"] = image_url
             
             # Use correct authentication: username (refresh_token) and app_password (access_token)
+            logger.info(f"📤 WordPress Post Now: Attempting to post with username='{username}', has_app_password={bool(app_password)}")
+            logger.info(f"📤 WordPress Post Now: Post data keys: {list(post_data.keys())}")
+            
             response = requests.post(
                 api_url,
                 json=post_data,
@@ -3049,10 +3052,32 @@ async def post_content_now(
                 timeout=30
             )
             
+            logger.info(f"📤 WordPress API response: status={response.status_code}")
+            
             if response.status_code not in [200, 201]:
+                error_text = response.text
+                logger.error(f"❌ WordPress API error: {response.status_code} - {error_text}")
+                
+                # Parse error for better user message
+                try:
+                    error_json = response.json()
+                    error_code = error_json.get("code", "")
+                    error_message = error_json.get("message", error_text)
+                    
+                    # Check for common WordPress permission errors
+                    if response.status_code == 401:
+                        if "rest_cannot_create" in error_code or "not allowed to create posts" in error_message.lower():
+                            detail = f"WordPress permission error: The user '{username}' does not have permission to create posts. Please ensure:\n1. The WordPress user has the 'Editor' or 'Administrator' role\n2. The Application Password was created correctly\n3. The Application Password has not been revoked\n\nError: {error_message}"
+                        else:
+                            detail = f"WordPress authentication failed. Please verify:\n1. The username is correct: '{username}'\n2. The Application Password is correct and not revoked\n3. The Application Password was copied correctly (no extra spaces)\n\nError: {error_message}"
+                    else:
+                        detail = f"WordPress API error ({response.status_code}): {error_message}"
+                except:
+                    detail = f"WordPress API error ({response.status_code}): {error_text[:500]}"
+                
                 raise HTTPException(
                     status_code=400,
-                    detail=f"WordPress API error: {response.status_code} - {response.text}"
+                    detail=detail
                 )
             
             post_id = response.json().get("id")
