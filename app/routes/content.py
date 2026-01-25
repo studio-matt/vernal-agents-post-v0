@@ -3038,8 +3038,18 @@ async def post_content_now(
             if permalink_slug:
                 post_data["slug"] = permalink_slug
             
+            # WordPress REST API requires featured_media to be an integer (media ID), not a URL
+            # Only set featured_media if image_url is a valid integer (media ID)
             if image_url:
-                post_data["featured_media"] = image_url
+                try:
+                    # Try to parse as integer (media ID)
+                    media_id = int(image_url)
+                    post_data["featured_media"] = media_id
+                    logger.info(f"📤 WordPress Post Now: Setting featured_media={media_id}")
+                except (ValueError, TypeError):
+                    # image_url is a URL, not a media ID - skip featured_media
+                    # WordPress REST API doesn't accept URLs for featured_media
+                    logger.warning(f"⚠️ WordPress Post Now: image_url is a URL ('{image_url}'), not a media ID. Skipping featured_media. To set featured image, upload the image first and use the media ID.")
             
             # Use correct authentication: username (refresh_token) and app_password (access_token)
             logger.info(f"📤 WordPress Post Now: Attempting to post with username='{username}', has_app_password={bool(app_password)}")
