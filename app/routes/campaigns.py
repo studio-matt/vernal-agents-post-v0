@@ -32,15 +32,37 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
     logger.info("🔍 /campaigns GET endpoint called")
     try:
         from models import Campaign
+        from sqlalchemy.orm import defer
         
-        # Filter campaigns by authenticated user (multi-tenant security)
-        # Admin users can see all campaigns for troubleshooting
-        if hasattr(current_user, 'is_admin') and current_user.is_admin:
-            campaigns = db.query(Campaign).all()
-            logger.info(f"Admin user {current_user.id} viewing all campaigns: found {len(campaigns)} campaigns")
-        else:
-            campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
-            logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
+        # Use defer() to exclude potentially missing columns from the query
+        # This prevents SQL errors if columns don't exist yet (before migration)
+        try:
+            # Try to query with defer for optional columns
+            query = db.query(Campaign)
+            # Defer columns that might not exist yet
+            try:
+                query = query.options(defer(Campaign.cornerstone_platform))
+            except (AttributeError, Exception):
+                # Column doesn't exist in model or query - continue without defer
+                pass
+            
+            # Filter campaigns by authenticated user (multi-tenant security)
+            # Admin users can see all campaigns for troubleshooting
+            if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                campaigns = query.all()
+                logger.info(f"Admin user {current_user.id} viewing all campaigns: found {len(campaigns)} campaigns")
+            else:
+                campaigns = query.filter(Campaign.user_id == current_user.id).all()
+                logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
+        except Exception as query_error:
+            # If query fails (e.g., column doesn't exist), try without defer
+            logger.warning(f"Query with defer failed, trying without: {query_error}")
+            if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                campaigns = db.query(Campaign).all()
+                logger.info(f"Admin user {current_user.id} viewing all campaigns: found {len(campaigns)} campaigns")
+            else:
+                campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+                logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
         
         # Ensure user has a demo campaign (create copy if needed)
         # Ensure every user has their own demo campaign copy
