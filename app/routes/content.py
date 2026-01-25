@@ -3076,14 +3076,21 @@ async def post_content_now(
                     error_code = error_json.get("code", "")
                     error_message = error_json.get("message", error_text)
                     
-                    # Check for common WordPress permission errors
+                    # Check for common WordPress plugin API errors
                     if response.status_code == 401:
-                        if "rest_cannot_create" in error_code or "not allowed to create posts" in error_message.lower():
-                            detail = f"WordPress permission error: The user '{username}' does not have permission to create posts. Please ensure:\n1. The WordPress user has the 'Editor' or 'Administrator' role\n2. The Application Password was created correctly\n3. The Application Password has not been revoked\n\nError: {error_message}"
+                        if "invalid_api_key" in error_code or "api key" in error_message.lower():
+                            detail = f"WordPress plugin API key authentication failed. Please verify:\n1. The API key (activation_key) is correct\n2. The API key hasn't been regenerated in WordPress\n3. The API key was copied correctly (no extra spaces)\n\nError: {error_message}"
                         else:
-                            detail = f"WordPress authentication failed. Please verify:\n1. The username is correct: '{username}'\n2. The Application Password is correct and not revoked\n3. The Application Password was copied correctly (no extra spaces)\n\nError: {error_message}"
+                            detail = f"WordPress plugin authentication failed. Please verify the API key is correct.\n\nError: {error_message}"
+                    elif response.status_code == 400:
+                        if "missing_title" in error_code:
+                            detail = f"WordPress plugin error: Post title is required.\n\nError: {error_message}"
+                        elif "missing_content" in error_code:
+                            detail = f"WordPress plugin error: Post content is required.\n\nError: {error_message}"
+                        else:
+                            detail = f"WordPress plugin API error ({response.status_code}): {error_message}"
                     else:
-                        detail = f"WordPress API error ({response.status_code}): {error_message}"
+                        detail = f"WordPress plugin API error ({response.status_code}): {error_message}"
                 except:
                     detail = f"WordPress API error ({response.status_code}): {error_text[:500]}"
                 
