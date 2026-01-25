@@ -50,10 +50,11 @@ def extract_wordpress_fields(text: str) -> Dict[str, Any]:
     
     # PRIORITY 1: Canonical format (Post Title: / Post Excerpt: / Permalink: / Article Body:)
     # This is the preferred, deterministic format
-    canonical_title = re.search(r'^Post Title:\s*(.+?)(?:\n|$)', text, re.IGNORECASE | re.MULTILINE)
-    canonical_excerpt = re.search(r'^Post Excerpt:\s*(.+?)(?:\n(?:Post |Permalink|Article)|$)', text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    # Support both "Post Title:" and "POST_TITLE:" formats (with space or underscore)
+    canonical_title = re.search(r'^Post[_\s]+Title:\s*(.+?)(?:\n|$)', text, re.IGNORECASE | re.MULTILINE)
+    canonical_excerpt = re.search(r'^Post[_\s]+Excerpt:\s*(.+?)(?:\n(?:Post[_\s]+|Permalink|Article)|$)', text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
     canonical_permalink = re.search(r'^Permalink:\s*([^\n]+)', text, re.IGNORECASE | re.MULTILINE)
-    canonical_body_marker = re.search(r'^Article Body:\s*', text, re.IGNORECASE | re.MULTILINE)
+    canonical_body_marker = re.search(r'^Article[_\s]+Body:\s*', text, re.IGNORECASE | re.MULTILINE)
     
     if canonical_title or canonical_excerpt or canonical_permalink:
         result["format_detected"] = "canonical"
