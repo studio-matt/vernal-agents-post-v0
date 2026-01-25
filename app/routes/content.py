@@ -3278,7 +3278,14 @@ async def save_content_item(
         if existing_content:
             # Update existing content using raw SQL (avoid ORM column issues)
             existing_id = existing_content['id']
-            content_update = item.get("description") or item.get("content", "")
+            # Get content from either "description" or "content" field
+            # Check if key exists (not just truthy) so we can save empty strings to clear content
+            content_update = None
+            if "description" in item:
+                content_update = item.get("description", "")
+            elif "content" in item:
+                content_update = item.get("content", "")
+            
             image_url = item.get("image") or item.get("image_url")
             
             # Get actual columns from database
@@ -3294,9 +3301,11 @@ async def save_content_item(
                 update_fields.append("title = :title")
                 update_values["title"] = item.get("title")
             
-            if content_update and content_update.strip():
+            # Always update content if provided (even if empty string) - allows clearing content
+            if content_update is not None:
                 update_fields.append("content = :content")
                 update_values["content"] = content_update
+                logger.info(f"💾 Updating content: length={len(content_update)}, empty={not content_update.strip()}")
             
             if image_url:
                 update_fields.append("image_url = :image_url")
