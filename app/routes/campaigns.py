@@ -388,6 +388,10 @@ def get_campaign_by_id(campaign_id: str, current_user = Depends(get_current_user
                 "image_settings": image_settings,
                 # Content queue items
                 "content_queue_items_json": _safe_getattr(campaign, 'content_queue_items_json'),
+                # Research selections
+                "research_selections_json": _safe_getattr(campaign, 'research_selections_json'),
+                # Cornerstone platform
+                "cornerstone_platform": _safe_getattr(campaign, 'cornerstone_platform'),
                 # Look Alike specific fields
                 "articles_url": _safe_getattr(campaign, 'articles_url')
             }
@@ -514,6 +518,10 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
             campaign.research_selections_json = campaign_data.research_selections_json
             logger.info(f"Saved research_selections_json for campaign {campaign_id}")
         
+        if campaign_data.cornerstone_platform is not None:
+            campaign.cornerstone_platform = campaign_data.cornerstone_platform
+            logger.info(f"Saved cornerstone_platform for campaign {campaign_id}: {campaign_data.cornerstone_platform}")
+        
         # Site Builder specific fields - changes require re-processing
         if hasattr(campaign_data, 'site_base_url') and campaign_data.site_base_url is not None:
             old_site_base_url = _safe_getattr(campaign, 'site_base_url')
@@ -618,6 +626,7 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
             research_selections_json=original_campaign.research_selections_json,
             custom_keywords_json=original_campaign.custom_keywords_json,
             personality_settings_json=original_campaign.personality_settings_json,
+            cornerstone_platform=_safe_getattr(original_campaign, 'cornerstone_platform'),
             site_base_url=_safe_getattr(original_campaign, 'site_base_url'),
             target_keywords_json=_safe_get_json(original_campaign, 'target_keywords_json'),
             gap_analysis_results_json=_safe_get_json(original_campaign, 'gap_analysis_results_json'),

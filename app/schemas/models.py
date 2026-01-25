@@ -46,6 +46,7 @@ class CampaignUpdate(BaseModel):
     scheduling_settings_json: Optional[str] = None
     content_queue_items_json: Optional[str] = None
     research_selections_json: Optional[str] = None
+    cornerstone_platform: Optional[str] = None  # Platform designated as cornerstone (WordPress, Facebook, or LinkedIn)
     articles_url: Optional[str] = None
 
 

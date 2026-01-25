@@ -245,6 +245,7 @@ class Campaign(Base):
     research_selections_json = Column(Text, nullable=True)  # JSON string for Research Assistant selections (raw ingredients for content generation): [{id, type, name, source, ...}]
     custom_keywords_json = Column(Text, nullable=True)  # JSON string for custom keywords/ideas: ["keyword1", "keyword2"]
     personality_settings_json = Column(Text, nullable=True)  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
+    cornerstone_platform = Column(String(50), nullable=True)  # Platform designated as cornerstone (WordPress, Facebook, or LinkedIn) - used to reference cornerstone content in writing agents via {cornerstone} placeholder
     # image_settings_json = Column(Text, nullable=True)  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
     # NOTE: Column commented out until database migration is run. Access via try-except in code.
     # Site Builder campaign fields
