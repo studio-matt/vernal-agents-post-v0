@@ -3036,6 +3036,20 @@ async def post_content_now(
             if wordpress_excerpt:
                 post_data["excerpt"] = wordpress_excerpt
             
+            # Add category and author if provided
+            if content_id:
+                content_obj = db.query(Content).filter(Content.id == content_id).first()
+                if content_obj:
+                    if hasattr(content_obj, 'category_id') and content_obj.category_id:
+                        post_data["category_id"] = content_obj.category_id
+                    if hasattr(content_obj, 'author_id') and content_obj.author_id:
+                        post_data["author_id"] = content_obj.author_id
+            elif content_item:
+                if content_item.get("category_id"):
+                    post_data["category_id"] = int(content_item.get("category_id"))
+                if content_item.get("author_id"):
+                    post_data["author_id"] = int(content_item.get("author_id"))
+            
             # Plugin endpoint uses 'slug' for permalink
             if permalink_slug:
                 # Note: Plugin endpoint may not support slug directly, but we'll include it
