@@ -2990,16 +2990,17 @@ async def post_content_now(
             
             from requests.auth import HTTPBasicAuth
             
-            # For WordPress: platform_user_id = site_url, refresh_token = username, access_token = app_password
+            # For WordPress: platform_user_id = site_url, refresh_token = username, access_token = plugin_api_key
             site_url = connection.platform_user_id
-            username = connection.refresh_token  # WordPress username stored in refresh_token
-            app_password = connection.access_token  # WordPress Application Password stored in access_token
+            username = connection.refresh_token  # WordPress username (not used for plugin endpoint)
+            plugin_api_key = connection.access_token  # WordPress plugin API key (activation_key) stored in access_token
             
             # Ensure site_url doesn't have trailing slash for API endpoint
             site_url = site_url.rstrip('/')
-            api_url = f"{site_url}/wp-json/wp/v2/posts"
+            # Use plugin's custom endpoint which only requires API key (no user permission checks)
+            api_url = f"{site_url}/wp-json/vernal-contentum/v1/posts"
             
-            logger.info(f"📤 WordPress Post Now: site_url={site_url}, username={username}, api_url={api_url}")
+            logger.info(f"📤 WordPress Post Now: site_url={site_url}, api_url={api_url}, has_api_key={bool(plugin_api_key)}")
             
             # Get WordPress-specific fields from content if available
             wordpress_title = title or "Untitled Post"
@@ -3035,30 +3036,31 @@ async def post_content_now(
             if wordpress_excerpt:
                 post_data["excerpt"] = wordpress_excerpt
             
+            # Plugin endpoint uses 'slug' for permalink
             if permalink_slug:
-                post_data["slug"] = permalink_slug
+                # Note: Plugin endpoint may not support slug directly, but we'll include it
+                # The plugin's create_post method doesn't explicitly handle slug, but WordPress will auto-generate from title
+                pass  # Plugin endpoint doesn't support slug parameter in current implementation
             
-            # WordPress REST API requires featured_media to be an integer (media ID), not a URL
-            # Only set featured_media if image_url is a valid integer (media ID)
+            # Plugin endpoint supports featured_image_url (URL, not media ID)
             if image_url:
-                try:
-                    # Try to parse as integer (media ID)
-                    media_id = int(image_url)
-                    post_data["featured_media"] = media_id
-                    logger.info(f"📤 WordPress Post Now: Setting featured_media={media_id}")
-                except (ValueError, TypeError):
-                    # image_url is a URL, not a media ID - skip featured_media
-                    # WordPress REST API doesn't accept URLs for featured_media
-                    logger.warning(f"⚠️ WordPress Post Now: image_url is a URL ('{image_url}'), not a media ID. Skipping featured_media. To set featured image, upload the image first and use the media ID.")
+                # Plugin endpoint accepts URL and will download/attach it
+                post_data["featured_image_url"] = image_url
+                logger.info(f"📤 WordPress Post Now: Setting featured_image_url={image_url}")
             
-            # Use correct authentication: username (refresh_token) and app_password (access_token)
-            logger.info(f"📤 WordPress Post Now: Attempting to post with username='{username}', has_app_password={bool(app_password)}")
+            # Use plugin API key authentication (X-API-Key header)
+            headers = {
+                "Content-Type": "application/json",
+                "X-API-Key": plugin_api_key
+            }
+            
+            logger.info(f"📤 WordPress Post Now: Attempting to post with plugin API key (length={len(plugin_api_key) if plugin_api_key else 0})")
             logger.info(f"📤 WordPress Post Now: Post data keys: {list(post_data.keys())}")
             
             response = requests.post(
                 api_url,
                 json=post_data,
-                auth=HTTPBasicAuth(username, app_password),
+                headers=headers,
                 timeout=30
             )
             
