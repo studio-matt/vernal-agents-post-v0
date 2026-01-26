@@ -1029,9 +1029,36 @@ Sample Text (first 500 characters):
                                 if settings_items:
                                     platform_settings_text = f"\n\n{platform.capitalize()}-Specific Settings/Modifications:\n" + "\n".join(settings_items)
                     
+                    # Fetch cornerstone content if this is a supporting platform (not the cornerstone platform)
+                    cornerstone_content = ""
+                    if campaign.cornerstone_platform and platform.lower() != campaign.cornerstone_platform.lower():
+                        # This is a supporting platform - fetch the cornerstone content
+                        from models import Content
+                        cornerstone_content_item = session.query(Content).filter(
+                            Content.campaign_id == cid,
+                            Content.platform == campaign.cornerstone_platform.lower()
+                        ).order_by(Content.date_upload.desc()).first()  # Get most recent cornerstone content
+                        
+                        if cornerstone_content_item and cornerstone_content_item.content:
+                            # Build full cornerstone content with title and content
+                            cornerstone_title = cornerstone_content_item.title or "Cornerstone Content"
+                            cornerstone_text = cornerstone_content_item.content
+                            # Include WordPress fields if available (check post_title and post_excerpt from description field or separate fields)
+                            # Note: WordPress fields might be stored in a JSON field or separate columns
+                            # For now, use the content field which should contain the full text
+                            
+                            cornerstone_content = f"""
+Cornerstone Content (from {campaign.cornerstone_platform}):
+Title: {cornerstone_title}
+Content: {cornerstone_text}
+"""
+                            logger.info(f"📝 Fetched cornerstone content for supporting platform {platform} (cornerstone: {campaign.cornerstone_platform})")
+                        else:
+                            logger.warning(f"⚠️ Cornerstone platform {campaign.cornerstone_platform} is set but no cornerstone content found")
+                    
                     # Build writing context for THIS ONE ARTICLE
                     # Includes: content queue items (for this article only), parent idea, brand guidelines,
-                    # campaign context, and platform-specific modifications
+                    # campaign context, platform-specific modifications, and cornerstone content
                     writing_context = f"""Content Queue Foundation (for this article only):
 {queue_context}
 
@@ -1039,8 +1066,17 @@ Sample Text (first 500 characters):
 
 Campaign Context:
 {campaign_context}
+{cornerstone_content}
 
 Generate content for {platform} based on the content queue items and campaign context above."""
+                    
+                    # Replace {cornerstone} placeholder if it exists in the writing context
+                    if "{cornerstone}" in writing_context and cornerstone_content:
+                        writing_context = writing_context.replace("{cornerstone}", cornerstone_content.strip())
+                    elif "{cornerstone}" in writing_context:
+                        # Placeholder exists but no cornerstone content - remove placeholder
+                        writing_context = writing_context.replace("{cornerstone}", "[No cornerstone content available]")
+                        logger.warning(f"⚠️ {{cornerstone}} placeholder found but no cornerstone content available")
                     
                     # Log configuration details for verbose status tracking
                     author_personality_name = "None"
