@@ -678,6 +678,34 @@ def create_content_generation_crew(
                 # Fallback: use the full text if campaign context section not found
                 context_string = text
             
+            # Extract cornerstone content from text parameter
+            # The text parameter contains "Cornerstone Content:" section if this is a supporting platform
+            cornerstone_string = ""
+            if "Cornerstone Content (from" in text:
+                # Extract the cornerstone content section
+                cornerstone_start = text.find("Cornerstone Content (from")
+                # Find the end - either before "Campaign Context:" or before "\n\nGenerate content"
+                cornerstone_end = text.find("\n\nCampaign Context:", cornerstone_start)
+                if cornerstone_end == -1:
+                    cornerstone_end = text.find("\n\nGenerate content", cornerstone_start)
+                if cornerstone_end == -1:
+                    cornerstone_end = len(text)
+                cornerstone_section = text[cornerstone_start:cornerstone_end]
+                # Extract just the content part (remove the "Cornerstone Content (from X):" header)
+                if "Title:" in cornerstone_section:
+                    title_start = cornerstone_section.find("Title:")
+                    content_start = cornerstone_section.find("Content:", title_start)
+                    if content_start != -1:
+                        cornerstone_string = cornerstone_section[content_start:].replace("Content:", "").strip()
+                else:
+                    # Fallback: use the whole section
+                    cornerstone_string = cornerstone_section.replace("Cornerstone Content (from", "").strip()
+                    # Remove the closing part
+                    if ":" in cornerstone_string:
+                        cornerstone_string = cornerstone_string.split(":", 1)[1].strip()
+                
+                logger.info(f"📝 Extracted cornerstone content for {platform} task field ({len(cornerstone_string)} chars)")
+            
             # Helper function to replace template variables with actual values or escape unknown ones
             def format_template_string(template_str: str, setting_key: str = None, **kwargs) -> str:
                 """
@@ -754,6 +782,14 @@ def create_content_generation_crew(
                             # Replace {context} with actual context from text parameter
                             # This includes content queue, brand guidelines, parent idea, etc.
                             result = result.replace(f'{{{var}}}', context_string)
+                        elif var == 'cornerstone':
+                            # Replace {cornerstone} with actual cornerstone content if available
+                            if cornerstone_string:
+                                result = result.replace(f'{{{var}}}', cornerstone_string)
+                            else:
+                                # No cornerstone content available - replace with fallback message
+                                result = result.replace(f'{{{var}}}', '[No cornerstone content available]')
+                                logger.warning(f"⚠️ {{cornerstone}} placeholder found in task but no cornerstone content available")
                         else:
                             # For other unknown variables, remove them (already warned above)
                             result = result.replace(f'{{{var}}}', '')
@@ -767,7 +803,8 @@ def create_content_generation_crew(
                     setting_key=expected_output_setting.setting_key,
                     week=week,
                     platform=platform,
-                    context=context_string
+                    context=context_string,
+                    cornerstone=cornerstone_string
                 )
                 logger.info(f"✅ Using {platform.capitalize()} Writer expected_output from SystemSettings (admin panel)")
             elif platform_task_desc:
@@ -777,7 +814,8 @@ def create_content_generation_crew(
                     setting_key=f"fallback_{platform}_task_expected_output",
                     week=week,
                     platform=platform,
-                    context=context_string
+                    context=context_string,
+                    cornerstone=cornerstone_string
                 )
                 logger.warning(f"⚠️ Using fallback expected_output from database task (admin panel config not found)")
             else:
