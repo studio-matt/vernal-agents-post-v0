@@ -679,32 +679,21 @@ def create_content_generation_crew(
                 context_string = text
             
             # Extract cornerstone content from text parameter
-            # The text parameter contains "Cornerstone Content:" section if this is a supporting platform
+            # The text parameter contains "Cornerstone Article Body:" section if this is a supporting platform
             cornerstone_string = ""
-            if "Cornerstone Content (from" in text:
-                # Extract the cornerstone content section
-                cornerstone_start = text.find("Cornerstone Content (from")
+            if "Cornerstone Article Body:" in text:
+                # Extract the cornerstone content body (only the body, no title/excerpt)
+                cornerstone_start = text.find("Cornerstone Article Body:")
                 # Find the end - either before "Campaign Context:" or before "\n\nGenerate content"
                 cornerstone_end = text.find("\n\nCampaign Context:", cornerstone_start)
                 if cornerstone_end == -1:
                     cornerstone_end = text.find("\n\nGenerate content", cornerstone_start)
                 if cornerstone_end == -1:
                     cornerstone_end = len(text)
-                cornerstone_section = text[cornerstone_start:cornerstone_end]
-                # Extract just the content part (remove the "Cornerstone Content (from X):" header)
-                if "Title:" in cornerstone_section:
-                    title_start = cornerstone_section.find("Title:")
-                    content_start = cornerstone_section.find("Content:", title_start)
-                    if content_start != -1:
-                        cornerstone_string = cornerstone_section[content_start:].replace("Content:", "").strip()
-                else:
-                    # Fallback: use the whole section
-                    cornerstone_string = cornerstone_section.replace("Cornerstone Content (from", "").strip()
-                    # Remove the closing part
-                    if ":" in cornerstone_string:
-                        cornerstone_string = cornerstone_string.split(":", 1)[1].strip()
+                # Extract everything after "Cornerstone Article Body:" label
+                cornerstone_string = text[cornerstone_start + len("Cornerstone Article Body:"):cornerstone_end].strip()
                 
-                logger.info(f"📝 Extracted cornerstone content for {platform} task field ({len(cornerstone_string)} chars)")
+                logger.info(f"📝 Extracted cornerstone content body for {platform} task field ({len(cornerstone_string)} chars)")
             
             # Helper function to replace template variables with actual values or escape unknown ones
             def format_template_string(template_str: str, setting_key: str = None, **kwargs) -> str:

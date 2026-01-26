@@ -1040,21 +1040,14 @@ Sample Text (first 500 characters):
                         ).order_by(Content.date_upload.desc()).first()  # Get most recent cornerstone content
                         
                         if cornerstone_content_item and cornerstone_content_item.content:
-                            # Build full cornerstone content with title and content
-                            # Use WordPress post_title if available, otherwise use title
-                            cornerstone_title = cornerstone_content_item.post_title or cornerstone_content_item.title or "Cornerstone Content"
-                            cornerstone_text = cornerstone_content_item.content
+                            # Pass ONLY the content body (no title or excerpt)
+                            # This prevents agents from anchoring to summary instead of mining the full article
+                            cornerstone_text = cornerstone_content_item.content.strip()
                             
-                            # Include WordPress excerpt if available
-                            if cornerstone_content_item.post_excerpt:
-                                cornerstone_text = f"{cornerstone_content_item.post_excerpt}\n\n{cornerstone_text}"
+                            # Prepend label for clarity
+                            cornerstone_content = f"Cornerstone Article Body:\n{cornerstone_text}"
                             
-                            cornerstone_content = f"""
-Cornerstone Content (from {campaign.cornerstone_platform}):
-Title: {cornerstone_title}
-Content: {cornerstone_text}
-"""
-                            logger.info(f"📝 Fetched cornerstone content for supporting platform {platform} (cornerstone: {campaign.cornerstone_platform})")
+                            logger.info(f"📝 Fetched cornerstone content body for supporting platform {platform} (cornerstone: {campaign.cornerstone_platform}, {len(cornerstone_text)} chars)")
                         else:
                             logger.warning(f"⚠️ Cornerstone platform {campaign.cornerstone_platform} is set but no cornerstone content found")
                     
