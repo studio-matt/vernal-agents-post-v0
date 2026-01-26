@@ -76,7 +76,9 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     try:
                         # Get all column names from the database table (excluding cornerstone_platform)
                         from sqlalchemy import inspect as sql_inspect
-                        inspector = sql_inspect(db.bind)
+                        # Get the engine from the session
+                        engine = db.get_bind() if hasattr(db, 'get_bind') else db.bind
+                        inspector = sql_inspect(engine)
                         columns = [col['name'] for col in inspector.get_columns('campaigns') if col['name'] != 'cornerstone_platform']
                         
                         # Build SELECT statement with only existing columns
