@@ -132,13 +132,7 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     logger.error(f"Essential columns fallback also failed: {essential_error}")
                     raise
         
-        # Continue with existing logic if we have campaigns
-        if campaigns is None:
-            raise Exception("Failed to fetch campaigns with all fallback methods")
-        
-        # Original code continues here - ensure user has demo campaign, etc.
-        try:
-            except (OperationalError, ProgrammingError) as sql_error:
+        # Continue with existing logic - ensure user has demo campaign, etc.
                 # SQL error likely due to missing column - try raw SQL query without cornerstone_platform
                 error_str = str(sql_error).lower()
                 if 'cornerstone_platform' in error_str or 'unknown column' in error_str or 'doesn\'t exist' in error_str or 'column' in error_str:
