@@ -1030,14 +1030,36 @@ Sample Text (first 500 characters):
                                     platform_settings_text = f"\n\n{platform.capitalize()}-Specific Settings/Modifications:\n" + "\n".join(settings_items)
                     
                     # Fetch cornerstone content if this is a supporting platform (not the cornerstone platform)
+                    # IMPORTANT: Fetch cornerstone content for the SPECIFIC week and day being generated
+                    # This ensures supporting platforms reference the correct cornerstone post for that day
                     cornerstone_content = ""
                     if campaign.cornerstone_platform and platform.lower() != campaign.cornerstone_platform.lower():
-                        # This is a supporting platform - fetch the cornerstone content
+                        # This is a supporting platform - fetch the cornerstone content for THIS specific week and day
                         from models import Content
+                        
+                        # First try to find cornerstone content for the exact week and day
                         cornerstone_content_item = session.query(Content).filter(
                             Content.campaign_id == cid,
-                            Content.platform == campaign.cornerstone_platform.lower()
-                        ).order_by(Content.date_upload.desc()).first()  # Get most recent cornerstone content
+                            Content.platform == campaign.cornerstone_platform.lower(),
+                            Content.week == week,
+                            Content.day == day
+                        ).first()
+                        
+                        # If not found for exact match, try to find any cornerstone content for this day (different week)
+                        if not cornerstone_content_item:
+                            cornerstone_content_item = session.query(Content).filter(
+                                Content.campaign_id == cid,
+                                Content.platform == campaign.cornerstone_platform.lower(),
+                                Content.day == day
+                            ).order_by(Content.week.desc(), Content.date_upload.desc()).first()
+                        
+                        # If still not found, fall back to most recent cornerstone content (for backward compatibility)
+                        if not cornerstone_content_item:
+                            cornerstone_content_item = session.query(Content).filter(
+                                Content.campaign_id == cid,
+                                Content.platform == campaign.cornerstone_platform.lower()
+                            ).order_by(Content.date_upload.desc()).first()
+                            logger.warning(f"⚠️ No cornerstone content found for week {week}, day {day}. Using most recent cornerstone content.")
                         
                         if cornerstone_content_item and cornerstone_content_item.content:
                             # Pass ONLY the content body (no title or excerpt)
@@ -1047,9 +1069,15 @@ Sample Text (first 500 characters):
                             # Prepend label for clarity
                             cornerstone_content = f"Cornerstone Article Body:\n{cornerstone_text}"
                             
-                            logger.info(f"📝 Fetched cornerstone content body for supporting platform {platform} (cornerstone: {campaign.cornerstone_platform}, {len(cornerstone_text)} chars)")
+                            # Log which cornerstone content was used (for debugging)
+                            matched_week = cornerstone_content_item.week
+                            matched_day = cornerstone_content_item.day
+                            if matched_week == week and matched_day == day:
+                                logger.info(f"📝 Fetched cornerstone content for week {week}, day {day} (exact match) - {len(cornerstone_text)} chars")
+                            else:
+                                logger.info(f"📝 Fetched cornerstone content for week {matched_week}, day {matched_day} (requested: week {week}, day {day}) - {len(cornerstone_text)} chars")
                         else:
-                            logger.warning(f"⚠️ Cornerstone platform {campaign.cornerstone_platform} is set but no cornerstone content found")
+                            logger.warning(f"⚠️ Cornerstone platform {campaign.cornerstone_platform} is set but no cornerstone content found for week {week}, day {day}")
                     
                     # Build writing context for THIS ONE ARTICLE
                     # Includes: content queue items (for this article only), parent idea, brand guidelines,
