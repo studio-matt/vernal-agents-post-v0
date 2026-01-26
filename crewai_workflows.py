@@ -784,6 +784,30 @@ def create_content_generation_crew(
                             result = result.replace(f'{{{var}}}', '')
                     return result
             
+            # Helper function to handle conditional cornerstone logic in task field
+            def process_conditional_cornerstone_logic(task_text: str, has_cornerstone: bool) -> str:
+                """
+                Process conditional logic for cornerstone in task field.
+                If {cornerstone} is NOT present, keep the "If {cornerstone} is NOT present:" block.
+                If {cornerstone} IS present, remove that entire conditional block.
+                """
+                import re
+                
+                # Pattern to match the conditional block:
+                # "If {cornerstone} is NOT present:" followed by text until next section or end
+                pattern = r'If\s+\{cornerstone\}\s+is\s+NOT\s+present:.*?(?=\n\n|\n[A-Z][^:]*:|$)'
+                
+                if has_cornerstone:
+                    # Cornerstone IS present - remove the conditional block
+                    task_text = re.sub(pattern, '', task_text, flags=re.IGNORECASE | re.DOTALL | re.MULTILINE)
+                    # Clean up extra newlines
+                    task_text = re.sub(r'\n{3,}', '\n\n', task_text)
+                else:
+                    # Cornerstone is NOT present - keep the block but remove the "If {cornerstone} is NOT present:" label
+                    task_text = re.sub(r'If\s+\{cornerstone\}\s+is\s+NOT\s+present:\s*', '', task_text, flags=re.IGNORECASE)
+                
+                return task_text.strip()
+            
             # Use admin panel configuration if available, otherwise fall back to database task
             if expected_output_setting and expected_output_setting.setting_value:
                 # Format template variables in expected_output
@@ -795,6 +819,11 @@ def create_content_generation_crew(
                     context=context_string,
                     cornerstone=cornerstone_string
                 )
+                # Process conditional cornerstone logic
+                writing_expected_output = process_conditional_cornerstone_logic(
+                    writing_expected_output, 
+                    bool(cornerstone_string)
+                )
                 logger.info(f"✅ Using {platform.capitalize()} Writer expected_output from SystemSettings (admin panel)")
             elif platform_task_desc:
                 # CRITICAL: Even fallback expected_output must be formatted to remove {context} and other template variables
@@ -805,6 +834,11 @@ def create_content_generation_crew(
                     platform=platform,
                     context=context_string,
                     cornerstone=cornerstone_string
+                )
+                # Process conditional cornerstone logic
+                writing_expected_output = process_conditional_cornerstone_logic(
+                    writing_expected_output, 
+                    bool(cornerstone_string)
                 )
                 logger.warning(f"⚠️ Using fallback expected_output from database task (admin panel config not found)")
             else:
