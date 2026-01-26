@@ -8,6 +8,8 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy import text
 from auth_api import get_current_user
 from database import SessionLocal
 from app.schemas.models import CampaignCreate, CampaignUpdate
@@ -36,21 +38,80 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
         
         # Filter campaigns by authenticated user (multi-tenant security)
         # Admin users can see all campaigns for troubleshooting
-        # Use try-except to handle potential SQL errors if columns don't exist yet
+        # Use defer() to exclude potentially missing columns from SELECT to prevent SQL errors
         try:
+            # Try to defer cornerstone_platform if it might not exist in database
+            query = db.query(Campaign)
+            try:
+                # Check if column exists by trying to defer it
+                query = query.options(defer(Campaign.cornerstone_platform))
+            except (AttributeError, Exception) as defer_error:
+                # Column doesn't exist in model or can't be deferred - continue without defer
+                logger.debug(f"Could not defer cornerstone_platform: {defer_error}")
+            
             if hasattr(current_user, 'is_admin') and current_user.is_admin:
-                campaigns = db.query(Campaign).all()
+                campaigns = query.all()
                 logger.info(f"Admin user {current_user.id} viewing all campaigns: found {len(campaigns)} campaigns")
             else:
-                campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+                campaigns = query.filter(Campaign.user_id == current_user.id).all()
                 logger.info(f"Filtered campaigns by user_id={current_user.id}: found {len(campaigns)} campaigns")
         except Exception as query_error:
-            # If query fails due to missing column, try with explicit column selection
-            logger.warning(f"Campaign query failed, may be due to missing column: {query_error}")
+            # If query fails due to missing column, try without defer
+            logger.warning(f"Campaign query failed, trying without defer: {query_error}")
             import traceback
             logger.error(f"Query error traceback: {traceback.format_exc()}")
-            # Re-raise the error so it's properly handled by the outer try-except
-            raise
+            try:
+                # Retry query without defer
+                if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                    campaigns = db.query(Campaign).all()
+                    logger.info(f"Admin user {current_user.id} viewing all campaigns (retry): found {len(campaigns)} campaigns")
+                else:
+                    campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
+                    logger.info(f"Filtered campaigns by user_id={current_user.id} (retry): found {len(campaigns)} campaigns")
+            except (OperationalError, ProgrammingError) as sql_error:
+                # SQL error likely due to missing column - try raw SQL query without cornerstone_platform
+                error_str = str(sql_error).lower()
+                if 'cornerstone_platform' in error_str or 'unknown column' in error_str or 'doesn\'t exist' in error_str:
+                    logger.warning(f"SQL error detected (likely missing cornerstone_platform column), using raw SQL fallback: {sql_error}")
+                    try:
+                        # Get all column names from the database table (excluding cornerstone_platform)
+                        from sqlalchemy import inspect as sql_inspect
+                        inspector = sql_inspect(db.bind)
+                        columns = [col['name'] for col in inspector.get_columns('campaigns') if col['name'] != 'cornerstone_platform']
+                        
+                        # Build SELECT statement with only existing columns
+                        columns_str = ', '.join(columns)
+                        if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                            sql = text(f"SELECT {columns_str} FROM campaigns")
+                            result = db.execute(sql)
+                        else:
+                            sql = text(f"SELECT {columns_str} FROM campaigns WHERE user_id = :user_id")
+                            result = db.execute(sql, {"user_id": current_user.id})
+                        
+                        # Convert raw results to Campaign objects
+                        campaigns = []
+                        for row in result:
+                            row_dict = dict(row._mapping)
+                            # Create Campaign object and set attributes
+                            campaign = Campaign()
+                            for key, value in row_dict.items():
+                                if hasattr(campaign, key):
+                                    setattr(campaign, key, value)
+                            campaigns.append(campaign)
+                        
+                        logger.info(f"Raw SQL fallback successful: found {len(campaigns)} campaigns")
+                    except Exception as raw_sql_error:
+                        logger.error(f"Raw SQL fallback also failed: {raw_sql_error}")
+                        import traceback
+                        logger.error(f"Raw SQL fallback traceback: {traceback.format_exc()}")
+                        raise
+                else:
+                    # Different SQL error - re-raise
+                    raise
+            except Exception as retry_error:
+                # If retry also fails, log and re-raise
+                logger.error(f"Campaign query retry also failed: {retry_error}")
+                raise
         
         # Ensure user has a demo campaign (create copy if needed)
         # Ensure every user has their own demo campaign copy
