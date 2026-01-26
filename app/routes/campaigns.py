@@ -39,6 +39,7 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
         # Filter campaigns by authenticated user (multi-tenant security)
         # Admin users can see all campaigns for troubleshooting
         # Use defer() to exclude potentially missing columns from SELECT to prevent SQL errors
+        campaigns = None
         try:
             # Try to defer cornerstone_platform if it might not exist in database
             query = db.query(Campaign)
@@ -68,6 +69,75 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                 else:
                     campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
                     logger.info(f"Filtered campaigns by user_id={current_user.id} (retry): found {len(campaigns)} campaigns")
+        # If campaigns is still None, use raw SQL fallback
+        if campaigns is None:
+            logger.warning("Campaigns query failed, attempting raw SQL fallback")
+            try:
+                # Hardcoded list of all Campaign columns except cornerstone_platform
+                columns = [
+                    'id', 'campaign_id', 'campaign_name', 'description', 'query', 'type',
+                    'keywords', 'urls', 'trending_topics', 'topics', 'status', 'user_id',
+                    'created_at', 'updated_at', 'extraction_settings_json', 'preprocessing_settings_json',
+                    'entity_settings_json', 'modeling_settings_json', 'scheduling_settings_json',
+                    'campaign_plan_json', 'content_queue_items_json', 'research_selections_json',
+                    'custom_keywords_json', 'personality_settings_json', 'image_settings_json',
+                    'site_base_url', 'target_keywords_json', 'top_ideas_count', 'articles_url',
+                    'gap_analysis_results_json'
+                ]
+                
+                columns_str = ', '.join(columns)
+                if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                    sql = text(f"SELECT {columns_str} FROM campaigns")
+                    result = db.execute(sql)
+                else:
+                    sql = text(f"SELECT {columns_str} FROM campaigns WHERE user_id = :user_id")
+                    result = db.execute(sql, {"user_id": current_user.id})
+                
+                campaigns = []
+                for row in result:
+                    row_dict = dict(row._mapping)
+                    campaign = Campaign()
+                    for key, value in row_dict.items():
+                        if hasattr(campaign, key):
+                            setattr(campaign, key, value)
+                    campaigns.append(campaign)
+                
+                logger.info(f"Raw SQL fallback successful: found {len(campaigns)} campaigns")
+            except Exception as raw_sql_error:
+                logger.error(f"Raw SQL fallback failed: {raw_sql_error}")
+                import traceback
+                logger.error(f"Raw SQL fallback traceback: {traceback.format_exc()}")
+                # Try with essential columns only
+                try:
+                    essential_columns = ['id', 'campaign_id', 'campaign_name', 'description', 'query', 'type', 'keywords', 'urls', 'status', 'user_id', 'created_at', 'updated_at']
+                    columns_str = ', '.join(essential_columns)
+                    if hasattr(current_user, 'is_admin') and current_user.is_admin:
+                        sql = text(f"SELECT {columns_str} FROM campaigns")
+                        result = db.execute(sql)
+                    else:
+                        sql = text(f"SELECT {columns_str} FROM campaigns WHERE user_id = :user_id")
+                        result = db.execute(sql, {"user_id": current_user.id})
+                    
+                    campaigns = []
+                    for row in result:
+                        row_dict = dict(row._mapping)
+                        campaign = Campaign()
+                        for key, value in row_dict.items():
+                            if hasattr(campaign, key):
+                                setattr(campaign, key, value)
+                        campaigns.append(campaign)
+                    
+                    logger.info(f"Essential columns fallback successful: found {len(campaigns)} campaigns")
+                except Exception as essential_error:
+                    logger.error(f"Essential columns fallback also failed: {essential_error}")
+                    raise
+        
+        # Continue with existing logic if we have campaigns
+        if campaigns is None:
+            raise Exception("Failed to fetch campaigns with all fallback methods")
+        
+        # Original code continues here - ensure user has demo campaign, etc.
+        try:
             except (OperationalError, ProgrammingError) as sql_error:
                 # SQL error likely due to missing column - try raw SQL query without cornerstone_platform
                 error_str = str(sql_error).lower()
