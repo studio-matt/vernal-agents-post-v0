@@ -788,23 +788,25 @@ def create_content_generation_crew(
             def process_conditional_cornerstone_logic(task_text: str, has_cornerstone: bool) -> str:
                 """
                 Process conditional logic for cornerstone in task field.
-                If {cornerstone} is NOT present, keep the "If {cornerstone} is NOT present:" block.
-                If {cornerstone} IS present, remove that entire conditional block.
+                If {cornerstone} IS present (has actual content), remove the "If {cornerstone} is NOT present:" block.
+                If {cornerstone} is NOT present (no content), keep the block but remove the conditional label.
                 """
                 import re
                 
                 # Pattern to match the conditional block:
                 # "If {cornerstone} is NOT present:" followed by text until next section or end
-                pattern = r'If\s+\{cornerstone\}\s+is\s+NOT\s+present:.*?(?=\n\n|\n[A-Z][^:]*:|$)'
+                # The block ends at double newline, next heading, or end of string
+                pattern = r'If\s+\{cornerstone\}\s+is\s+NOT\s+present:\s*(.*?)(?=\n\n[A-Z]|\n\n[A-Z][^:]*:|$)'
                 
                 if has_cornerstone:
-                    # Cornerstone IS present - remove the conditional block
+                    # Cornerstone IS present - remove the entire conditional block
                     task_text = re.sub(pattern, '', task_text, flags=re.IGNORECASE | re.DOTALL | re.MULTILINE)
                     # Clean up extra newlines
                     task_text = re.sub(r'\n{3,}', '\n\n', task_text)
                 else:
-                    # Cornerstone is NOT present - keep the block but remove the "If {cornerstone} is NOT present:" label
-                    task_text = re.sub(r'If\s+\{cornerstone\}\s+is\s+NOT\s+present:\s*', '', task_text, flags=re.IGNORECASE)
+                    # Cornerstone is NOT present - keep the block content but remove the "If {cornerstone} is NOT present:" label
+                    # This makes it appear as regular instructions
+                    task_text = re.sub(r'If\s+\{cornerstone\}\s+is\s+NOT\s+present:\s*', '', task_text, flags=re.IGNORECASE | re.MULTILINE)
                 
                 return task_text.strip()
             
