@@ -1041,11 +1041,13 @@ Sample Text (first 500 characters):
                         
                         if cornerstone_content_item and cornerstone_content_item.content:
                             # Build full cornerstone content with title and content
-                            cornerstone_title = cornerstone_content_item.title or "Cornerstone Content"
+                            # Use WordPress post_title if available, otherwise use title
+                            cornerstone_title = cornerstone_content_item.post_title or cornerstone_content_item.title or "Cornerstone Content"
                             cornerstone_text = cornerstone_content_item.content
-                            # Include WordPress fields if available (check post_title and post_excerpt from description field or separate fields)
-                            # Note: WordPress fields might be stored in a JSON field or separate columns
-                            # For now, use the content field which should contain the full text
+                            
+                            # Include WordPress excerpt if available
+                            if cornerstone_content_item.post_excerpt:
+                                cornerstone_text = f"{cornerstone_content_item.post_excerpt}\n\n{cornerstone_text}"
                             
                             cornerstone_content = f"""
 Cornerstone Content (from {campaign.cornerstone_platform}):
