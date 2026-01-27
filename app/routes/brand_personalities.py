@@ -1075,7 +1075,8 @@ Sample Text (first 500 characters):
                             if matched_week == week and matched_day == day:
                                 logger.info(f"📝 Fetched cornerstone content for week {week}, day {day} (exact match) - {len(cornerstone_text)} chars")
                             else:
-                                logger.info(f"📝 Fetched cornerstone content for week {matched_week}, day {matched_day} (requested: week {week}, day {day}) - {len(cornerstone_text)} chars")
+                                # Day match but different week - warn about potential theme mismatch
+                                logger.warning(f"⚠️ Using cornerstone content from week {matched_week}, day {matched_day} (requested: week {week}, day {day}). Campaign themes may differ week-to-week. - {len(cornerstone_text)} chars")
                         else:
                             logger.warning(f"⚠️ Cornerstone platform {campaign.cornerstone_platform} is set but no cornerstone content found for week {week}, day {day}")
                     
