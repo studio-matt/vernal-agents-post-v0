@@ -1,4 +1,4 @@
-"""
+z"""
 CrewAI-based workflows for content generation
 Enables agent-to-agent handoffs with automatic orchestration
 """
@@ -681,6 +681,7 @@ def create_content_generation_crew(
             # Extract cornerstone content from text parameter
             # The text parameter contains "Cornerstone Article Body:" section if this is a supporting platform
             cornerstone_string = ""
+            cornerstone_url = ""
             if "Cornerstone Article Body:" in text:
                 # Extract the cornerstone content body (only the body, no title/excerpt)
                 cornerstone_start = text.find("Cornerstone Article Body:")
@@ -694,6 +695,16 @@ def create_content_generation_crew(
                 cornerstone_string = text[cornerstone_start + len("Cornerstone Article Body:"):cornerstone_end].strip()
                 
                 logger.info(f"📝 Extracted cornerstone content body for {platform} task field ({len(cornerstone_string)} chars)")
+            
+            # Extract cornerstone URL from text parameter if available
+            # The URL is passed separately in the writing context and can be extracted from a "Cornerstone URL:" label
+            if "Cornerstone URL:" in text:
+                url_start = text.find("Cornerstone URL:")
+                url_end = text.find("\n", url_start)
+                if url_end == -1:
+                    url_end = len(text)
+                cornerstone_url = text[url_start + len("Cornerstone URL:"):url_end].strip()
+                logger.info(f"🔗 Extracted cornerstone URL for {platform} task field: {cornerstone_url}")
             
             # Helper function to replace template variables with actual values or escape unknown ones
             def format_template_string(template_str: str, setting_key: str = None, **kwargs) -> str:
@@ -779,6 +790,14 @@ def create_content_generation_crew(
                                 # No cornerstone content available - replace with fallback message
                                 result = result.replace(f'{{{var}}}', '[No cornerstone content available]')
                                 logger.warning(f"⚠️ {{cornerstone}} placeholder found in task but no cornerstone content available")
+                        elif var == 'cornerstone_url':
+                            # Replace {cornerstone_url} with actual cornerstone URL if available
+                            if cornerstone_url:
+                                result = result.replace(f'{{{var}}}', cornerstone_url)
+                            else:
+                                # No cornerstone URL available - replace with fallback message
+                                result = result.replace(f'{{{var}}}', '[Cornerstone URL not available - content may not be published yet]')
+                                logger.warning(f"⚠️ {{cornerstone_url}} placeholder found in task but no cornerstone URL available")
                         else:
                             # For other unknown variables, remove them (already warned above)
                             result = result.replace(f'{{{var}}}', '')
@@ -819,7 +838,8 @@ def create_content_generation_crew(
                     week=week,
                     platform=platform,
                     context=context_string,
-                    cornerstone=cornerstone_string
+                    cornerstone=cornerstone_string,
+                    cornerstone_url=cornerstone_url
                 )
                 # Process conditional cornerstone logic
                 writing_expected_output = process_conditional_cornerstone_logic(
@@ -835,7 +855,8 @@ def create_content_generation_crew(
                     week=week,
                     platform=platform,
                     context=context_string,
-                    cornerstone=cornerstone_string
+                    cornerstone=cornerstone_string,
+                    cornerstone_url=cornerstone_url
                 )
                 # Process conditional cornerstone logic
                 writing_expected_output = process_conditional_cornerstone_logic(

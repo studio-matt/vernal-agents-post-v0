@@ -2614,6 +2614,7 @@ async def post_content_now(
         
         # Route to appropriate platform posting function
         platform_lower = platform.lower()
+        post_url = None  # Will be set by each platform's posting logic
         
         if platform_lower == "linkedin":
             # Call LinkedIn posting logic
@@ -2663,6 +2664,8 @@ async def post_content_now(
             
             post_id = response.json().get("id")
             platform_name = "LinkedIn"
+            # LinkedIn post URL format: https://www.linkedin.com/feed/update/{post_id}
+            post_url = f"https://www.linkedin.com/feed/update/{post_id}" if post_id else None
             
         elif platform_lower == "twitter" or platform_lower == "x":
             # Call Twitter posting logic
@@ -2709,6 +2712,9 @@ async def post_content_now(
             
             post_id = response.json().get("data", {}).get("id")
             platform_name = "Twitter"
+            # Twitter post URL format: https://twitter.com/user/status/{tweet_id}
+            # Note: We don't have username, so we'll use a generic format
+            post_url = f"https://twitter.com/i/web/status/{post_id}" if post_id else None
             
         elif platform_lower == "instagram":
             # Call Instagram posting logic
@@ -2855,6 +2861,9 @@ async def post_content_now(
             
             post_id = publish_response.json().get("id")
             platform_name = "Instagram"
+            # Instagram post URL format: https://www.instagram.com/p/{shortcode}/
+            # Note: We only have the media ID, not the shortcode, so we'll construct a generic URL
+            post_url = f"https://www.instagram.com/p/{post_id}/" if post_id else None
             
         elif platform_lower == "facebook":
             # Call Facebook posting logic (posts to Facebook Page)
@@ -2974,6 +2983,9 @@ async def post_content_now(
             
             post_id = post_response.json().get("id")
             platform_name = "Facebook"
+            # Facebook post URL format: https://www.facebook.com/{page_id}/posts/{post_id}
+            # Note: We have page_id from earlier, but we'll use a generic format
+            post_url = f"https://www.facebook.com/{page_id}/posts/{post_id}" if post_id and page_id else None
             
         elif platform_lower == "wordpress":
             # Call WordPress posting logic
@@ -3113,8 +3125,11 @@ async def post_content_now(
                     detail=detail
                 )
             
-            post_id = response.json().get("id")
+            response_data = response.json()
+            post_id = response_data.get("id")
             platform_name = "WordPress"
+            # WordPress plugin returns 'url' field in response
+            post_url = response_data.get("url") or response_data.get("link")
             
         else:
             raise HTTPException(
@@ -3122,12 +3137,16 @@ async def post_content_now(
                 detail=f"Unsupported platform: {platform}. Supported platforms: linkedin, twitter, instagram, facebook, wordpress"
             )
         
-        # Update content status if content_id exists
+        # Update content status and post_url if content_id exists
         if content_id:
             content = db.query(Content).filter(Content.id == content_id).first()
             if content:
                 content.status = "posted"
                 content.date_upload = datetime.now().replace(tzinfo=None)
+                # Save post_url if available
+                if post_url:
+                    content.post_url = post_url
+                    logger.info(f"✅ Saved post_url for content {content_id}: {post_url}")
                 db.commit()
                 logger.info(f"✅ Updated content {content_id} status to 'posted'")
         

@@ -1033,6 +1033,7 @@ Sample Text (first 500 characters):
                     # IMPORTANT: Fetch cornerstone content for the SPECIFIC week and day being generated
                     # This ensures supporting platforms reference the correct cornerstone post for that day
                     cornerstone_content = ""
+                    cornerstone_url = ""
                     if campaign.cornerstone_platform and platform.lower() != campaign.cornerstone_platform.lower():
                         # This is a supporting platform - fetch the cornerstone content for THIS specific week and day
                         from models import Content
@@ -1069,6 +1070,13 @@ Sample Text (first 500 characters):
                             # Prepend label for clarity
                             cornerstone_content = f"Cornerstone Article Body:\n{cornerstone_text}"
                             
+                            # Get the published URL if available (post_url field)
+                            if hasattr(cornerstone_content_item, 'post_url') and cornerstone_content_item.post_url:
+                                cornerstone_url = cornerstone_content_item.post_url
+                                logger.info(f"🔗 Found cornerstone URL: {cornerstone_url}")
+                            else:
+                                logger.warning(f"⚠️ Cornerstone content found but no post_url available (content may not be published yet)")
+                            
                             # Log which cornerstone content was used (for debugging)
                             matched_week = cornerstone_content_item.week
                             matched_day = cornerstone_content_item.day
@@ -1083,6 +1091,8 @@ Sample Text (first 500 characters):
                     # Build writing context for THIS ONE ARTICLE
                     # Includes: content queue items (for this article only), parent idea, brand guidelines,
                     # campaign context, platform-specific modifications, and cornerstone content
+                    # Include cornerstone URL if available
+                    cornerstone_url_section = f"\nCornerstone URL:\n{cornerstone_url}" if cornerstone_url else ""
                     writing_context = f"""Content Queue Foundation (for this article only):
 {queue_context}
 
@@ -1090,7 +1100,7 @@ Sample Text (first 500 characters):
 
 Campaign Context:
 {campaign_context}
-{cornerstone_content}
+{cornerstone_content}{cornerstone_url_section}
 
 Generate content for {platform} based on the content queue items and campaign context above."""
                     
