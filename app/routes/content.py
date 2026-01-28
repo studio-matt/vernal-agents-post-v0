@@ -3405,17 +3405,36 @@ async def save_content_item(
                 logger.info(f"💾 Updating permalink: '{item.get('permalink')}'")
             
             # WordPress category and author (only update if columns exist and key is present in item)
+            # Always update if key exists (even if null) to allow clearing values
             if "category_id" in content_columns and "category_id" in item:
                 category_value = item.get("category_id")
                 update_fields.append("category_id = :category_id")
-                update_values["category_id"] = int(category_value) if category_value else None
-                logger.info(f"💾 Updating category_id: {update_values['category_id']}")
+                # Handle null, 0, and empty string - convert to None for NULL in database
+                if category_value is None or category_value == "null" or category_value == "":
+                    update_values["category_id"] = None
+                elif category_value:
+                    try:
+                        update_values["category_id"] = int(category_value)
+                    except (ValueError, TypeError):
+                        update_values["category_id"] = None
+                else:
+                    update_values["category_id"] = None
+                logger.info(f"💾 Updating category_id: {update_values['category_id']} (raw value: {category_value}, type: {type(category_value).__name__})")
             
             if "author_id" in content_columns and "author_id" in item:
                 author_value = item.get("author_id")
                 update_fields.append("author_id = :author_id")
-                update_values["author_id"] = int(author_value) if author_value else None
-                logger.info(f"💾 Updating author_id: {update_values['author_id']}")
+                # Handle null, 0, and empty string - convert to None for NULL in database
+                if author_value is None or author_value == "null" or author_value == "":
+                    update_values["author_id"] = None
+                elif author_value:
+                    try:
+                        update_values["author_id"] = int(author_value)
+                    except (ValueError, TypeError):
+                        update_values["author_id"] = None
+                else:
+                    update_values["author_id"] = None
+                logger.info(f"💾 Updating author_id: {update_values['author_id']} (raw value: {author_value}, type: {type(author_value).__name__})")
             
             if update_fields:
                 update_stmt = text(f"UPDATE content SET {', '.join(update_fields)} WHERE id = :id")
