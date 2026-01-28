@@ -69,6 +69,12 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                 else:
                     campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
                     logger.info(f"Filtered campaigns by user_id={current_user.id} (retry): found {len(campaigns)} campaigns")
+            except Exception as retry_error:
+                logger.error(f"Retry query also failed: {retry_error}")
+                import traceback
+                logger.error(f"Retry error traceback: {traceback.format_exc()}")
+                campaigns = None
+        
         # If campaigns is still None, use raw SQL fallback
         if campaigns is None:
             logger.warning("Campaigns query failed, attempting raw SQL fallback")
@@ -130,7 +136,13 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     logger.info(f"Essential columns fallback successful: found {len(campaigns)} campaigns")
                 except Exception as essential_error:
                     logger.error(f"Essential columns fallback also failed: {essential_error}")
-                    raise
+                    # Initialize campaigns as empty list to prevent None errors
+                    campaigns = []
+        
+        # Ensure campaigns is never None
+        if campaigns is None:
+            logger.warning("⚠️ All campaign queries failed, initializing empty list")
+            campaigns = []
         
         # Continue with existing logic - ensure user has demo campaign, etc.
         # Ensure user has a demo campaign (create copy if needed)
@@ -308,6 +320,35 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     except (AttributeError, ValueError) as e:
                         logger.warning(f"Failed to format updated_at for campaign {campaign.id}: {e}")
                 
+                # Safely parse comma-separated strings
+                keywords_list = []
+                if campaign.keywords:
+                    try:
+                        keywords_list = campaign.keywords.split(",") if isinstance(campaign.keywords, str) else (campaign.keywords if isinstance(campaign.keywords, list) else [])
+                    except Exception:
+                        keywords_list = []
+                
+                urls_list = []
+                if campaign.urls:
+                    try:
+                        urls_list = campaign.urls.split(",") if isinstance(campaign.urls, str) else (campaign.urls if isinstance(campaign.urls, list) else [])
+                    except Exception:
+                        urls_list = []
+                
+                trending_topics_list = []
+                if campaign.trending_topics:
+                    try:
+                        trending_topics_list = campaign.trending_topics.split(",") if isinstance(campaign.trending_topics, str) else (campaign.trending_topics if isinstance(campaign.trending_topics, list) else [])
+                    except Exception:
+                        trending_topics_list = []
+                
+                topics_list = []
+                if campaign.topics:
+                    try:
+                        topics_list = campaign.topics.split(",") if isinstance(campaign.topics, str) else (campaign.topics if isinstance(campaign.topics, list) else [])
+                    except Exception:
+                        topics_list = []
+                
                 campaigns_list.append({
                     "id": campaign.id,
                     "campaign_id": campaign.campaign_id,
@@ -315,10 +356,10 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     "description": campaign.description or "",
                     "type": campaign.type or "",
                     "query": campaign.query or "",
-                    "keywords": campaign.keywords.split(",") if campaign.keywords else [],
-                    "urls": campaign.urls.split(",") if campaign.urls else [],
-                    "trending_topics": campaign.trending_topics.split(",") if campaign.trending_topics else [],
-                    "topics": campaign.topics.split(",") if campaign.topics else [],
+                    "keywords": keywords_list,
+                    "urls": urls_list,
+                    "trending_topics": trending_topics_list,
+                    "topics": topics_list,
                     "status": campaign.status or "INCOMPLETE",
                     "user_id": campaign.user_id,
                     "user_username": user_cache.get(campaign.user_id, {}).get("username") if campaign.user_id else None,
