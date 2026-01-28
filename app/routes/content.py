@@ -2568,8 +2568,9 @@ async def post_content_now(
         # Get content item from request
         content_id = request_data.get("content_id")
         content_item = request_data.get("content_item")
+        wordpress_fields = request_data.get("wordpress_fields")  # For passing category_id/author_id when using contentId
         
-        logger.info(f"📤 Post Now request received: content_id={content_id}, has_content_item={bool(content_item)}")
+        logger.info(f"📤 Post Now request received: content_id={content_id}, has_content_item={bool(content_item)}, has_wordpress_fields={bool(wordpress_fields)}")
         
         # If content_id provided, fetch from database
         if content_id:
@@ -3050,12 +3051,20 @@ async def post_content_now(
             
             # Add category and author if provided
             if content_id:
-                content_obj = db.query(Content).filter(Content.id == content_id).first()
-                if content_obj:
-                    if hasattr(content_obj, 'category_id') and content_obj.category_id:
-                        post_data["category_id"] = content_obj.category_id
-                    if hasattr(content_obj, 'author_id') and content_obj.author_id:
-                        post_data["author_id"] = content_obj.author_id
+                # First check if wordpress_fields were passed (takes precedence over DB)
+                if wordpress_fields:
+                    if wordpress_fields.get("category_id"):
+                        post_data["category_id"] = int(wordpress_fields.get("category_id"))
+                    if wordpress_fields.get("author_id"):
+                        post_data["author_id"] = int(wordpress_fields.get("author_id"))
+                else:
+                    # Fallback to database values
+                    content_obj = db.query(Content).filter(Content.id == content_id).first()
+                    if content_obj:
+                        if hasattr(content_obj, 'category_id') and content_obj.category_id:
+                            post_data["category_id"] = content_obj.category_id
+                        if hasattr(content_obj, 'author_id') and content_obj.author_id:
+                            post_data["author_id"] = content_obj.author_id
             elif content_item:
                 if content_item.get("category_id"):
                     post_data["category_id"] = int(content_item.get("category_id"))
