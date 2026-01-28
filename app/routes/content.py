@@ -3403,6 +3403,19 @@ async def save_content_item(
                 update_values["permalink"] = item.get("permalink") or None
                 logger.info(f"💾 Updating permalink: '{item.get('permalink')}'")
             
+            # WordPress category and author (only update if columns exist and key is present in item)
+            if "category_id" in content_columns and "category_id" in item:
+                category_value = item.get("category_id")
+                update_fields.append("category_id = :category_id")
+                update_values["category_id"] = int(category_value) if category_value else None
+                logger.info(f"💾 Updating category_id: {update_values['category_id']}")
+            
+            if "author_id" in content_columns and "author_id" in item:
+                author_value = item.get("author_id")
+                update_fields.append("author_id = :author_id")
+                update_values["author_id"] = int(author_value) if author_value else None
+                logger.info(f"💾 Updating author_id: {update_values['author_id']}")
+            
             if update_fields:
                 update_stmt = text(f"UPDATE content SET {', '.join(update_fields)} WHERE id = :id")
                 logger.info(f"🔧 Executing UPDATE: {update_stmt}")
@@ -3412,11 +3425,16 @@ async def save_content_item(
                 logger.info(f"✅ Updated existing content (ID: {existing_id}): week={week}, day={day}, platform={platform_db_value}, image={bool(image_url)}")
                 
                 # Verify the update by querying back
-                verify_query = text("SELECT post_title, post_excerpt, permalink FROM content WHERE id = :id")
+                verify_columns = ["post_title", "post_excerpt", "permalink"]
+                if "category_id" in content_columns:
+                    verify_columns.append("category_id")
+                if "author_id" in content_columns:
+                    verify_columns.append("author_id")
+                verify_query = text(f"SELECT {', '.join(verify_columns)} FROM content WHERE id = :id")
                 verify_result = db.execute(verify_query, {"id": existing_id}).first()
                 if verify_result:
                     verified = dict(verify_result._mapping)
-                    logger.info(f"✅ Verified WordPress fields after update: post_title='{verified.get('post_title')}', post_excerpt='{verified.get('post_excerpt')}', permalink='{verified.get('permalink')}'")
+                    logger.info(f"✅ Verified WordPress fields after update: post_title='{verified.get('post_title')}', post_excerpt='{verified.get('post_excerpt')}', permalink='{verified.get('permalink')}', category_id={verified.get('category_id')}, author_id={verified.get('author_id')}")
             
             # Set final_content_id for return
             final_content_id = existing_id
@@ -3500,6 +3518,15 @@ async def save_content_item(
                 
                 if "permalink" in content_columns and item.get("permalink"):
                     values["permalink"] = item.get("permalink")
+                
+                # WordPress category and author (only add if columns exist and values provided)
+                if "category_id" in content_columns and item.get("category_id"):
+                    values["category_id"] = int(item.get("category_id"))
+                    logger.info(f"💾 Adding category_id for new content: {values['category_id']}")
+                
+                if "author_id" in content_columns and item.get("author_id"):
+                    values["author_id"] = int(item.get("author_id"))
+                    logger.info(f"💾 Adding author_id for new content: {values['author_id']}")
                 
                 if "use_without_image" in content_columns:
                     values["use_without_image"] = 1 if item.get("use_without_image", False) else 0
@@ -3678,6 +3705,8 @@ def get_campaign_content_items(
                 post_title = item.get('post_title') or None
                 post_excerpt = item.get('post_excerpt') or None
                 permalink = item.get('permalink') or None
+                category_id = item.get('category_id')  # Can be None or integer
+                author_id = item.get('author_id')  # Can be None or integer
                 
                 items_data.append({
                     "id": f"week-{week}-{day}-{platform}-{item_id}",  # Composite ID for frontend
@@ -3701,6 +3730,8 @@ def get_campaign_content_items(
                     "post_title": post_title,
                     "post_excerpt": post_excerpt,
                     "permalink": permalink,
+                    "category_id": int(category_id) if category_id is not None else None,
+                    "author_id": int(author_id) if author_id is not None else None,
                 })
                 logger.info(f"📋 Item: week={week}, day={day}, platform={platform}, status={status}, has_image={bool(image_url)}, db_id={item_id}")
             except Exception as item_error:

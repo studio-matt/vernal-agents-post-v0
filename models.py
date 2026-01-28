@@ -132,6 +132,8 @@ class Content(Base):
     post_title = Column(String(255), nullable=True)  # WordPress post title (SEO-optimized)
     post_excerpt = Column(Text, nullable=True)  # WordPress post excerpt
     permalink = Column(String(255), nullable=True)  # Optimized WordPress permalink/slug
+    category_id = Column(Integer, nullable=True)  # WordPress category ID
+    author_id = Column(Integer, nullable=True)  # WordPress author ID
     post_url = Column(String(500), nullable=True)  # Published URL for any platform (WordPress permalink, LinkedIn post URL, etc.)
     # NOTE: The following columns are NOT in the database schema:
     # content_processed_at, image_processed_at, content_published_at, image_published_at, use_without_image
