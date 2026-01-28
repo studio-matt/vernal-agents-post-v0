@@ -138,10 +138,20 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
         # Wrap in try-except to prevent errors from breaking the endpoint
         try:
             # Check if user already has a demo campaign (by name pattern)
-            user_has_demo = db.query(Campaign).filter(
-                Campaign.user_id == current_user.id,
-                Campaign.campaign_name.like("Demo Campaign%")
-            ).first()
+            # Use safe query with defer to avoid column errors
+            try:
+                demo_check_query = db.query(Campaign)
+                try:
+                    demo_check_query = demo_check_query.options(defer(Campaign.cornerstone_platform))
+                except (AttributeError, Exception):
+                    pass
+                user_has_demo = demo_check_query.filter(
+                    Campaign.user_id == current_user.id,
+                    Campaign.campaign_name.like("Demo Campaign%")
+                ).first()
+            except Exception as demo_check_error:
+                logger.warning(f"⚠️ Failed to check for demo campaign, assuming none exists: {demo_check_error}")
+                user_has_demo = None
             
             if not user_has_demo:
                 logger.info(f"📋 User {current_user.id} does not have demo campaign, creating one now")
@@ -151,21 +161,48 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     # For non-admin users, refresh the entire campaigns list to include the newly created demo campaign
                     # This ensures the demo campaign is included even if it was created after the initial query
                     if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
-                        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
-                        logger.info(f"✅ Refreshed campaigns list for user {current_user.id} after creating demo campaign")
+                        # Use safe query with defer to avoid column errors
+                        try:
+                            refresh_query = db.query(Campaign)
+                            try:
+                                refresh_query = refresh_query.options(defer(Campaign.cornerstone_platform))
+                            except (AttributeError, Exception):
+                                pass
+                            campaigns = refresh_query.filter(Campaign.user_id == current_user.id).all()
+                            logger.info(f"✅ Refreshed campaigns list for user {current_user.id} after creating demo campaign")
+                        except Exception as refresh_error:
+                            logger.warning(f"⚠️ Failed to refresh campaigns after demo creation, using existing list: {refresh_error}")
+                            # Continue with existing campaigns list
                     else:
                         # For admin users, just add it to the list if not already present
-                        user_demo_campaign = db.query(Campaign).filter(
-                            Campaign.campaign_id == user_demo_campaign_id,
-                            Campaign.user_id == current_user.id
-                        ).first()
-                        if user_demo_campaign and not any(c.campaign_id == user_demo_campaign_id for c in campaigns):
-                            campaigns.append(user_demo_campaign)
-                            logger.info(f"✅ Added user demo campaign {user_demo_campaign_id} to admin user {current_user.id}'s campaign list")
+                        try:
+                            refresh_query = db.query(Campaign)
+                            try:
+                                refresh_query = refresh_query.options(defer(Campaign.cornerstone_platform))
+                            except (AttributeError, Exception):
+                                pass
+                            user_demo_campaign = refresh_query.filter(
+                                Campaign.campaign_id == user_demo_campaign_id,
+                                Campaign.user_id == current_user.id
+                            ).first()
+                            if user_demo_campaign and not any(c.campaign_id == user_demo_campaign_id for c in campaigns):
+                                campaigns.append(user_demo_campaign)
+                                logger.info(f"✅ Added user demo campaign {user_demo_campaign_id} to admin user {current_user.id}'s campaign list")
+                        except Exception as refresh_error:
+                            logger.warning(f"⚠️ Failed to fetch demo campaign for admin, skipping: {refresh_error}")
                 else:
                     logger.warning(f"⚠️ Could not create demo campaign for user {current_user.id}")
-                    # Check if template exists
-                    template_exists = db.query(Campaign).filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
+                    # Check if template exists (use safe query)
+                    try:
+                        template_check_query = db.query(Campaign)
+                        try:
+                            template_check_query = template_check_query.options(defer(Campaign.cornerstone_platform))
+                        except (AttributeError, Exception):
+                            pass
+                        template_exists = template_check_query.filter(Campaign.campaign_id == DEMO_CAMPAIGN_ID).first()
+                    except Exception as template_check_error:
+                        logger.warning(f"⚠️ Failed to check for template campaign: {template_check_error}")
+                        template_exists = None
                     if not template_exists:
                         logger.error(f"❌ Template demo campaign {DEMO_CAMPAIGN_ID} does not exist in database!")
                         logger.error(f"❌ This is a critical error - template campaign must exist for demo campaign creation to work")
@@ -175,8 +212,19 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                 if not any(c.campaign_id == user_has_demo.campaign_id for c in campaigns):
                     if not (hasattr(current_user, 'is_admin') and current_user.is_admin):
                         # For non-admin, refresh the list to ensure we have the latest data
-                        campaigns = db.query(Campaign).filter(Campaign.user_id == current_user.id).all()
-                        logger.info(f"✅ Refreshed campaigns list for user {current_user.id} to include existing demo campaign")
+                        # Use safe query with defer to avoid column errors
+                        try:
+                            refresh_query = db.query(Campaign)
+                            try:
+                                refresh_query = refresh_query.options(defer(Campaign.cornerstone_platform))
+                            except (AttributeError, Exception):
+                                pass
+                            campaigns = refresh_query.filter(Campaign.user_id == current_user.id).all()
+                            logger.info(f"✅ Refreshed campaigns list for user {current_user.id} to include existing demo campaign")
+                        except Exception as refresh_error:
+                            logger.warning(f"⚠️ Failed to refresh campaigns, using existing list: {refresh_error}")
+                            # Add the demo campaign to existing list if not present
+                            campaigns.append(user_has_demo)
                     else:
                         campaigns.append(user_has_demo)
                         logger.info(f"✅ Added existing demo campaign {user_has_demo.campaign_id} to admin user {current_user.id}'s campaign list")
@@ -194,13 +242,30 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
         ))
         
         # If no campaigns found for user, also check total campaigns for debugging
-        total_campaigns = db.query(Campaign).count()
-        if len(campaigns) == 0 and total_campaigns > 0:
-            logger.warning(f"⚠️ User {current_user.id} has 0 campaigns, but database has {total_campaigns} total campaigns. This may indicate a user_id mismatch.")
-            # Show sample campaign user_ids for debugging
-            sample_campaigns = db.query(Campaign).limit(5).all()
-            sample_user_ids = [c.user_id for c in sample_campaigns]
-            logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
+        # Use safe query to avoid column errors
+        try:
+            total_campaigns_query = db.query(Campaign)
+            try:
+                total_campaigns_query = total_campaigns_query.options(defer(Campaign.cornerstone_platform))
+            except (AttributeError, Exception):
+                pass
+            total_campaigns = total_campaigns_query.count()
+            if len(campaigns) == 0 and total_campaigns > 0:
+                logger.warning(f"⚠️ User {current_user.id} has 0 campaigns, but database has {total_campaigns} total campaigns. This may indicate a user_id mismatch.")
+                # Show sample campaign user_ids for debugging
+                try:
+                    sample_query = db.query(Campaign)
+                    try:
+                        sample_query = sample_query.options(defer(Campaign.cornerstone_platform))
+                    except (AttributeError, Exception):
+                        pass
+                    sample_campaigns = sample_query.limit(5).all()
+                    sample_user_ids = [c.user_id for c in sample_campaigns]
+                    logger.info(f"Sample campaign user_ids in database: {sample_user_ids}")
+                except Exception as sample_error:
+                    logger.warning(f"⚠️ Failed to fetch sample campaigns for debugging: {sample_error}")
+        except Exception as total_error:
+            logger.warning(f"⚠️ Failed to check total campaigns count: {total_error}")
         # Get user info for campaigns (to show username/email)
         from models import User
         user_cache = {}
@@ -260,7 +325,8 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     "user_email": user_cache.get(campaign.user_id, {}).get("email") if campaign.user_id else None,
                     "createdAt": created_at,  # Use camelCase for frontend
                     "updated_at": updated_at,
-                    "custom_keywords": custom_keywords
+                    "custom_keywords": custom_keywords,
+                    "cornerstone_platform": _safe_getattr(campaign, 'cornerstone_platform')
                 })
             except Exception as e:
                 logger.error(f"Error processing campaign {campaign.id}: {e}")
