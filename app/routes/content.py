@@ -3194,6 +3194,7 @@ async def save_content_item(
         
         logger.info(f"💾 save-content-item called for campaign {campaign_id} by user {current_user.id}")
         logger.info(f"📦 Request data: {request_data}")
+        logger.info(f"📦 WordPress fields in request: category_id={request_data.get('category_id')}, author_id={request_data.get('author_id')}")
         
         # Verify campaign exists
         campaign = db.query(Campaign).filter(
