@@ -229,21 +229,29 @@ def verify_campaign_ownership(
 async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
     """Register a new user"""
     try:
-        logger.info(f"Signup attempt for username: {user_data.username}, email: {user_data.email}")
+        # Normalize email and username (trim whitespace, lowercase email)
+        normalized_email = user_data.email.strip().lower()
+        normalized_username = user_data.username.strip()
         
-        # Check if user already exists
+        logger.info(f"Signup attempt for username: {normalized_username}, email: {normalized_email}")
+        
+        # Check if user already exists (case-insensitive email check, exact username match)
         from models import User
+        from sqlalchemy import func
         existing_user = db.query(User).filter(
-            (User.username == user_data.username) | (User.email == user_data.email)
+            (User.username == normalized_username) | (func.lower(User.email) == normalized_email)
         ).first()
         
         if existing_user:
-            if existing_user.username == user_data.username:
+            # Check which field matched
+            if existing_user.username.lower() == normalized_username.lower():
+                logger.warning(f"Signup blocked: Username '{normalized_username}' already exists (existing user ID: {existing_user.id})")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Username already exists"
                 )
-            else:
+            elif existing_user.email.lower() == normalized_email:
+                logger.warning(f"Signup blocked: Email '{normalized_email}' already exists (existing user ID: {existing_user.id})")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Email already exists"
@@ -255,23 +263,56 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         from utils import hash_password
         hashed_password = hash_password(user_data.password)
         
-        # Create new user
+        # Create new user (use normalized values)
         from models import User
         new_user = User(
-            username=user_data.username,
-            email=user_data.email,
+            username=normalized_username,
+            email=normalized_email,
             password=hashed_password,
-            contact=user_data.contact,
+            contact=user_data.contact.strip() if user_data.contact else None,
             is_verified=False,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
         
         db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        
-        logger.info(f"User created successfully: {new_user.id}")
+        try:
+            db.commit()
+            db.refresh(new_user)
+            logger.info(f"User created successfully: {new_user.id}")
+        except Exception as db_error:
+            db.rollback()
+            # Check if it's a unique constraint violation
+            error_str = str(db_error).lower()
+            if "duplicate" in error_str or "unique" in error_str or "1062" in error_str:
+                logger.warning(f"Database constraint violation during signup: {db_error}")
+                # Try to find which field caused the violation
+                try:
+                    check_user = db.query(User).filter(
+                        (func.lower(User.email) == normalized_email) | 
+                        (User.username == normalized_username)
+                    ).first()
+                    if check_user:
+                        if check_user.email.lower() == normalized_email:
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Email already exists"
+                            )
+                        elif check_user.username.lower() == normalized_username.lower():
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Username already exists"
+                            )
+                except HTTPException:
+                    raise
+                # Generic message if we can't determine the field
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User with this email or username already exists"
+                )
+            else:
+                # Re-raise if it's a different error
+                raise
         
         # Create demo campaign for new user
         try:
