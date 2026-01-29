@@ -2,16 +2,17 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, Suspense } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { loginUser, forgetPassword, resetPassword } from "@/components/Service"
+import { useRouter, useSearchParams } from "next/navigation"
+import { loginUser, forgetPassword, resetPassword, verifyEmail } from "@/components/Service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft } from "lucide-react"
 
-export default function Login() {
+function LoginContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [formData, setFormData] = useState({ username: "", password: "" })
   const [resetData, setResetData] = useState({
@@ -25,6 +26,46 @@ export default function Login() {
 
   const [isForgotMode, setIsForgotMode] = useState(false)
   const [showResetForm, setShowResetForm] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
+
+  // Auto-verify email if URL contains verify=true, email, and otp
+  useEffect(() => {
+    const verifyParam = searchParams.get("verify")
+    const emailParam = searchParams.get("email")
+    const otpParam = searchParams.get("otp")
+
+    if (verifyParam === "true" && emailParam && otpParam) {
+      handleAutoVerify(emailParam, otpParam)
+    }
+  }, [searchParams])
+
+  const handleAutoVerify = async (email: string, otp: string) => {
+    setIsVerifying(true)
+    setError(null)
+    setMessage(null)
+
+    try {
+      console.log("[v0] Auto-verifying email:", email, "with OTP:", otp)
+      const response = await verifyEmail({ email, otp_code: otp })
+
+      if (response?.status === "success") {
+        setMessage("Email verified successfully! You can now log in.")
+        setFormData({ ...formData, username: email })
+      } else {
+        setError(response?.message || "Email verification failed. Please try again.")
+      }
+    } catch (err: any) {
+      console.error("[v0] Auto-verify error:", err)
+      const errorMessage =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Email verification failed. The OTP may have expired."
+      setError(errorMessage)
+    }
+
+    setIsVerifying(false)
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -141,6 +182,22 @@ export default function Login() {
     setLoading(false)
   }
 
+  // Show loading state during auto-verification
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen bg-[#7A99A8]">
+        <main className="container max-w-2xl mx-auto p-6 space-y-6">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3d545f] mx-auto mb-4"></div>
+              <p className="text-lg font-medium">Verifying your email...</p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#7A99A8]">
       <main className="container max-w-2xl mx-auto p-6 space-y-6">
@@ -250,5 +307,25 @@ export default function Login() {
         </Card>
       </main>
     </div>
+  )
+}
+
+// Wrap with Suspense for useSearchParams
+export default function Login() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#7A99A8]">
+        <main className="container max-w-2xl mx-auto p-6 space-y-6">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3d545f] mx-auto mb-4"></div>
+              <p className="text-lg font-medium">Loading...</p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
