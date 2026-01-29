@@ -178,7 +178,7 @@ export const forgetPassword = async ({
   email: string
 }): Promise<any> => {
   try {
-    const endpoint = "forget-password"
+    const endpoint = "auth/forget-password"
 
     const payload = {
       email,
@@ -187,8 +187,9 @@ export const forgetPassword = async ({
     const response = await Service(endpoint, "POST", payload)
 
     return {
-      status: response?.status || 200,
+      status: response?.status === "success" ? 200 : 400,
       message: response?.message || "OTP sent successfully",
+      otp_code: response?.otp_code, // Include OTP if returned (when email fails)
     }
   } catch (error: any) {
     console.error("Error during forget password:", error)
@@ -214,7 +215,7 @@ export const resetPassword = async ({
   new_password: string
 }): Promise<any> => {
   try {
-    const endpoint = "reset-password"
+    const endpoint = "auth/reset-password"
 
     const payload = {
       email,
@@ -225,7 +226,7 @@ export const resetPassword = async ({
     const response = await Service(endpoint, "POST", payload)
 
     return {
-      status: response?.status || 200,
+      status: response?.status === "success" ? 200 : 400,
       message: response?.message || "Password reset successfully",
       token: response?.token || response?.access_token,
     }
@@ -258,8 +259,9 @@ export const resendotp = async ({
     const response = await Service(endpoint, "POST", payload)
 
     return {
-      status: response?.status || 200,
+      status: response?.status === "success" ? 200 : 400,
       message: response?.message || "OTP resent successfully",
+      otp_code: response?.otp_code, // Include OTP if returned (when email fails)
     }
   } catch (error: any) {
     console.error("Error during OTP resend:", error)

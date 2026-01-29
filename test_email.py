@@ -7,6 +7,11 @@ Tests SMTP connection and email sending before deployment
 import os
 import asyncio
 import sys
+
+# Load environment variables FIRST before any other imports
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from email_service import get_email_service
 
 async def test_email_config():
@@ -34,11 +39,12 @@ async def test_email_config():
     print("📧 Testing Email Service:")
     email_service = get_email_service()
     
-    # Test OTP email
-    print("  🔄 Testing OTP email...")
+    # Test OTP email (send to self for testing)
+    test_email = os.getenv("MAIL_FROM", "seed@vernalcontentum.com")
+    print(f"  🔄 Testing OTP email (sending to {test_email})...")
     try:
         success = await email_service.send_otp_email(
-            email="test@example.com",
+            email=test_email,
             otp_code="123456",
             user_name="Test User"
         )
@@ -50,10 +56,10 @@ async def test_email_config():
         print(f"  ❌ OTP email test: ERROR - {str(e)}")
     
     # Test password reset email
-    print("  🔄 Testing password reset email...")
+    print(f"  🔄 Testing password reset email (sending to {test_email})...")
     try:
         success = await email_service.send_password_reset_email(
-            email="test@example.com",
+            email=test_email,
             otp_code="789012",
             user_name="Test User"
         )
