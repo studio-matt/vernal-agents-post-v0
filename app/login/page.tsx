@@ -101,13 +101,9 @@ function LoginContent() {
         localStorage.setItem("username", formData.username)
         localStorage.setItem("email", formData.username)
         
-        // Check if onboarding is completed
-        const onboardingCompleted = localStorage.getItem("onboarding_completed")
-        if (onboardingCompleted === "true") {
-          setTimeout(() => router.push("/dashboard/content-planner"), 1000)
-        } else {
-          setTimeout(() => router.push("/onboarding"), 1000)
-        }
+        // Go directly to campaigns page (onboarding is skipped for now)
+        localStorage.setItem("onboarding_completed", "true")
+        setTimeout(() => router.push("/dashboard/campaigns"), 1000)
       } else {
         setError(response?.message || "Login failed. Please try again.")
       }

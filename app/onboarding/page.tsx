@@ -87,7 +87,7 @@ export default function Onboarding() {
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem("onboarding_completed")
     if (onboardingCompleted === "true") {
-      router.push("/dashboard/content-planner")
+      router.push("/dashboard/campaigns")
     }
   }, [router])
 
@@ -214,7 +214,7 @@ export default function Onboarding() {
     // Store selected platforms in localStorage
     localStorage.setItem("selected_platforms", JSON.stringify(selectedPlatforms))
     localStorage.setItem("onboarding_completed", "true")
-    router.push("/dashboard/content-planner")
+    router.push("/dashboard/campaigns")
   }
 
   const renderStep1 = () => (

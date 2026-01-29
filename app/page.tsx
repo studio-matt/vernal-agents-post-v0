@@ -70,13 +70,9 @@ export default function Home() {
         localStorage.setItem("username", loginData.username)
         localStorage.setItem("email", loginData.username)
         
-        // Check if onboarding is completed
-        const onboardingCompleted = localStorage.getItem("onboarding_completed")
-        if (onboardingCompleted === "true") {
-          setTimeout(() => router.push("/dashboard/content-planner"), 1000)
-        } else {
-          setTimeout(() => router.push("/onboarding"), 1000)
-        }
+        // Go directly to campaigns page (onboarding is skipped for now)
+        localStorage.setItem("onboarding_completed", "true")
+        setTimeout(() => router.push("/dashboard/campaigns"), 1000)
       } else {
         setLoginError(response?.message || "Login failed. Please try again.")
       }

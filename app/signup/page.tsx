@@ -81,13 +81,9 @@ export default function Signup() {
           localStorage.setItem("username", formData.username);
           localStorage.setItem("email", formData.email);
           
-          // Check if onboarding is completed
-          const onboardingCompleted = localStorage.getItem("onboarding_completed");
-          if (onboardingCompleted === "true") {
-            setTimeout(() => router.push("/dashboard/content-planner"), 1000);
-          } else {
-            setTimeout(() => router.push("/onboarding"), 1000);
-          }
+          // Go directly to campaigns page (onboarding is skipped for now)
+          localStorage.setItem("onboarding_completed", "true");
+          setTimeout(() => router.push("/dashboard/campaigns"), 1000);
         } else {
           // If auto-login fails, redirect to login page
           setTimeout(() => router.push("/login"), 1500);
