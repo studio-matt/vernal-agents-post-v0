@@ -229,29 +229,21 @@ def verify_campaign_ownership(
 async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
     """Register a new user"""
     try:
-        # Normalize email and username (trim whitespace, lowercase email)
-        normalized_email = user_data.email.strip().lower()
-        normalized_username = user_data.username.strip()
+        logger.info(f"Signup attempt for username: {user_data.username}, email: {user_data.email}")
         
-        logger.info(f"Signup attempt for username: {normalized_username}, email: {normalized_email}")
-        
-        # Check if user already exists (case-insensitive email check, exact username match)
+        # Check if user already exists
         from models import User
-        from sqlalchemy import func
         existing_user = db.query(User).filter(
-            (User.username == normalized_username) | (func.lower(User.email) == normalized_email)
+            (User.username == user_data.username) | (User.email == user_data.email)
         ).first()
         
         if existing_user:
-            # Check which field matched
-            if existing_user.username.lower() == normalized_username.lower():
-                logger.warning(f"Signup blocked: Username '{normalized_username}' already exists (existing user ID: {existing_user.id})")
+            if existing_user.username == user_data.username:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Username already exists"
                 )
-            elif existing_user.email.lower() == normalized_email:
-                logger.warning(f"Signup blocked: Email '{normalized_email}' already exists (existing user ID: {existing_user.id})")
+            else:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Email already exists"
@@ -263,56 +255,23 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         from utils import hash_password
         hashed_password = hash_password(user_data.password)
         
-        # Create new user (use normalized values)
+        # Create new user
         from models import User
         new_user = User(
-            username=normalized_username,
-            email=normalized_email,
+            username=user_data.username,
+            email=user_data.email,
             password=hashed_password,
-            contact=user_data.contact.strip() if user_data.contact else None,
+            contact=user_data.contact,
             is_verified=False,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
         
         db.add(new_user)
-        try:
-            db.commit()
-            db.refresh(new_user)
-            logger.info(f"User created successfully: {new_user.id}")
-        except Exception as db_error:
-            db.rollback()
-            # Check if it's a unique constraint violation
-            error_str = str(db_error).lower()
-            if "duplicate" in error_str or "unique" in error_str or "1062" in error_str:
-                logger.warning(f"Database constraint violation during signup: {db_error}")
-                # Try to find which field caused the violation
-                try:
-                    check_user = db.query(User).filter(
-                        (func.lower(User.email) == normalized_email) | 
-                        (User.username == normalized_username)
-                    ).first()
-                    if check_user:
-                        if check_user.email.lower() == normalized_email:
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="Email already exists"
-                            )
-                        elif check_user.username.lower() == normalized_username.lower():
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="Username already exists"
-                            )
-                except HTTPException:
-                    raise
-                # Generic message if we can't determine the field
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="User with this email or username already exists"
-                )
-            else:
-                # Re-raise if it's a different error
-                raise
+        db.commit()
+        db.refresh(new_user)
+        
+        logger.info(f"User created successfully: {new_user.id}")
         
         # Create demo campaign for new user
         try:
@@ -422,13 +381,6 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password"
             )
-
-        # Require email verification before allowing login
-        if not user.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Please verify your email before logging in. Check your inbox for the verification link."
-            )
         
         # Create access token
         from utils import create_access_token
@@ -493,7 +445,8 @@ async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db
         # Update user verification status
         user.is_verified = True
         user.updated_at = datetime.utcnow()
-        db.delete(otp_record)  # Remove used OTP
+        # Delete ALL OTP records for this user so none remain (enables re-register / account delete)
+        db.query(OTP).filter(OTP.user_id == user.id).delete()
         db.commit()
         
         logger.info(f"Email verified successfully for user: {user.id}")
@@ -533,7 +486,6 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
         expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 minutes expiry
         
         # Store OTP in database
-        from models import OTP
         otp_record = OTP(
             user_id=user.id,
             otp_code=otp_code,
@@ -586,7 +538,7 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
 
 @auth_router.post("/forget-password")
 async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(get_db)):
-    """Send password reset OTP"""
+    """Send password reset OTP (mock implementation)"""
     try:
         logger.info(f"Forget password request for: {request.email}")
         
@@ -605,7 +557,6 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
         expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 minutes expiry
         
         # Store OTP in database
-        from models import OTP
         otp_record = OTP(
             user_id=user.id,
             otp_code=otp_code,
@@ -615,29 +566,19 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
         db.commit()
         
         # Send password reset email
-        try:
-            from email_service import get_email_service
-            email_service = get_email_service()
-            email_sent = await email_service.send_password_reset_email(
-                email=request.email,
-                otp_code=otp_code,
-                user_name=user.username
+        from email_service import get_email_service
+        email_service = get_email_service()
+        email_sent = await email_service.send_password_reset_email(
+            email=request.email,
+            otp_code=otp_code,
+            user_name=user.username
+        )
+        
+        if not email_sent:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send password reset email. Please try again."
             )
-            
-            if not email_sent:
-                logger.warning(f"Failed to send password reset email to {request.email}, but OTP generated: {otp_code}")
-                return {
-                    "status": "success",
-                    "message": f"OTP generated: {otp_code} (email failed, check server logs)",
-                    "otp_code": otp_code
-                }
-        except Exception as email_err:
-            logger.error(f"Email service error during password reset: {email_err}")
-            return {
-                "status": "success",
-                "message": f"OTP generated: {otp_code} (email service unavailable)",
-                "otp_code": otp_code
-            }
         
         logger.info(f"Password reset OTP sent successfully to: {request.email}")
         
@@ -721,6 +662,60 @@ async def get_current_user_info(current_user = Depends(get_current_user)):
         is_verified=current_user.is_verified,
         created_at=current_user.created_at
     )
+
+
+@auth_router.delete("/me")
+async def delete_my_account(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Delete the current user and all related data (campaigns, content, OTP, connections, etc.)."""
+    try:
+        from models import (
+            User, OTP, PlatformConnection, Content, Campaign,
+            CampaignRawData, CampaignResearchInsights, CampaignResearchData,
+            StateToken, PluginAPIKey, AuthorPersonality, BrandPersonality,
+        )
+        uid = current_user.id
+        logger.info(f"Delete account requested for user_id={uid}")
+
+        # Get campaign_ids (UUIDs) for this user's campaigns before deleting campaigns
+        campaign_ids = [
+            row.campaign_id for row in
+            db.query(Campaign.campaign_id).filter(Campaign.user_id == uid).all()
+            if getattr(row, "campaign_id", None)
+        ]
+
+        # Delete in dependency order to avoid FK violations
+        db.query(OTP).filter(OTP.user_id == uid).delete()
+        db.query(StateToken).filter(StateToken.user_id == uid).delete()
+        db.query(Content).filter(Content.user_id == uid).delete()
+
+        for cid in campaign_ids:
+            db.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).delete()
+            db.query(CampaignResearchInsights).filter(CampaignResearchInsights.campaign_id == cid).delete()
+            db.query(CampaignResearchData).filter(CampaignResearchData.campaign_id == cid).delete()
+
+        db.query(Campaign).filter(Campaign.user_id == uid).delete()
+        db.query(PlatformConnection).filter(PlatformConnection.user_id == uid).delete()
+        db.query(PluginAPIKey).filter(PluginAPIKey.user_id == uid).delete()
+        # Author/Brand personalities may store user_id as string
+        db.query(AuthorPersonality).filter(AuthorPersonality.user_id == str(uid)).delete()
+        db.query(BrandPersonality).filter(BrandPersonality.user_id == str(uid)).delete()
+
+        user = db.query(User).filter(User.id == uid).first()
+        if user:
+            db.delete(user)
+        db.commit()
+        logger.info(f"User {uid} and all related data deleted.")
+        return {"status": "success", "message": "Account and all associated data have been deleted."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete account error: {str(e)}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete account. Please try again or contact support.",
+        )
+
 
 @auth_router.get("/health")
 async def auth_health():
