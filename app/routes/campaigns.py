@@ -159,7 +159,7 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
                     pass
                 user_has_demo = demo_check_query.filter(
                     Campaign.user_id == current_user.id,
-                    Campaign.campaign_name.like("Demo Campaign%")
+                    Campaign.campaign_name.like("Demo %")
                 ).first()
             except Exception as demo_check_error:
                 logger.warning(f"⚠️ Failed to check for demo campaign, assuming none exists: {demo_check_error}")
@@ -249,7 +249,7 @@ def get_campaigns(current_user = Depends(get_current_user), db: Session = Depend
         # Sort campaigns: demo campaign first, then by created_at
         from datetime import datetime as dt
         campaigns.sort(key=lambda c: (
-            0 if c.campaign_name and c.campaign_name.startswith("Demo Campaign") else 1,
+            0 if c.campaign_name and c.campaign_name.startswith("Demo ") else 1,
             c.created_at or dt.min
         ))
         

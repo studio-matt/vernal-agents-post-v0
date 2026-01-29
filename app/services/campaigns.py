@@ -36,10 +36,10 @@ def create_user_demo_campaign(user_id: int, db: Session):
         logger.info(f"✅ Found template demo campaign: {template_campaign.campaign_name} (user_id: {template_campaign.user_id})")
         
         # Check if user already has a demo campaign
-        # We'll use a naming convention: demo campaigns have name starting with "Demo Campaign"
+        # We'll use a naming convention: demo campaigns have name starting with "Demo"
         existing_demo = db.query(Campaign).filter(
             Campaign.user_id == user_id,
-            Campaign.campaign_name.like("Demo Campaign%")
+            Campaign.campaign_name.like("Demo %")
         ).first()
         
         if existing_demo:
@@ -50,6 +50,7 @@ def create_user_demo_campaign(user_id: int, db: Session):
         user_demo_campaign_id = str(uuid.uuid4())
         
         # Copy campaign data
+        # Note: Only copy columns that exist in the Campaign model
         user_campaign = Campaign(
             campaign_id=user_demo_campaign_id,
             campaign_name=template_campaign.campaign_name,
@@ -66,12 +67,17 @@ def create_user_demo_campaign(user_id: int, db: Session):
             preprocessing_settings_json=template_campaign.preprocessing_settings_json,
             entity_settings_json=template_campaign.entity_settings_json,
             modeling_settings_json=template_campaign.modeling_settings_json,
+            scheduling_settings_json=_safe_getattr(template_campaign, 'scheduling_settings_json'),
+            campaign_plan_json=_safe_getattr(template_campaign, 'campaign_plan_json'),
+            content_queue_items_json=_safe_getattr(template_campaign, 'content_queue_items_json'),
+            research_selections_json=_safe_getattr(template_campaign, 'research_selections_json'),
+            custom_keywords_json=_safe_getattr(template_campaign, 'custom_keywords_json'),
+            personality_settings_json=_safe_getattr(template_campaign, 'personality_settings_json'),
+            cornerstone_platform=_safe_getattr(template_campaign, 'cornerstone_platform'),
             site_base_url=_safe_getattr(template_campaign, 'site_base_url'),
             target_keywords_json=_safe_getattr(template_campaign, 'target_keywords_json'),
+            gap_analysis_results_json=_safe_getattr(template_campaign, 'gap_analysis_results_json'),
             top_ideas_count=_safe_getattr(template_campaign, 'top_ideas_count'),
-            image_settings_json=_safe_getattr(template_campaign, 'image_settings_json'),
-            content_queue_items_json=_safe_getattr(template_campaign, 'content_queue_items_json'),
-            articles_url=_safe_getattr(template_campaign, 'articles_url'),
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )

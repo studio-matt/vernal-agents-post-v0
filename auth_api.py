@@ -316,7 +316,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         
         # Create demo campaign for new user
         try:
-            from main import create_user_demo_campaign
+            from app.services.campaigns import create_user_demo_campaign
             demo_campaign_id = create_user_demo_campaign(new_user.id, db)
             if demo_campaign_id:
                 logger.info(f"✅ Created demo campaign {demo_campaign_id} for new user {new_user.id}")
