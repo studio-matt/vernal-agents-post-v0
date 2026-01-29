@@ -5,6 +5,7 @@ Moved from main.py to preserve API contract parity
 import logging
 import json
 import threading
+import time
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
