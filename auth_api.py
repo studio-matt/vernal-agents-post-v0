@@ -422,6 +422,13 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password"
             )
+
+        # Require email verification before allowing login
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email before logging in. Check your inbox for the verification link."
+            )
         
         # Create access token
         from utils import create_access_token
