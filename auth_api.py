@@ -275,7 +275,7 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         
         # Create demo campaign for new user
         try:
-            from app.services.campaigns import create_user_demo_campaign
+            from main import create_user_demo_campaign
             demo_campaign_id = create_user_demo_campaign(new_user.id, db)
             if demo_campaign_id:
                 logger.info(f"✅ Created demo campaign {demo_campaign_id} for new user {new_user.id}")
@@ -445,8 +445,7 @@ async def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db
         # Update user verification status
         user.is_verified = True
         user.updated_at = datetime.utcnow()
-        # Delete ALL OTP records for this user so none remain (enables re-register / account delete)
-        db.query(OTP).filter(OTP.user_id == user.id).delete()
+        db.delete(otp_record)  # Remove used OTP
         db.commit()
         
         logger.info(f"Email verified successfully for user: {user.id}")
@@ -662,60 +661,6 @@ async def get_current_user_info(current_user = Depends(get_current_user)):
         is_verified=current_user.is_verified,
         created_at=current_user.created_at
     )
-
-
-@auth_router.delete("/me")
-async def delete_my_account(current_user = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Delete the current user and all related data (campaigns, content, OTP, connections, etc.)."""
-    try:
-        from models import (
-            User, OTP, PlatformConnection, Content, Campaign,
-            CampaignRawData, CampaignResearchInsights, CampaignResearchData,
-            StateToken, PluginAPIKey, AuthorPersonality, BrandPersonality,
-        )
-        uid = current_user.id
-        logger.info(f"Delete account requested for user_id={uid}")
-
-        # Get campaign_ids (UUIDs) for this user's campaigns before deleting campaigns
-        campaign_ids = [
-            row.campaign_id for row in
-            db.query(Campaign.campaign_id).filter(Campaign.user_id == uid).all()
-            if getattr(row, "campaign_id", None)
-        ]
-
-        # Delete in dependency order to avoid FK violations
-        db.query(OTP).filter(OTP.user_id == uid).delete()
-        db.query(StateToken).filter(StateToken.user_id == uid).delete()
-        db.query(Content).filter(Content.user_id == uid).delete()
-
-        for cid in campaign_ids:
-            db.query(CampaignRawData).filter(CampaignRawData.campaign_id == cid).delete()
-            db.query(CampaignResearchInsights).filter(CampaignResearchInsights.campaign_id == cid).delete()
-            db.query(CampaignResearchData).filter(CampaignResearchData.campaign_id == cid).delete()
-
-        db.query(Campaign).filter(Campaign.user_id == uid).delete()
-        db.query(PlatformConnection).filter(PlatformConnection.user_id == uid).delete()
-        db.query(PluginAPIKey).filter(PluginAPIKey.user_id == uid).delete()
-        # Author/Brand personalities may store user_id as string
-        db.query(AuthorPersonality).filter(AuthorPersonality.user_id == str(uid)).delete()
-        db.query(BrandPersonality).filter(BrandPersonality.user_id == str(uid)).delete()
-
-        user = db.query(User).filter(User.id == uid).first()
-        if user:
-            db.delete(user)
-        db.commit()
-        logger.info(f"User {uid} and all related data deleted.")
-        return {"status": "success", "message": "Account and all associated data have been deleted."}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Delete account error: {str(e)}", exc_info=True)
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete account. Please try again or contact support.",
-        )
-
 
 @auth_router.get("/health")
 async def auth_health():

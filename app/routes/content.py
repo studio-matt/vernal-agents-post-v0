@@ -310,6 +310,8 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 set_task("collecting_inputs", 15, "Collecting inputs and settings")
                 
                 # Validate Site Builder requirements EARLY (fail at "Initializing" stage)
+                # Use short timeouts (5s) so we don't hang forever on slow/unreachable sites
+                SITE_VALIDATION_TIMEOUT = 5
                 if data.type == "site_builder":
                     from models import Campaign
                     # json is already imported globally at top of file
@@ -413,7 +415,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         # Step 2: Validate URL accessibility (DNS, connectivity, HTTP status)
                         logger.info(f"🔍 Checking if site is accessible: {site_url}")
                         try:
-                            is_accessible, access_error, http_status = validate_url_accessibility(site_url, timeout=10)
+                            is_accessible, access_error, http_status = validate_url_accessibility(site_url, timeout=SITE_VALIDATION_TIMEOUT)
                         except Exception as access_validation_error:
                             logger.error(f"❌ Error during URL accessibility validation: {access_validation_error}")
                             import traceback
@@ -448,7 +450,7 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                         logger.info(f"🔍 Performing quick sitemap check: {site_url}")
                         set_task("checking_sitemap", 20, f"Checking for sitemap at {site_url}")
                         try:
-                            sitemap_found, sitemap_url, sitemap_error = quick_sitemap_check(site_url, timeout=10)
+                            sitemap_found, sitemap_url, sitemap_error = quick_sitemap_check(site_url, timeout=SITE_VALIDATION_TIMEOUT)
                         except Exception as sitemap_check_error:
                             logger.error(f"❌ Error during quick sitemap check: {sitemap_check_error}")
                             import traceback
