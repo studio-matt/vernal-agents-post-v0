@@ -4,6 +4,7 @@ Moved from main.py to preserve API contract parity
 """
 import logging
 import json
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, status, Request
