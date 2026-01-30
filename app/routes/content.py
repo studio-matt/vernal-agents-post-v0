@@ -1390,6 +1390,54 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                             session.commit()
                             logger.info(f"✅ Campaign {cid} marked as READY_TO_ACTIVATE with {valid_data_count} valid data rows ({valid_text_count} with text)")
                             
+                            # Create placeholder content items from scraped data so Content Queue shows "scraped data"
+                            # (GET content-items reads from Content table; analyze only fills CampaignRawData otherwise)
+                            try:
+                                from models import Content
+                                valid_rows = [r for r in all_rows if r.source_url and not r.source_url.startswith(("error:", "placeholder:")) and r.extracted_text and len((r.extracted_text or "").strip()) > 10]
+                                days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                                created_content = 0
+                                for i, row in enumerate(valid_rows[:50]):  # cap at 50 items
+                                    title = (row.source_url or "Scraped page")[:255]
+                                    if row.extracted_text:
+                                        first_line = (row.extracted_text.strip().split("\n")[0] or row.extracted_text[:80])[:80]
+                                        if first_line:
+                                            title = first_line[:255]
+                                    snippet = (row.extracted_text or "")[:2000] or "(No content)"
+                                    day = days[i % 7]
+                                    week = (i // 7) + 1
+                                    now = datetime.utcnow()
+                                    c = Content(
+                                        user_id=camp.user_id,
+                                        campaign_id=cid,
+                                        week=week,
+                                        day=day,
+                                        content=snippet,
+                                        title=title,
+                                        status="draft",
+                                        date_upload=now,
+                                        platform="linkedin",
+                                        file_name=f"{cid}_scraped_{row.id}.txt",
+                                        file_type="text",
+                                        platform_post_no="1",
+                                        schedule_time=now,
+                                        is_draft=True,
+                                        can_edit=True,
+                                    )
+                                    session.add(c)
+                                    created_content += 1
+                                if created_content > 0:
+                                    session.commit()
+                                    logger.info(f"✅ Created {created_content} placeholder content items from scraped data for campaign {cid}")
+                            except Exception as content_err:
+                                logger.warning(f"⚠️ Could not create placeholder content from scraped data: {content_err}")
+                                import traceback
+                                logger.debug(traceback.format_exc())
+                                try:
+                                    session.rollback()
+                                except Exception:
+                                    pass
+                            
                             # Only set progress to 100% AFTER we've confirmed valid data exists
                             set_task("finalizing", 100, f"Scraping complete - {valid_data_count} pages scraped successfully")
                             
