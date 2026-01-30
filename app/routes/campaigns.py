@@ -636,7 +636,23 @@ def update_campaign(campaign_id: str, campaign_data: CampaignUpdate, current_use
         
         # Update fields if provided
         if campaign_data.status is not None:
-            campaign.status = campaign_data.status
+            new_status = campaign_data.status
+            # When user explicitly resets status to INCOMPLETE, clear raw data and content so next rebuild does a full re-scrape
+            if new_status == "INCOMPLETE" and (campaign.status or "") != "INCOMPLETE":
+                try:
+                    from models import CampaignRawData, Content
+                    raw_deleted = db.query(CampaignRawData).filter(CampaignRawData.campaign_id == campaign_id).delete()
+                    content_deleted = db.query(Content).filter(Content.campaign_id == campaign_id, Content.user_id == current_user.id).delete()
+                    if raw_deleted or content_deleted:
+                        db.commit()
+                        logger.info(f"Reset status: cleared {raw_deleted} raw data rows and {content_deleted} content rows for campaign {campaign_id} so next rebuild will re-scrape")
+                except Exception as clear_err:
+                    logger.warning(f"Could not clear raw/content on reset: {clear_err}")
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+            campaign.status = new_status
         if campaign_data.name is not None:
             campaign.campaign_name = campaign_data.name
         if campaign_data.description is not None:
