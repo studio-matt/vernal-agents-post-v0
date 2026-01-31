@@ -1,4 +1,4 @@
-z"""
+"""
 CrewAI-based workflows for content generation
 Enables agent-to-agent handoffs with automatic orchestration
 """
