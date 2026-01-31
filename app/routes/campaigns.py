@@ -972,8 +972,8 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
                 detail="Campaign not found or access denied"
             )
         
-        # Delete associated raw data (cascade delete)
-        from models import CampaignRawData
+        # Delete associated raw data and content (cascade delete) so scheduled posts disappear
+        from models import CampaignRawData, Content
         raw_data_count = db.query(CampaignRawData).filter(
             CampaignRawData.campaign_id == campaign_id
         ).count()
@@ -982,6 +982,16 @@ def delete_campaign(campaign_id: str, current_user = Depends(get_current_user), 
                 CampaignRawData.campaign_id == campaign_id
             ).delete()
             logger.info(f"Deleted {raw_data_count} raw data records for campaign {campaign_id}")
+        content_count = db.query(Content).filter(
+            Content.campaign_id == campaign_id,
+            Content.user_id == current_user.id
+        ).count()
+        if content_count > 0:
+            db.query(Content).filter(
+                Content.campaign_id == campaign_id,
+                Content.user_id == current_user.id
+            ).delete()
+            logger.info(f"Deleted {content_count} content/scheduled posts for campaign {campaign_id}")
         
         db.delete(campaign)
         db.commit()

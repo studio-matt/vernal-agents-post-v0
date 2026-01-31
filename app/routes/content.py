@@ -2240,18 +2240,24 @@ def get_scheduled_posts(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all scheduled posts for the authenticated user"""
+    """Get all scheduled posts for the authenticated user (only from campaigns that still exist)"""
     try:
-        from models import Content
+        from models import Content, Campaign
         from datetime import datetime
         
         logger.info(f"📋 Fetching scheduled posts for user {current_user.id}")
         
-        # Get all content for the user that has been scheduled (status = 'scheduled' or has schedule_time in future)
-        scheduled_posts = db.query(Content).filter(
-            Content.user_id == current_user.id,
-            Content.status.in_(["draft", "scheduled", "published"])
-        ).order_by(Content.schedule_time.asc()).all()
+        # Only return content whose campaign still exists (so deleted campaigns' posts disappear)
+        existing_campaign_ids = db.query(Campaign.campaign_id).distinct().all()
+        existing_campaign_ids = [r[0] for r in existing_campaign_ids]
+        if not existing_campaign_ids:
+            scheduled_posts = []
+        else:
+            scheduled_posts = db.query(Content).filter(
+                Content.user_id == current_user.id,
+                Content.campaign_id.in_(existing_campaign_ids),
+                Content.status.in_(["draft", "scheduled", "published"])
+            ).order_by(Content.schedule_time.asc()).all()
         
         logger.info(f"📋 Found {len(scheduled_posts)} scheduled posts for user {current_user.id}")
         
