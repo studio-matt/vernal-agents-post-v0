@@ -14,6 +14,7 @@ from database import SessionLocal
 from app.schemas.models import BrandPersonalityCreate, BrandPersonalityUpdate
 from app.utils.openai_helpers import get_openai_api_key
 from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX
+from app.utils.wordpress_body import sanitize_wordpress_body
 
 logger = logging.getLogger(__name__)
 
@@ -1248,8 +1249,8 @@ Generate content for {platform} based on the content queue items and campaign co
                                         logger.info(f"📝 Extracted WordPress fields result: {wordpress_fields}")
                                     
                                     # Return author voice content directly
-                                    # Use cleaned body if WordPress fields were extracted, otherwise use original
-                                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else generated_text
+                                    # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
+                                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else sanitize_wordpress_body(generated_text)
                                     response_data = {
                                         "content": content_to_use,
                                         "title": "",
@@ -1447,12 +1448,13 @@ Generate content for {platform} based on the content queue items and campaign co
                             
                             if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                                 crew_data.update(wordpress_fields)
-                                # Use cleaned body if available (removes field labels)
+                                # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
                                 cleaned_body = extraction_result.get("cleaned_body")
-                                if cleaned_body and "content" in crew_data:
-                                    crew_data["content"] = cleaned_body
-                                elif cleaned_body and "text" in crew_data:
-                                    crew_data["text"] = cleaned_body
+                                body_only = cleaned_body if cleaned_body else sanitize_wordpress_body(str(content_text))
+                                if "content" in crew_data:
+                                    crew_data["content"] = body_only
+                                if "text" in crew_data:
+                                    crew_data["text"] = body_only
                                 if format_detected != "canonical":
                                     logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
                                                  f"Consider updating writing prompt to use canonical format.")
@@ -1626,12 +1628,13 @@ Generate content for {platform} based on the content queue items above."""
                                 }
                                 if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                                     crew_data.update(wordpress_fields)
-                                    # Use cleaned body if available (removes field labels)
+                                    # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
                                     cleaned_body = extraction_result.get("cleaned_body")
-                                    if cleaned_body and "content" in crew_data:
-                                        crew_data["content"] = cleaned_body
-                                    elif cleaned_body and "text" in crew_data:
-                                        crew_data["text"] = cleaned_body
+                                    body_only = cleaned_body if cleaned_body else sanitize_wordpress_body(str(content_text))
+                                    if "content" in crew_data:
+                                        crew_data["content"] = body_only
+                                    if "text" in crew_data:
+                                        crew_data["text"] = body_only
                                     if format_detected != "canonical":
                                         logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
                             
@@ -1671,8 +1674,8 @@ Generate content for {platform} based on the content queue items above."""
                             logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
                                          f"Consider updating writing prompt to use canonical format.")
                     
-                    # Use cleaned body if WordPress fields were extracted, otherwise use original
-                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else generated_text
+                    # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
+                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else sanitize_wordpress_body(generated_text)
                     response_data = {
                         "content": content_to_use,
                         "title": "",  # Can be extracted or generated separately
@@ -1723,12 +1726,13 @@ Generate content for {platform} based on the content queue items above."""
             }
             if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
                 crew_data.update(wordpress_fields)
-                # Use cleaned body if available (removes field labels)
+                # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
                 cleaned_body = extraction_result.get("cleaned_body")
-                if cleaned_body and "content" in crew_data:
-                    crew_data["content"] = cleaned_body
-                elif cleaned_body and "text" in crew_data:
-                    crew_data["text"] = cleaned_body
+                body_only = cleaned_body if cleaned_body else sanitize_wordpress_body(str(content_text))
+                if "content" in crew_data:
+                    crew_data["content"] = body_only
+                if "text" in crew_data:
+                    crew_data["text"] = body_only
                 if format_detected != "canonical":
                     logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
         

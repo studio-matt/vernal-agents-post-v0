@@ -32,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.utils.openai_helpers import get_openai_api_key
 from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX
+from app.utils.wordpress_body import sanitize_wordpress_body
 from app.schemas.models import AnalyzeRequest
 
 @content_router.post("/analyze/test")
@@ -2436,6 +2437,9 @@ async def schedule_campaign_content(
                     # Update existing content
                     content_text = item.get("description") or item.get("content", "")
                     title_text = item.get("title", "")
+                    # WordPress: never save raw model output as body
+                    if (item.get("platform", "linkedin") or "").lower() == "wordpress":
+                        content_text = sanitize_wordpress_body(content_text)
                     
                     # Validate and update content - ensure we don't overwrite with empty strings
                     if content_text and content_text.strip():
@@ -2471,6 +2475,10 @@ async def schedule_campaign_content(
                     if not content_text or not content_text.strip():
                         logger.warning(f"Skipping item with empty content: {item.get('id', 'unknown')}")
                         continue
+                    
+                    # WordPress: never save raw model output as body
+                    if (item.get("platform", "linkedin") or "").lower() == "wordpress":
+                        content_text = sanitize_wordpress_body(content_text)
                     
                     if not title_text or not title_text.strip():
                         title_text = f"{item.get('platform', 'linkedin').title()} Post - {item.get('day', 'Monday')}"
@@ -3047,9 +3055,13 @@ async def post_content_now(
                 if content_item.get("permalink"):
                     permalink_slug = content_item.get("permalink")
             
+            # Never use raw model output as WP body: POST_TITLE→title, POST_EXCERPT→excerpt, PERMALINK→slug, CONTENT→body only
+            body_only = sanitize_wordpress_body(content_text)
+            if body_only != content_text:
+                logger.info(f"📤 WordPress Post Now: sanitized body (removed title/excerpt/permalink), before len={len(content_text)}, after len={len(body_only)}")
             post_data = {
                 "title": wordpress_title,
-                "content": content_text,
+                "content": body_only,
                 "status": "publish"
             }
             
@@ -3362,10 +3374,14 @@ async def save_content_item(
                 update_values["title"] = item.get("title")
             
             # Always update content if provided (even if empty string) - allows clearing content
+            # WordPress: never save raw model output as body; sanitize so only body is stored
             if content_update is not None:
                 update_fields.append("content = :content")
-                update_values["content"] = content_update
-                logger.info(f"💾 Updating content: length={len(content_update)}, empty={not content_update.strip()}")
+                body_to_save = sanitize_wordpress_body(content_update) if platform_db_value == "wordpress" else content_update
+                update_values["content"] = body_to_save
+                if platform_db_value == "wordpress" and body_to_save != content_update:
+                    logger.info(f"💾 WordPress content sanitized before save: before len={len(content_update)}, after len={len(body_to_save)}")
+                logger.info(f"💾 Updating content: length={len(body_to_save)}, empty={not body_to_save.strip()}")
             
             if image_url:
                 update_fields.append("image_url = :image_url")
@@ -3470,6 +3486,10 @@ async def save_content_item(
             # Validate required fields
             content_text = item.get("description") or item.get("content", "")
             title_text = item.get("title", "")
+            
+            # WordPress: never save raw model output as body; sanitize so only body is stored
+            if platform_db_value == "wordpress":
+                content_text = sanitize_wordpress_body(content_text)
             
             # If content is empty, use a placeholder (for image-only saves)
             if not content_text or not content_text.strip():
