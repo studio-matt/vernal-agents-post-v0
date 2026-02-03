@@ -169,12 +169,26 @@ def get_category_action(policy_violation: Optional[str], policy_config: Dict[str
     # Extract category name from violation string
     violation_lower = policy_violation.lower()
     
-    # Map common category patterns to category names
+    # Map QC violation phrasing to Admin category names (legal, medical_claims, etc.)
+    # Admin Category Actions (Deny/Warn/Allow) are authoritative: rejections must ONLY happen when action is "deny".
+    # "warn" → approve with warning; "allow" → approve and ignore. Never reject for warn/allow.
     category_mapping = {
+        "safety": "legal",
         "legal": "legal",
+        "compliance": "legal",
+        "substance": "legal",
+        "substances": "legal",
+        "drug": "legal",
+        "drugs": "legal",
+        "therapeutic": "medical_claims",
+        "therapy": "medical_claims",
         "medical": "medical_claims",
         "medical_claim": "medical_claims",
+        "health": "medical_claims",
         "regulated": "regulated_goods",
+        "weapon": "regulated_goods",
+        "weapons": "regulated_goods",
+        "nicotine": "regulated_goods",
         "illegal": "illegal_activity",
         "misinformation": "misinformation",
         "hate": "hate_harassment",
@@ -1661,23 +1675,24 @@ If they conflict on stylistic grounds, prioritize platform/brand/author. If QC i
                     is_approved = True
                     logger.info(f"✅ QC approved (fallback detection) - using writer output unchanged")
             
-            # Apply QC policy configuration to determine action (deny/warn/allow)
-            category_action = "deny"  # Default: deny if no policy config
+            # Apply QC agent Category Actions from Admin: only "deny" may cause rejection.
+            # "warn" → approve with warning (no rejection); "allow" → approve and ignore. Never reject for warn/allow.
+            category_action = "deny"  # Default: deny only when category unknown (safe default)
             is_warning = False
             
             if policy_violation:
                 category_action = get_category_action(policy_violation, qc_policy_config)
-                logger.info(f"🔍 QC POLICY: Policy violation '{policy_violation}' → Action '{category_action}'")
+                logger.info(f"🔍 QC POLICY: Policy violation '{policy_violation}' → Action '{category_action}' (from Admin Category Actions)")
                 
                 if category_action == "warn":
                     is_warning = True
-                    is_approved = True  # Approve content, but add warning
+                    is_approved = True  # Approve with warning; do NOT reject
                     logger.info(f"⚠️ QC WARNING: Category action is 'warn' - approving with warning (not rejection)")
                 elif category_action == "allow":
-                    is_approved = True  # Approve content, ignore violation
-                    logger.info(f"ℹ️ QC POLICY: Category action is 'allow' - approving despite violation")
+                    is_approved = True  # Approve and ignore; do NOT reject
+                    logger.info(f"ℹ️ QC POLICY: Category action is 'allow' - approving despite violation (no rejection)")
                 else:  # deny
-                    is_approved = False  # Reject content
+                    is_approved = False  # Only "deny" causes rejection and retry
                     logger.info(f"❌ QC POLICY: Category action is 'deny' - rejecting content")
             
             if is_approved:
