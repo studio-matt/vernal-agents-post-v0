@@ -4,7 +4,8 @@
 
 ### Step 1: Run the Debug Script
 ```bash
-cd /path/to/backend-repo-git
+# Backend lives at this path on the AWS server (see EMERGENCY_NET_BACKEND.md)
+cd /home/ubuntu/vernal-agents-post-v0
 bash scripts/debug_campaigns_slow.sh
 ```
 

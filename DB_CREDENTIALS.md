@@ -14,8 +14,9 @@ mysql -u vernalcontentum_vernaluse -p vernalcontentum_contentMachine
 
 ## Quick Database Check Script
 
-Run this to check campaigns table:
+On the AWS server (backend path: `/home/ubuntu/vernal-agents-post-v0`):
 ```bash
+cd /home/ubuntu/vernal-agents-post-v0
 bash scripts/check_campaigns_db.sh
 ```
 

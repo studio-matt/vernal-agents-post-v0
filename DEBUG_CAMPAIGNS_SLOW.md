@@ -79,7 +79,7 @@ uptime
 ### 6. Enable Detailed Logging (Temporary)
 ```bash
 # Edit the campaigns endpoint to add timing logs
-cd /path/to/backend-repo-git
+cd /home/ubuntu/vernal-agents-post-v0
 # Add timing logs around database queries in app/routes/campaigns.py
 
 # Or check current logs with more detail
