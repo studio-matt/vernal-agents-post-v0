@@ -33,8 +33,8 @@ cat /tmp/campaigns.json | python3 -m json.tool | head -50
 
 ### Step 4: Check Database Directly
 ```bash
-# Connect to MySQL (adjust credentials)
-mysql -u your_user -p your_database
+# Connect to MySQL with correct credentials
+mysql -u vernalcontentum_vernaluse -p vernalcontentum_contentMachine
 
 # Then run:
 # Count campaigns

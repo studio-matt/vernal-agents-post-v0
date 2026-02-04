@@ -38,8 +38,8 @@ cat /tmp/campaigns_response.json | jq '.campaigns | length' 2>/dev/null || echo 
 
 ### 4. Check Database Performance
 ```bash
-# Connect to MySQL
-mysql -u your_user -p your_database
+# Connect to MySQL with correct credentials
+mysql -u vernalcontentum_vernaluse -p vernalcontentum_contentMachine
 
 # Then run these queries:
 # Check table sizes
@@ -47,7 +47,7 @@ SELECT
     table_name AS 'Table',
     ROUND(((data_length + index_length) / 1024 / 1024), 2) AS 'Size (MB)'
 FROM information_schema.TABLES
-WHERE table_schema = 'your_database_name'
+WHERE table_schema = 'vernalcontentum_contentMachine'
 ORDER BY (data_length + index_length) DESC;
 
 # Check if campaigns table has indexes
@@ -57,7 +57,7 @@ SHOW INDEXES FROM campaigns;
 sudo tail -f /var/log/mysql/slow-query.log
 
 # Check current MySQL processes
-mysql -u your_user -p -e "SHOW PROCESSLIST;" your_database
+mysql -u vernalcontentum_vernaluse -p -e "SHOW PROCESSLIST;" vernalcontentum_contentMachine
 ```
 
 ### 5. Check Server Resources
@@ -88,10 +88,10 @@ sudo journalctl -u vernal-agents -f
 
 ### 7. Check for Database Locks
 ```bash
-mysql -u your_user -p -e "
+mysql -u vernalcontentum_vernaluse -p -e "
 SELECT * FROM information_schema.INNODB_LOCKS;
 SELECT * FROM information_schema.INNODB_LOCK_WAITS;
-" your_database
+" vernalcontentum_contentMachine
 ```
 
 ### 8. Profile the Endpoint Code
