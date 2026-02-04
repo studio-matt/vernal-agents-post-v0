@@ -909,56 +909,59 @@ async def get_wordpress_categories(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Fetch WordPress categories from connected site using plugin API"""
+    """Fetch WordPress categories from the current user's connected site (plugin API). Always uses logged-in user's WordPress."""
     try:
         from models import PlatformConnection, PlatformEnum
         import requests
-        
+
         connection = db.query(PlatformConnection).filter(
             PlatformConnection.user_id == current_user.id,
             PlatformConnection.platform == PlatformEnum.WORDPRESS
         ).first()
-        
-        if not connection or not connection.platform_user_id or not connection.access_token:
+
+        if not connection or not getattr(connection, "platform_user_id", None) or not getattr(connection, "access_token", None):
             raise HTTPException(status_code=400, detail="WordPress not connected. Please connect your WordPress site first.")
-        
-        site_url = connection.platform_user_id.rstrip('/')
-        plugin_api_key = connection.access_token  # WordPress plugin API key (activation_key)
-        
-        # Use plugin endpoint with API key
+
+        site_url = (connection.platform_user_id or "").rstrip("/")
+        plugin_api_key = connection.access_token or ""
         plugin_url = f"{site_url}/wp-json/vernal-contentum/v1/categories"
-        headers = {
-            "X-API-Key": plugin_api_key
-        }
-        
-        response = requests.get(plugin_url, headers=headers, timeout=10)
-        
+        headers = {"X-API-Key": plugin_api_key}
+
+        try:
+            response = requests.get(plugin_url, headers=headers, timeout=20)
+        except requests.RequestException as e:
+            logger.warning(f"WordPress categories request failed for user {current_user.id}: {e}")
+            raise HTTPException(status_code=502, detail=f"WordPress site unreachable: {str(e)}")
+
         if response.status_code != 200:
-            logger.error(f"❌ Failed to fetch categories: {response.status_code} - {response.text}")
-            raise HTTPException(status_code=400, detail=f"Failed to fetch categories: {response.status_code}")
-        
-        categories_data = response.json()
-        
-        # Handle plugin response format
+            logger.warning(f"WordPress categories plugin returned {response.status_code}: {response.text[:200]}")
+            raise HTTPException(status_code=400, detail=f"WordPress plugin returned {response.status_code}")
+
+        try:
+            categories_data = response.json()
+        except ValueError:
+            logger.warning(f"WordPress categories non-JSON response: {response.text[:200]}")
+            raise HTTPException(status_code=502, detail="WordPress plugin returned invalid response")
+
         if categories_data.get("success") and categories_data.get("data"):
             formatted_categories = [
-                {"id": cat.get("id"), "name": cat.get("name"), "slug": cat.get("slug")} 
+                {"id": cat.get("id"), "name": cat.get("name"), "slug": cat.get("slug")}
                 for cat in categories_data.get("data", [])
             ]
         elif isinstance(categories_data, list):
             formatted_categories = [
-                {"id": cat.get("id"), "name": cat.get("name"), "slug": cat.get("slug")} 
+                {"id": cat.get("id"), "name": cat.get("name"), "slug": cat.get("slug")}
                 for cat in categories_data
             ]
         else:
             formatted_categories = []
-        
+
         logger.info(f"✅ Fetched {len(formatted_categories)} categories via plugin API for user {current_user.id}")
         return {"status": "success", "categories": formatted_categories}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error fetching WordPress categories: {e}")
+        logger.exception("Error fetching WordPress categories")
         raise HTTPException(status_code=500, detail=f"Failed to fetch categories: {str(e)}")
 
 @platforms_router.get("/platforms/wordpress/authors")
@@ -966,56 +969,59 @@ async def get_wordpress_authors(
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Fetch WordPress authors from connected site using plugin API"""
+    """Fetch WordPress authors from the current user's connected site (plugin API). Always uses logged-in user's WordPress."""
     try:
         from models import PlatformConnection, PlatformEnum
         import requests
-        
+
         connection = db.query(PlatformConnection).filter(
             PlatformConnection.user_id == current_user.id,
             PlatformConnection.platform == PlatformEnum.WORDPRESS
         ).first()
-        
-        if not connection or not connection.platform_user_id or not connection.access_token:
+
+        if not connection or not getattr(connection, "platform_user_id", None) or not getattr(connection, "access_token", None):
             raise HTTPException(status_code=400, detail="WordPress not connected. Please connect your WordPress site first.")
-        
-        site_url = connection.platform_user_id.rstrip('/')
-        plugin_api_key = connection.access_token  # WordPress plugin API key (activation_key)
-        
-        # Use plugin endpoint with API key
+
+        site_url = (connection.platform_user_id or "").rstrip("/")
+        plugin_api_key = connection.access_token or ""
         plugin_url = f"{site_url}/wp-json/vernal-contentum/v1/authors"
-        headers = {
-            "X-API-Key": plugin_api_key
-        }
-        
-        response = requests.get(plugin_url, headers=headers, timeout=10)
-        
+        headers = {"X-API-Key": plugin_api_key}
+
+        try:
+            response = requests.get(plugin_url, headers=headers, timeout=20)
+        except requests.RequestException as e:
+            logger.warning(f"WordPress authors request failed for user {current_user.id}: {e}")
+            raise HTTPException(status_code=502, detail=f"WordPress site unreachable: {str(e)}")
+
         if response.status_code != 200:
-            logger.error(f"❌ Failed to fetch authors: {response.status_code} - {response.text}")
-            raise HTTPException(status_code=400, detail=f"Failed to fetch authors: {response.status_code}")
-        
-        authors_data = response.json()
-        
-        # Handle plugin response format
+            logger.warning(f"WordPress authors plugin returned {response.status_code}: {response.text[:200]}")
+            raise HTTPException(status_code=400, detail=f"WordPress plugin returned {response.status_code}")
+
+        try:
+            authors_data = response.json()
+        except ValueError:
+            logger.warning(f"WordPress authors non-JSON response: {response.text[:200]}")
+            raise HTTPException(status_code=502, detail="WordPress plugin returned invalid response")
+
         if authors_data.get("success") and authors_data.get("data"):
             formatted_authors = [
-                {"id": author.get("id"), "name": author.get("display_name"), "username": author.get("username")} 
+                {"id": author.get("id"), "name": author.get("display_name"), "username": author.get("username")}
                 for author in authors_data.get("data", [])
             ]
         elif isinstance(authors_data, list):
             formatted_authors = [
-                {"id": author.get("id"), "name": author.get("display_name"), "username": author.get("username")} 
+                {"id": author.get("id"), "name": author.get("display_name"), "username": author.get("username")}
                 for author in authors_data
             ]
         else:
             formatted_authors = []
-        
+
         logger.info(f"✅ Fetched {len(formatted_authors)} authors via plugin API for user {current_user.id}")
         return {"status": "success", "authors": formatted_authors}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Error fetching WordPress authors: {e}")
+        logger.exception("Error fetching WordPress authors")
         raise HTTPException(status_code=500, detail=f"Failed to fetch authors: {str(e)}")
 
 @platforms_router.get("/platforms/wordpress/sitemap")

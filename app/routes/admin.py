@@ -481,13 +481,22 @@ def transfer_campaign(campaign_id: str, request: TransferCampaignRequest, admin_
         
         # Store original user for logging
         original_user_id = campaign.user_id
-        
+
+        # Clear WordPress category/author on all content so the new owner uses their own WordPress
+        from models import Content
+        updated = db.query(Content).filter(Content.campaign_id == campaign_id).update(
+            {Content.category_id: None, Content.author_id: None},
+            synchronize_session=False
+        )
+        if updated:
+            logger.info(f"Cleared category_id/author_id on {updated} content items for transferred campaign {campaign_id}")
+
         # Transfer campaign
         campaign.user_id = target_user_id
         campaign.updated_at = datetime.now()
         db.commit()
         db.refresh(campaign)
-        
+
         logger.info(f"✅ Admin {admin_user.id} transferred campaign {campaign_id} from user {original_user_id} to user {target_user_id}")
         
         return {
