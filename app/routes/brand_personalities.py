@@ -1522,233 +1522,33 @@ Generate content for {platform} based on the content queue items and campaign co
         }
         
     except Exception as e:
-        from models import Campaign
-        from crewai_workflows import create_content_generation_crew
-        import json
-        
-        # Verify campaign ownership
-        campaign = db.query(Campaign).filter(
-            Campaign.campaign_id == campaign_id,
-            Campaign.user_id == current_user.id
-        ).first()
-        
-        if not campaign:
-            raise HTTPException(status_code=404, detail="Campaign not found")
-        
-        # Get content queue items from request or campaign
-        content_queue_items = request_data.get("content_queue_items", [])
-        if not content_queue_items and campaign.content_queue_items_json:
-            content_queue_items = json.loads(campaign.content_queue_items_json)
-        
-        # Build context from content queue items
-        queue_context = "\n".join([
-            f"- {item.get('title', item.get('text', str(item)))}"
-            for item in content_queue_items
-        ])
-        
-        # Get other parameters
-        platform = request_data.get("platform", "linkedin")
-        week = request_data.get("week", 1)
-        day = request_data.get("day", "Monday")
-        parent_idea = request_data.get("parent_idea", "")
-        kg_location = request_data.get("knowledge_graph_location", "")
-        landing_page_url = request_data.get("landing_page_url", "")
-        author_personality_id = request_data.get("author_personality_id")  # NEW: Support author personality ID
-        use_author_voice = request_data.get("use_author_voice", True)  # NEW: Toggle for author voice
-        use_validation = request_data.get("use_validation", False)  # Phase 4: Toggle for validation
-        
-        # Build writing context
-        writing_context = f"""Content Queue Foundation:
-{queue_context}
-
-{f'Parent Idea: {parent_idea}' if parent_idea else ''}
-{f'Knowledge Graph Location: {kg_location}' if kg_location else ''}
-{f'Landing Page: {landing_page_url}' if landing_page_url else ''}
-
-Generate content for {platform} based on the content queue items above."""
-        
-        # Phase 3: Integrate author voice if author_personality_id is provided
-        if author_personality_id and use_author_voice:
-            from author_voice_helper import generate_with_author_voice, should_use_author_voice
-            
-            if should_use_author_voice(author_personality_id):
-                logger.info(f"Using author voice for personality: {author_personality_id}")
-                
-                # Get custom modifications for this platform if available
-                custom_modifications = None
-                if "platformSettings" in request_data:
-                    platform_settings = request_data.get("platformSettings", {})
-                    platform_lower = platform.lower()
-                    if platform_lower in platform_settings:
-                        settings = platform_settings[platform_lower]
-                        if not settings.get("useGlobalDefaults", True):
-                            custom_modifications = settings.get("customModifications", "")
-                
-                # Generate content with author voice (Phase 4: includes validation if requested)
-                generated_text, style_config, metadata, validation_result = generate_with_author_voice(
-                    content_prompt=writing_context,
-                    author_personality_id=author_personality_id,
-                    platform=platform.lower(),
-                    goal="content_generation",
-                    target_audience="general",
-                    custom_modifications=custom_modifications,
-                    use_validation=use_validation,
-                    db=db
-                )
-                
-                if generated_text:
-                    # Optionally pass through CrewAI for QC if requested
-                    use_crewai_qc = request_data.get("use_crewai_qc", False)
-                    
-                    if use_crewai_qc:
-                        # Pass generated content to CrewAI for QC only
-                        crew_result = create_content_generation_crew(
-                            text=f"Review and refine this content:\n\n{generated_text}\n\nStyle Config:\n{style_config}",
-                            week=week,
-                            platform=platform.lower(),
-                            days_list=[day],
-                            author_personality=request_data.get("author_personality", "custom")
-                        )
-                        
-                        # Merge author voice metadata with CrewAI result
-                        if crew_result.get("success"):
-                            crew_data = crew_result.get("data", {})
-                            # Extract WordPress fields if platform is WordPress
-                            if platform.lower() == "wordpress":
-                                content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
-                                extraction_result = extract_wordpress_fields(str(content_text))
-                                format_detected = extraction_result.get("format_detected", "unknown")
-                                
-                                # Log contract compliance
-                                logger.info(f"📝 WordPress fields extraction (CrewAI QC sync) - Format: {format_detected}")
-                                
-                                wordpress_fields = {
-                                    "post_title": extraction_result.get("post_title"),
-                                    "post_excerpt": extraction_result.get("post_excerpt"),
-                                    "permalink": extraction_result.get("permalink"),
-                                    "format_detected": format_detected
-                                }
-                                if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
-                                    crew_data.update(wordpress_fields)
-                                    # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
-                                    cleaned_body = extraction_result.get("cleaned_body")
-                                    body_only = cleaned_body if cleaned_body else sanitize_wordpress_body(str(content_text))
-                                    if "content" in crew_data:
-                                        crew_data["content"] = body_only
-                                    if "text" in crew_data:
-                                        crew_data["text"] = body_only
-                                    if format_detected != "canonical":
-                                        logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
-                            
-                            response_data = {
-                                **crew_data,
-                                "author_voice_used": True,
-                                "style_config": style_config,
-                                "author_voice_metadata": metadata
-                            }
-                            # Phase 4: Add validation results if available
-                            if validation_result:
-                                response_data["validation"] = validation_result
-                            return {
-                                "status": "success",
-                                "data": response_data,
-                                "error": crew_result.get("error")
-                            }
-                    
-                    # Return author voice generated content directly (when not using CrewAI QC)
-                    # Extract WordPress fields if platform is WordPress
-                    wordpress_fields = {}
-                    if platform.lower() == "wordpress":
-                        extraction_result = extract_wordpress_fields(generated_text)
-                        format_detected = extraction_result.get("format_detected", "unknown")
-                        
-                        # Log contract compliance
-                        logger.info(f"📝 WordPress fields extraction (Author Voice) - Format: {format_detected}")
-                        
-                        wordpress_fields = {
-                            "post_title": extraction_result.get("post_title"),
-                            "post_excerpt": extraction_result.get("post_excerpt"),
-                            "permalink": extraction_result.get("permalink"),
-                            "format_detected": format_detected
-                        }
-                        
-                        if format_detected != "canonical":
-                            logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}. "
-                                         f"Consider updating writing prompt to use canonical format.")
-                    
-                    # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
-                    content_to_use = extraction_result.get("cleaned_body") if wordpress_fields and extraction_result.get("cleaned_body") else sanitize_wordpress_body(generated_text)
-                    response_data = {
-                        "content": content_to_use,
-                        "title": "",  # Can be extracted or generated separately
-                        "author_voice_used": True,
-                        "style_config": style_config,
-                        "author_voice_metadata": metadata,
-                        "platform": platform
-                    }
-                    # Add WordPress fields if extracted
-                    if wordpress_fields:
-                        response_data.update(wordpress_fields)
-                    # Phase 4: Add validation results if available
-                    if validation_result:
-                        response_data["validation"] = validation_result
-                    return {
-                        "status": "success",
-                        "data": response_data,
-                        "error": None
-                    }
-                else:
-                    logger.warning(f"Author voice generation failed, falling back to CrewAI")
-                    # Fall through to CrewAI workflow
-        
-        # Generate content using CrewAI workflow (fallback or default)
-        crew_result = create_content_generation_crew(
-            text=writing_context,
-            week=week,
-            platform=platform.lower(),
-            days_list=[day],
-            author_personality=request_data.get("author_personality")
-        )
-        
-        # Extract WordPress fields if platform is WordPress
-        crew_data = crew_result.get("data", {})
-        if platform.lower() == "wordpress" and crew_result.get("success"):
-            content_text = crew_data.get("content", "") or crew_data.get("text", "") or str(crew_data)
-            extraction_result = extract_wordpress_fields(str(content_text))
-            format_detected = extraction_result.get("format_detected", "unknown")
-            
-            # Log contract compliance
-            logger.info(f"📝 WordPress fields extraction (sync fallback) - Format: {format_detected}")
-            
-            wordpress_fields = {
-                "post_title": extraction_result.get("post_title"),
-                "post_excerpt": extraction_result.get("post_excerpt"),
-                "permalink": extraction_result.get("permalink"),
-                "format_detected": format_detected
-            }
-            if wordpress_fields.get("post_title") or wordpress_fields.get("post_excerpt") or wordpress_fields.get("permalink"):
-                crew_data.update(wordpress_fields)
-                # Never use raw model output as WP body: use cleaned_body or sanitize as failsafe
-                cleaned_body = extraction_result.get("cleaned_body")
-                body_only = cleaned_body if cleaned_body else sanitize_wordpress_body(str(content_text))
-                if "content" in crew_data:
-                    crew_data["content"] = body_only
-                if "text" in crew_data:
-                    crew_data["text"] = body_only
-                if format_detected != "canonical":
-                    logger.warning(f"⚠️ Non-canonical WordPress format detected: {format_detected}.")
-        
-        return {
-            "status": "success" if crew_result.get("success") else "error",
-            "data": crew_data,
-            "error": crew_result.get("error")
-        }
-        
-    except Exception as e:
-        logger.error(f"Error generating campaign content: {e}")
+        # Never run sync pipeline in request handler. Always return task_id immediately
+        # so frontend can poll; record error in CONTENT_GEN_TASKS for status endpoint.
         import traceback
+        logger.error(f"Error in generate_campaign_content (returning task_id for poll): {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        task_id = str(uuid.uuid4())
+        req = request_data or {}
+        CONTENT_GEN_TASKS[task_id] = {
+            "campaign_id": campaign_id,
+            "platform": req.get("platform", "linkedin"),
+            "started_at": datetime.utcnow().isoformat(),
+            "progress": 0,
+            "status": "error",
+            "current_agent": None,
+            "current_task": f"Error: {str(e)}",
+            "agent_statuses": [],
+            "error": str(e),
+            "result": None,
+        }
+        if campaign_id not in CONTENT_GEN_TASK_INDEX:
+            CONTENT_GEN_TASK_INDEX[campaign_id] = []
+        CONTENT_GEN_TASK_INDEX[campaign_id].append(task_id)
+        return {
+            "status": "pending",
+            "task_id": task_id,
+            "message": "Content generation started. Use task_id to poll status."
+        }
 
 @brand_personalities_router.get("/campaigns/{campaign_id}/generate-content/status/{task_id}")
 async def get_content_generation_status(
