@@ -77,18 +77,26 @@ class GasMeterTracker:
             output_tokens: Number of output tokens
             cost_override: Optional manual cost override (if provided, skips calculation)
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         with self._lock:
             total_tokens = input_tokens + output_tokens
             self._llm_tokens_used += total_tokens
             
             if cost_override is not None:
                 self._llm_cost_usd += cost_override
+                logger.info(f"💰 Gas Meter: Tracked {total_tokens} tokens (override cost: ${cost_override:.6f})")
             else:
                 # Calculate cost based on model pricing
                 pricing = OPENAI_PRICING.get(model, OPENAI_PRICING["default"])
                 input_cost = input_tokens * pricing["input"]
                 output_cost = output_tokens * pricing["output"]
-                self._llm_cost_usd += input_cost + output_cost
+                cost = input_cost + output_cost
+                self._llm_cost_usd += cost
+                logger.info(f"💰 Gas Meter: Tracked {total_tokens} tokens ({input_tokens} in, {output_tokens} out) for {model} = ${cost:.6f}")
+            
+            logger.info(f"📊 Gas Meter: Total tokens: {self._llm_tokens_used}, Total cost: ${self._llm_cost_usd:.6f}")
     
     def get_current_costs(self) -> Dict:
         """
