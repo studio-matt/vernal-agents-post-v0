@@ -2088,7 +2088,9 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
                 temperature=0.4, 
                 max_tokens=1000
             )
-            response = llm.invoke(prompt)
+            # Track OpenAI API usage for gas meter
+            from gas_meter.openai_wrapper import track_langchain_call
+            response = track_langchain_call(llm, model="gpt-4o-mini", prompt=prompt)
             recommendations_text = response.content if hasattr(response, 'content') else str(response)
         except Exception as e:
             logger.error(f"Error calling LLM for {agent_type} recommendations: {e}")

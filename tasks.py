@@ -192,7 +192,11 @@ def analyze_text(prompt, api_key=None):
         # Guardrails: sanitize prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
         prompt, audit = guard_or_raise(prompt, max_len=12000)
 
-        response = client.chat.completions.create(
+        # Track OpenAI API usage for gas meter
+        from gas_meter.openai_wrapper import track_openai_call
+        
+        response = track_openai_call(
+            client.chat.completions.create,
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant tasked with analyzing documents and producing JSON output."},

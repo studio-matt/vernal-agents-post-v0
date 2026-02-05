@@ -603,7 +603,9 @@ Return only the parent idea, no additional text."""
                 # Guardrails: sanitize parent_prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
                 parent_prompt, audit = guard_or_raise(parent_prompt, max_len=12000)
 
-                parent_response = llm.invoke(parent_prompt)
+                # Track OpenAI API usage for gas meter
+                from gas_meter.openai_wrapper import track_langchain_call
+                parent_response = track_langchain_call(llm, model="gpt-4o-mini", prompt=parent_prompt)
                 parent_idea = parent_response.content.strip()
                 
                 # Generate children concepts for this parent
@@ -619,7 +621,7 @@ Return as a numbered list."""
                 # Guardrails: sanitize children_prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
                 children_prompt, audit = guard_or_raise(children_prompt, max_len=12000)
 
-                children_response = llm.invoke(children_prompt)
+                children_response = track_langchain_call(llm, model="gpt-4o-mini", prompt=children_prompt)
                 children_text = children_response.content.strip()
                 children = [line.strip() for line in children_text.split("\n") if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith("-"))]
                 
@@ -637,7 +639,7 @@ Select a knowledge graph location for this parent idea."""
                 # Guardrails: sanitize kg_location_prompt_full + check for injection (raises GuardrailsBlocked if blocking enabled)
                 kg_location_prompt_full, audit = guard_or_raise(kg_location_prompt_full, max_len=12000)
 
-                kg_response = llm.invoke(kg_location_prompt_full)
+                kg_response = track_langchain_call(llm, model="gpt-4o-mini", prompt=kg_location_prompt_full)
                 kg_location = kg_response.content.strip()
                 
                 week_plan["parent_ideas"].append({

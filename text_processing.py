@@ -976,7 +976,9 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
             logger.info(f"🔍 LLM attempt {attempt + 1}/{max_attempts}: Calling OpenAI API...")
             try:
                 # Call the LLM
-                response = llm.invoke(prompt)
+                # Track OpenAI API usage for gas meter
+                from gas_meter.openai_wrapper import track_langchain_call
+                response = track_langchain_call(llm, model="gpt-4o-mini", prompt=prompt)
                 response_text = response.content.strip()
                 logger.info(f"✅ LLM API call successful, response length: {len(response_text)}")
                 logger.debug(f"🔍 Raw LLM response: {response_text[:200]}...")

@@ -145,7 +145,11 @@ Generate the content following the instructions above.
             # Guardrails: sanitize user message + check for injection (raises GuardrailsBlocked if blocking enabled)
             user_message, audit = guard_or_raise(user_message, max_len=12000)
 
-            response = self.client.chat.completions.create(
+            # Track OpenAI API usage for gas meter
+            from gas_meter.openai_wrapper import track_openai_call
+            
+            response = track_openai_call(
+                self.client.chat.completions.create,
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": system_message},

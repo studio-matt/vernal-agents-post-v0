@@ -209,7 +209,10 @@ Additional Platform-Specific Instructions:
                     temperature=adjusted_temperature,
                     api_key=api_key
                 )
-                return llm.invoke(prompt).content
+                # Track OpenAI API usage for gas meter
+                from gas_meter.openai_wrapper import track_langchain_call
+                response = track_langchain_call(llm, model="gpt-4o-mini", prompt=prompt)
+                return response.content
             
             logger.info(f"Using temperature={adjusted_temperature:.2f} (featureWeight={feature_weight:.2f})")
             
