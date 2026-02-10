@@ -3383,9 +3383,10 @@ async def save_content_item(
                     logger.info(f"💾 WordPress content sanitized before save: before len={len(content_update)}, after len={len(body_to_save)}")
                 logger.info(f"💾 Updating content: length={len(body_to_save)}, empty={not body_to_save.strip()}")
             
-            if image_url:
+            # Always update image_url if key present (allows clearing image on delete)
+            if "image" in item or "image_url" in item:
                 update_fields.append("image_url = :image_url")
-                update_values["image_url"] = image_url
+                update_values["image_url"] = image_url or None
             
             update_fields.append("status = :status")
             update_values["status"] = "draft"
