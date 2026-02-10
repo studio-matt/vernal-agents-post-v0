@@ -95,6 +95,13 @@ except Exception as e:
     logger.error(f"❌ Failed to include brand personalities router: {e}")
 
 try:
+    from app.routes.generation_logs import generation_logs_router
+    app.include_router(generation_logs_router)
+    logger.info("✅ Generation logs router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include generation logs router: {e}")
+
+try:
     from gas_meter.endpoint_code import router as gas_meter_router
     app.include_router(gas_meter_router)
     logger.info("✅ Gas meter router included successfully")
