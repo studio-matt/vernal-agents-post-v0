@@ -43,6 +43,7 @@ class UserResponse(BaseModel):
     email: str
     contact: Optional[str]
     is_verified: bool
+    is_admin: bool = False
     created_at: datetime
 
 class LoginResponse(BaseModel):
@@ -399,6 +400,7 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
                 email=user.email,
                 contact=user.contact,
                 is_verified=user.is_verified,
+                is_admin=getattr(user, 'is_admin', False),
                 created_at=user.created_at
             )
         )
@@ -659,6 +661,7 @@ async def get_current_user_info(current_user = Depends(get_current_user)):
         email=current_user.email,
         contact=current_user.contact,
         is_verified=current_user.is_verified,
+        is_admin=getattr(current_user, 'is_admin', False),
         created_at=current_user.created_at
     )
 
