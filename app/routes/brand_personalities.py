@@ -1033,69 +1033,70 @@ Sample Text (first 500 characters):
                                     platform_settings_text = f"\n\n{platform.capitalize()}-Specific Settings/Modifications:\n" + "\n".join(settings_items)
                     
                     # Fetch cornerstone content if this is a supporting platform (not the cornerstone platform)
-                    # IMPORTANT: Fetch cornerstone content for the SPECIFIC week and day being generated
-                    # This ensures supporting platforms reference the correct cornerstone post for that day
+                    # Priority 1: Use cornerstone_content + cornerstone_permalink + cornerstone_post_title from request (frontend sends these for linkbacks)
+                    # Priority 2: Fall back to DB lookup for same week/day
                     cornerstone_content = ""
                     cornerstone_url = ""
-                    if campaign.cornerstone_platform and platform.lower() != campaign.cornerstone_platform.lower():
-                        # This is a supporting platform - fetch the cornerstone content for THIS specific week and day
+                    cornerstone_post_title = ""  # Suggested link text for inline linkback in secondary copy
+                    request_cornerstone = (req_data.get("cornerstone_content") or "").strip()
+                    request_permalink = (req_data.get("cornerstone_permalink") or "").strip()
+                    request_post_title = (req_data.get("cornerstone_post_title") or "").strip()
+                    if request_cornerstone:
+                        cornerstone_content = f"Cornerstone Article Body:\n{request_cornerstone}"
+                        cornerstone_post_title = request_post_title
+                        if request_permalink:
+                            from models import PlatformConnection, PlatformEnum
+                            wp_conn = session.query(PlatformConnection).filter(
+                                PlatformConnection.user_id == user_id,
+                                PlatformConnection.platform == PlatformEnum.WORDPRESS
+                            ).first()
+                            if wp_conn and getattr(wp_conn, "platform_user_id", None):
+                                base_url = (wp_conn.platform_user_id or "").rstrip("/")
+                                permalink = request_permalink.lstrip("/")
+                                cornerstone_url = f"{base_url}/{permalink}" if base_url else ""
+                                if cornerstone_url:
+                                    logger.info(f"🔗 Built cornerstone URL from connection + permalink: {cornerstone_url}")
+                            else:
+                                logger.warning(f"⚠️ cornerstone_permalink provided but WordPress not connected for user; cannot build linkback URL")
+                    elif campaign.cornerstone_platform and platform.lower() != campaign.cornerstone_platform.lower():
+                        # This is a supporting platform - fetch the cornerstone content for THIS specific week and day from DB
                         from models import Content
-                        
-                        # First try to find cornerstone content for the exact week and day
                         cornerstone_content_item = session.query(Content).filter(
                             Content.campaign_id == cid,
                             Content.platform == campaign.cornerstone_platform.lower(),
                             Content.week == week,
                             Content.day == day
                         ).first()
-                        
-                        # If not found for exact match, try to find any cornerstone content for this day (different week)
                         if not cornerstone_content_item:
                             cornerstone_content_item = session.query(Content).filter(
                                 Content.campaign_id == cid,
                                 Content.platform == campaign.cornerstone_platform.lower(),
                                 Content.day == day
                             ).order_by(Content.week.desc(), Content.date_upload.desc()).first()
-                        
-                        # If still not found, fall back to most recent cornerstone content (for backward compatibility)
                         if not cornerstone_content_item:
                             cornerstone_content_item = session.query(Content).filter(
                                 Content.campaign_id == cid,
                                 Content.platform == campaign.cornerstone_platform.lower()
                             ).order_by(Content.date_upload.desc()).first()
                             logger.warning(f"⚠️ No cornerstone content found for week {week}, day {day}. Using most recent cornerstone content.")
-                        
                         if cornerstone_content_item and cornerstone_content_item.content:
-                            # Pass ONLY the content body (no title or excerpt)
-                            # This prevents agents from anchoring to summary instead of mining the full article
                             cornerstone_text = cornerstone_content_item.content.strip()
-                            
-                            # Prepend label for clarity
                             cornerstone_content = f"Cornerstone Article Body:\n{cornerstone_text}"
-                            
-                            # Get the published URL if available (post_url field)
                             if hasattr(cornerstone_content_item, 'post_url') and cornerstone_content_item.post_url:
                                 cornerstone_url = cornerstone_content_item.post_url
-                                logger.info(f"🔗 Found cornerstone URL: {cornerstone_url}")
+                                logger.info(f"🔗 Found cornerstone URL from DB: {cornerstone_url}")
                             else:
                                 logger.warning(f"⚠️ Cornerstone content found but no post_url available (content may not be published yet)")
-                            
-                            # Log which cornerstone content was used (for debugging)
-                            matched_week = cornerstone_content_item.week
-                            matched_day = cornerstone_content_item.day
-                            if matched_week == week and matched_day == day:
-                                logger.info(f"📝 Fetched cornerstone content for week {week}, day {day} (exact match) - {len(cornerstone_text)} chars")
-                            else:
-                                # Day match but different week - warn about potential theme mismatch
-                                logger.warning(f"⚠️ Using cornerstone content from week {matched_week}, day {matched_day} (requested: week {week}, day {day}). Campaign themes may differ week-to-week. - {len(cornerstone_text)} chars")
                         else:
                             logger.warning(f"⚠️ Cornerstone platform {campaign.cornerstone_platform} is set but no cornerstone content found for week {week}, day {day}")
                     
                     # Build writing context for THIS ONE ARTICLE
-                    # Includes: content queue items (for this article only), parent idea, brand guidelines,
-                    # campaign context, platform-specific modifications, and cornerstone content
-                    # Include cornerstone URL if available
-                    cornerstone_url_section = f"\nCornerstone URL:\n{cornerstone_url}" if cornerstone_url else ""
+                    # Include cornerstone URL and optional link text so the agent can insert inline linkbacks in secondary copy
+                    cornerstone_url_section = ""
+                    if cornerstone_url:
+                        cornerstone_url_section = f"\nCornerstone URL (insert an inline link to this in the copy):\n{cornerstone_url}"
+                        if cornerstone_post_title:
+                            cornerstone_url_section += f"\nSuggested link text: {cornerstone_post_title}"
                     writing_context = f"""Content Queue Foundation (for this article only):
 {queue_context}
 
