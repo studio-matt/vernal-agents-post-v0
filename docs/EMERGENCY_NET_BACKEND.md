@@ -814,6 +814,17 @@ cd /home/ubuntu/vernal-agents-post-v0
 - **Fix (backend):** Return **task_id immediately** (or right after enqueueing the job) from `POST .../generate-content`, and run the pipeline in a **background task**. Write progress/status to whatever store the `GET .../generate-content/status/{task_id}` endpoint reads from, so the frontend can poll and show 20% → 100%. This is the same async pattern that made progress move before; if a recent change made the route synchronous, revert or re-add the async path.
 - **Frontend:** Shows an indeterminate "Starting agents…" state when waiting for task_id so the UI doesn’t look stuck at 0%; real % still requires backend returning task_id and updating status.
 
+### **Backend slow after big runs (e.g. 1000 articles/day)**
+- **Symptoms:** After a large batch (Generate Day’s Content, many articles), the server is very slow: `GET campaigns`, `GET .../generate-content/status/{task_id}`, and other endpoints take a long time or time out.
+- **Frontend (vernal-post-v0):** Status polling is optimized to reduce load: **adaptive interval** (2s when ≤8 tasks, 4s when 9–20, 6s when 21+) and **staggered first poll** (first requests spread over ~800ms). So 50 tasks no longer cause 25 req/s; they poll every 6s and start staggered.
+- **Backend recommendations (implement in this repo):**
+  - **Status endpoint:** Store task state in **Redis or DB** (not in-memory per worker) so `GET .../generate-content/status/{task_id}` is a fast lookup; add a short TTL cache (e.g. 5–10s) per task_id if needed.
+  - **Batch status (optional):** If supported, frontend could call one `GET .../generate-content/status?task_ids=id1,id2,...` to reduce round-trips; backend returns a map of statuses.
+  - **Campaigns list:** Ensure `GET campaigns` uses indexed queries and minimal joins; consider caching campaign list (e.g. Redis, 30–60s TTL) when under heavy load.
+  - **Connection pooling:** Use DB connection pooling and limit concurrent connections; avoid one connection per request.
+  - **Background workers:** Run content generation in background workers (Celery, RQ, or async tasks) so the API returns quickly and workers scale independently.
+  - **Rate limiting:** Optional per-user or global rate limit on status polling to cap load during huge batches.
+
 ### **Campaigns list spinning / "not connecting to APIs"**
 - **Symptoms:** Content planner (campaigns list) spins indefinitely; console shows Network Error, timeout, or ERR_NETWORK_CHANGED for `GET campaigns`, `author_personalities`, `brand_personalities`, etc.
 - **Causes:** Backend unreachable (down, wrong host, firewall), nginx not proxying to backend, or backend very slow (>30s for campaigns).
