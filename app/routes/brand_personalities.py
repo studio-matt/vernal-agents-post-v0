@@ -914,7 +914,48 @@ async def generate_campaign_content(
                             task_data["agent_statuses"].append(agent_entry)
                         logger.info(f"📊 Task {tid}: {progress}% - {agent} - {task}")
                     
+                    # Fail-fast: stop if past deadline so status endpoint returns error before 10 min
+                    def check_deadline() -> bool:
+                        if tid not in CONTENT_GEN_TASKS:
+                            return True
+                        started_at_str = CONTENT_GEN_TASKS[tid].get("started_at")
+                        if not started_at_str:
+                            return False
+                        try:
+                            started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+                            from datetime import timezone
+                            if started_at.tzinfo:
+                                elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+                            else:
+                                elapsed = (datetime.utcnow() - started_at).total_seconds()
+                            if elapsed >= max(0, MAX_CONTENT_GEN_DURATION_SEC - 60):
+                                msg = f"Task exceeded maximum duration ({MAX_CONTENT_GEN_DURATION_SEC // 60} min)"
+                                CONTENT_GEN_TASKS[tid]["status"] = "error"
+                                CONTENT_GEN_TASKS[tid]["error"] = msg
+                                CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
+                                logger.warning(f"❌ Task {tid} failed (deadline): {msg}")
+                                return True
+                        except (ValueError, TypeError):
+                            pass
+                        return False
+                    
+                    # Ensure frontend gets body from result.data (final_content, content, quality_control, writing)
+                    def normalize_result_data(data: dict) -> dict:
+                        if not data:
+                            return data
+                        body = (data.get("final_content") or data.get("content") or data.get("quality_control") or data.get("writing") or "")
+                        if isinstance(body, dict):
+                            body = body.get("content") or body.get("text") or body.get("raw") or str(body)
+                        body = str(body) if body else ""
+                        if not data.get("final_content") and body:
+                            data["final_content"] = body
+                        if not data.get("content") and body:
+                            data["content"] = body
+                        return data
+                    
                     update_task_status(progress=5, task="Initializing", status="in_progress")
+                    if check_deadline():
+                        return
                     
                     # Verify campaign ownership
                     campaign = session.query(Campaign).filter(
@@ -1145,6 +1186,8 @@ Generate content for {platform} based on the content queue items and campaign co
                     
                     update_task_status(progress=10, task="Preparing content context")
                     
+                    if check_deadline():
+                        return
                     # Phase 3: Integrate author voice if author_personality_id is provided
                     if author_personality_id and use_author_voice:
                         from author_voice_helper import generate_with_author_voice, should_use_author_voice
@@ -1222,11 +1265,13 @@ Generate content for {platform} based on the content queue items and campaign co
                                             }
                                             if validation_result:
                                                 response_data["validation"] = validation_result
+                                            normalize_result_data(response_data)
                                             CONTENT_GEN_TASKS[tid]["result"] = {
                                                 "status": "success",
                                                 "data": response_data,
                                                 "error": None
                                             }
+                                            logger.info(f"✅ Task {tid} completed with result (author voice + CrewAI QC)")
                                             update_task_status(progress=100, status="completed", task="Content generation completed")
                                             return
                                     
@@ -1267,11 +1312,13 @@ Generate content for {platform} based on the content queue items and campaign co
                                         response_data.update(wordpress_fields)
                                     if validation_result:
                                         response_data["validation"] = validation_result
+                                    normalize_result_data(response_data)
                                     CONTENT_GEN_TASKS[tid]["result"] = {
                                         "status": "success",
                                         "data": response_data,
                                         "error": None
                                     }
+                                    logger.info(f"✅ Task {tid} completed with result (author voice)")
                                     update_task_status(progress=100, status="completed", task="Content generation completed")
                                     return
                             except Exception as av_error:
@@ -1284,6 +1331,8 @@ Generate content for {platform} based on the content queue items and campaign co
                                 )
                                 logger.warning(f"Author voice generation failed, falling back to CrewAI")
                     
+                    if check_deadline():
+                        return
                     # Fallback to CrewAI workflow
                     # Note: CrewAI will handle Research → Writing → QC sequentially
                     # We track overall progress, but individual agents are tracked by CrewAI internally
@@ -1465,11 +1514,13 @@ Generate content for {platform} based on the content queue items and campaign co
                                 logger.warning(f"⚠️ No WordPress fields extracted from CrewAI result. Format: {format_detected}, "
                                              f"Content type: {type(content_text)}, length: {len(str(content_text))}")
                         
+                        normalize_result_data(crew_data)
                         CONTENT_GEN_TASKS[tid]["result"] = {
                             "status": "success",
                             "data": crew_data,
                             "error": None
                         }
+                        logger.info(f"✅ Task {tid} completed with result (CrewAI)")
                         # Mark all agents as completed before final status update
                         if "agent_statuses" in CONTENT_GEN_TASKS[tid]:
                             for agent_status in CONTENT_GEN_TASKS[tid]["agent_statuses"]:
@@ -1482,6 +1533,7 @@ Generate content for {platform} based on the content queue items and campaign co
                         update_task_status(progress=100, status="completed", task="Content generation completed")
                     else:
                         error_msg = crew_result.get("error", "Unknown error")
+                        logger.warning(f"❌ Task {tid} failed (CrewAI): {error_msg}")
                         update_task_status(
                             agent="CrewAI Workflow",
                             task=f"Error: {error_msg}",
@@ -1498,6 +1550,7 @@ Generate content for {platform} based on the content queue items and campaign co
                         CONTENT_GEN_TASKS[tid]["error"] = str(bg_error)
                         CONTENT_GEN_TASKS[tid]["status"] = "error"
                         CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {str(bg_error)}"
+                        logger.warning(f"❌ Task {tid} failed (exception): {bg_error}")
                 finally:
                     session.close()
             except Exception as outer_error:
@@ -1505,6 +1558,7 @@ Generate content for {platform} based on the content queue items and campaign co
                 if tid in CONTENT_GEN_TASKS:
                     CONTENT_GEN_TASKS[tid]["error"] = str(outer_error)
                     CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    logger.warning(f"❌ Task {tid} failed (outer): {outer_error}")
         
         # Start background thread
         import threading
@@ -1615,7 +1669,7 @@ async def get_content_generation_status(
             current_agent = task.get("current_agent")
             current_task = task.get("current_task", "Processing")
         
-        # If task is completed and has result, include it
+        # If task is completed and has result, include it; on error explicitly send result: null
         response = {
             "status": task_status,
             "progress": task.get("progress", 0),
@@ -1624,10 +1678,10 @@ async def get_content_generation_status(
             "agent_statuses": task.get("agent_statuses", []),
             "error": task.get("error")
         }
-        
-        # If completed, include result
         if task_status == "completed" and task.get("result"):
             response["result"] = task.get("result")
+        elif task_status == "error":
+            response["result"] = None
         
         return response
         
