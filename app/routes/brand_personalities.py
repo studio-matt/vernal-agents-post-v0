@@ -13,7 +13,7 @@ from auth_api import get_current_user
 from database import SessionLocal
 from app.schemas.models import BrandPersonalityCreate, BrandPersonalityUpdate
 from app.utils.openai_helpers import get_openai_api_key
-from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX
+from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX, MAX_CONTENT_GEN_DURATION_SEC
 from app.utils.wordpress_body import sanitize_wordpress_body
 
 logger = logging.getLogger(__name__)
@@ -1585,8 +1585,28 @@ async def get_content_generation_status(
         
         task = CONTENT_GEN_TASKS[task_id]
         
-        # If task is completed, clear current_agent and current_task
+        # Enforce max duration: if task is still running past limit, mark as failed so frontend gets terminal state
         task_status = task.get("status", "pending")
+        if task_status not in ("completed", "error"):
+            started_at_str = task.get("started_at")
+            if started_at_str:
+                try:
+                    started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+                    # If started_at is timezone-aware, use it; else treat as naive UTC
+                    if started_at.tzinfo:
+                        from datetime import timezone
+                        elapsed_sec = (datetime.now(timezone.utc) - started_at).total_seconds()
+                    else:
+                        elapsed_sec = (datetime.utcnow() - started_at).total_seconds()
+                    if elapsed_sec > MAX_CONTENT_GEN_DURATION_SEC:
+                        task["status"] = "error"
+                        task["error"] = f"Task exceeded maximum duration ({MAX_CONTENT_GEN_DURATION_SEC // 60} min)"
+                        task_status = "error"
+                        logger.warning(f"Task {task_id} marked failed: exceeded max duration ({elapsed_sec:.0f}s)")
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Could not parse started_at for task {task_id}: {e}")
+        
+        # If task is completed, clear current_agent and current_task
         if task_status == "completed":
             # Clear current agent/task when completed
             current_agent = None
