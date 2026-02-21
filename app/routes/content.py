@@ -2248,7 +2248,7 @@ def get_scheduled_posts(
         
         logger.info(f"📋 Fetching scheduled posts for user {current_user.id}")
         
-        # Only return content whose campaign still exists (so deleted campaigns' posts disappear)
+        # Only return content that is scheduled (not yet published). Published posts appear on Published tab.
         existing_campaign_ids = db.query(Campaign.campaign_id).distinct().all()
         existing_campaign_ids = [r[0] for r in existing_campaign_ids]
         if not existing_campaign_ids:
@@ -2257,7 +2257,7 @@ def get_scheduled_posts(
             scheduled_posts = db.query(Content).filter(
                 Content.user_id == current_user.id,
                 Content.campaign_id.in_(existing_campaign_ids),
-                Content.status.in_(["draft", "scheduled", "published"])
+                Content.status == "scheduled"
             ).order_by(Content.schedule_time.asc()).all()
         
         logger.info(f"📋 Found {len(scheduled_posts)} scheduled posts for user {current_user.id}")
@@ -2297,19 +2297,70 @@ def get_scheduled_posts(
             detail=f"Failed to fetch scheduled posts: {str(e)}"
         )
 
+
+@content_router.get("/published-posts")
+def get_published_posts(
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all published posts for the user. Returns minimal data: title + link only (no stored content)."""
+    try:
+        from models import Content, Campaign
+        
+        logger.info(f"📋 Fetching published posts for user {current_user.id}")
+        
+        existing_campaign_ids = db.query(Campaign.campaign_id).distinct().all()
+        existing_campaign_ids = [r[0] for r in existing_campaign_ids]
+        if not existing_campaign_ids:
+            published_posts = []
+        else:
+            published_posts = db.query(Content).filter(
+                Content.user_id == current_user.id,
+                Content.campaign_id.in_(existing_campaign_ids),
+                Content.status.in_(["posted", "published"])
+            ).order_by(Content.date_upload.desc()).all()
+        
+        posts_data = []
+        for post in published_posts:
+            posts_data.append({
+                "id": post.id,
+                "title": post.title or "",
+                "post_url": getattr(post, "post_url", None) or "",
+                "platform": post.platform,
+                "published_at": post.date_upload.isoformat() if post.date_upload else None,
+                "campaign_id": post.campaign_id,
+            })
+        
+        logger.info(f"✅ Returning {len(posts_data)} published posts")
+        
+        return {
+            "status": "success",
+            "message": {
+                "posts": posts_data
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching published posts: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch published posts: {str(e)}"
+        )
+
+
 @content_router.delete("/posts/{post_id}")
 def delete_post(
     post_id: int,
     current_user = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a scheduled post by ID - REQUIRES AUTHENTICATION AND OWNERSHIP VERIFICATION"""
+    """Permanently delete a post. Cannot be undone. For moving back to content queue use POST /posts/{id}/return-to-editing."""
     try:
         from sqlalchemy import text
         
-        logger.info(f"🗑️ Deleting post {post_id} for user {current_user.id}")
+        logger.info(f"🗑️ Permanently deleting post {post_id} for user {current_user.id}")
         
-        # Use raw SQL to verify ownership and delete (avoid ORM column issues)
         check_query = text("""
             SELECT id FROM content 
             WHERE id = :post_id AND user_id = :user_id
@@ -2326,7 +2377,6 @@ def delete_post(
                 detail="Post not found or access denied"
             )
         
-        # Delete the post using raw SQL
         delete_query = text("DELETE FROM content WHERE id = :post_id AND user_id = :user_id")
         db.execute(delete_query, {
             "post_id": post_id,
@@ -2334,11 +2384,11 @@ def delete_post(
         })
         db.commit()
         
-        logger.info(f"✅ Post {post_id} deleted successfully")
+        logger.info(f"✅ Post {post_id} permanently deleted")
         
         return {
             "status": "success",
-            "message": "Post deleted successfully"
+            "message": "Post deleted permanently."
         }
     except HTTPException:
         raise
@@ -2350,12 +2400,62 @@ def delete_post(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete post: {str(e)}"
-        )(f"Error fetching scheduled posts: {e}")
+        )
+
+
+@content_router.post("/posts/{post_id}/return-to-editing")
+def return_post_to_editing(
+    post_id: int,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Move a scheduled post back to content queue (draft). Does not delete; post reappears in The Plan."""
+    try:
+        from sqlalchemy import text
+        
+        logger.info(f"📝 Returning post {post_id} to editing for user {current_user.id}")
+        
+        check_query = text("""
+            SELECT id FROM content 
+            WHERE id = :post_id AND user_id = :user_id
+            LIMIT 1
+        """)
+        check_result = db.execute(check_query, {
+            "post_id": post_id,
+            "user_id": current_user.id
+        }).first()
+        
+        if not check_result:
+            raise HTTPException(
+                status_code=404,
+                detail="Post not found or access denied"
+            )
+        
+        update_query = text("""
+            UPDATE content SET status = 'draft' WHERE id = :post_id AND user_id = :user_id
+        """)
+        db.execute(update_query, {
+            "post_id": post_id,
+            "user_id": current_user.id
+        })
+        db.commit()
+        
+        logger.info(f"✅ Post {post_id} returned to content queue")
+        
+        return {
+            "status": "success",
+            "message": "Post moved back to content queue. You can edit it in The Plan."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error returning post to editing: {str(e)}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
+        db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to fetch scheduled posts: {str(e)}"
+            detail=f"Failed to return post to editing: {str(e)}"
         )
 
 @content_router.post("/campaigns/{campaign_id}/schedule-content")
@@ -3166,18 +3266,20 @@ async def post_content_now(
                 detail=f"Unsupported platform: {platform}. Supported platforms: linkedin, twitter, instagram, facebook, wordpress"
             )
         
-        # Update content status and post_url if content_id exists
+        # Update content status and post_url; remove stored body/image so we only keep title + link
         if content_id:
             content = db.query(Content).filter(Content.id == content_id).first()
             if content:
                 content.status = "posted"
                 content.date_upload = datetime.now().replace(tzinfo=None)
-                # Save post_url if available
                 if post_url:
                     content.post_url = post_url
                     logger.info(f"✅ Saved post_url for content {content_id}: {post_url}")
+                # Remove content and image from our servers; published page shows title + link only
+                content.content = ""
+                content.image_url = None
                 db.commit()
-                logger.info(f"✅ Updated content {content_id} status to 'posted'")
+                logger.info(f"✅ Updated content {content_id} status to 'posted'; cleared body and image")
         
         logger.info(f"✅ Posted to {platform_name} immediately for user {current_user.id}")
         
