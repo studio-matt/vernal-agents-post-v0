@@ -207,9 +207,14 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
                 "progress_message": "Starting analysis",
             }
             logger.info(f"🔍 Created CONTENT_GEN_TASKS entry for task_id: {task_id}")
-            
-            CONTENT_GEN_TASK_INDEX[campaign_id] = task_id
-            logger.info(f"🔍 Created CONTENT_GEN_TASK_INDEX entry: {campaign_id} -> {task_id}")
+            # Use list like brand_personalities so multiple tasks per campaign (analyze + generate-content + generate-day) coexist
+            if campaign_id not in CONTENT_GEN_TASK_INDEX:
+                CONTENT_GEN_TASK_INDEX[campaign_id] = []
+            existing = CONTENT_GEN_TASK_INDEX[campaign_id]
+            if not isinstance(existing, list):
+                CONTENT_GEN_TASK_INDEX[campaign_id] = [existing] if existing else []
+            CONTENT_GEN_TASK_INDEX[campaign_id].append(task_id)
+            logger.info(f"🔍 Created CONTENT_GEN_TASK_INDEX entry: {campaign_id} -> appended {task_id}")
             
             logger.info(f"✅ Analysis task created (stub): task_id={task_id}, campaign_id={campaign_id}, user_id={user_id}")
         except Exception as task_creation_error:
@@ -1565,7 +1570,15 @@ def analyze_campaign(analyze_data: AnalyzeRequest, current_user = Depends(get_cu
             if task_id in CONTENT_GEN_TASKS:
                 del CONTENT_GEN_TASKS[task_id]
             if campaign_id in CONTENT_GEN_TASK_INDEX:
-                del CONTENT_GEN_TASK_INDEX[campaign_id]
+                raw = CONTENT_GEN_TASK_INDEX[campaign_id]
+                if isinstance(raw, list):
+                    new_list = [tid for tid in raw if tid != task_id]
+                    if new_list:
+                        CONTENT_GEN_TASK_INDEX[campaign_id] = new_list
+                    else:
+                        del CONTENT_GEN_TASK_INDEX[campaign_id]
+                elif raw == task_id:
+                    del CONTENT_GEN_TASK_INDEX[campaign_id]
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to start analysis thread: {str(thread_error)}"
@@ -1755,8 +1768,9 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
     active_task_id = None
     active_task_progress = -1
     
-    # First check the index (most recent task)
-    task_id_from_index = CONTENT_GEN_TASK_INDEX.get(campaign_id)
+    # First check the index (most recent task); index can be list (multiple tasks per campaign) or legacy single task_id
+    raw_index = CONTENT_GEN_TASK_INDEX.get(campaign_id)
+    index_list = raw_index if isinstance(raw_index, list) else ([raw_index] if raw_index else [])
     
     # Check all tasks to find the one that's actually running
     for tid, task in CONTENT_GEN_TASKS.items():
@@ -1768,12 +1782,12 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
                     active_task_id = tid
                     active_task_progress = task_progress
             # If no active task found yet, use the one from index
-            elif active_task_id is None and tid == task_id_from_index:
+            elif active_task_id is None and tid in index_list:
                 active_task_id = tid
     
-    # Fallback to index if no active task found
-    if not active_task_id:
-        active_task_id = task_id_from_index
+    # Fallback to index if no active task found (use first from list)
+    if not active_task_id and index_list:
+        active_task_id = index_list[0] if index_list else None
     
     if not active_task_id or active_task_id not in CONTENT_GEN_TASKS:
         # Task doesn't exist - return a clear status instead of 404
@@ -1786,7 +1800,7 @@ def get_status_by_campaign(campaign_id: str, current_user = Depends(get_current_
             "campaign_id": campaign_id
         }
     
-    logger.debug(f"📊 get_status_by_campaign: Using task {active_task_id} for campaign {campaign_id} (index had {task_id_from_index})")
+    logger.debug(f"📊 get_status_by_campaign: Using task {active_task_id} for campaign {campaign_id} (index had {raw_index})")
     return get_analyze_status(active_task_id, current_user)
 
 # Debug endpoint to check raw data for a campaign
