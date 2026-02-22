@@ -1785,6 +1785,54 @@ async def generate_campaign_content(
             "message": "Content generation started. Use task_id to poll status."
         }
 
+@brand_personalities_router.get("/campaigns/{campaign_id}/generate-content/running-tasks")
+async def get_running_content_tasks(
+    campaign_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Return list of content generation tasks still running for this campaign.
+    Used by frontend after page refresh to restore the progress modal and resume polling.
+    """
+    try:
+        from models import Campaign
+        campaign = db.query(Campaign).filter(
+            Campaign.campaign_id == campaign_id,
+            Campaign.user_id == current_user.id,
+        ).first()
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        raw = CONTENT_GEN_TASK_INDEX.get(campaign_id) or []
+        task_ids = raw if isinstance(raw, list) else ([raw] if raw else [])
+        running = []
+        for tid in task_ids:
+            if tid not in CONTENT_GEN_TASKS:
+                continue
+            t = CONTENT_GEN_TASKS[tid]
+            status = t.get("status", "pending")
+            if status in ("completed", "error"):
+                continue
+            entry = {
+                "task_id": tid,
+                "progress": t.get("progress", 0),
+                "status": status,
+                "items_done": t.get("items_done", 0),
+                "items_total": t.get("items_total", 0),
+            }
+            if t.get("scope") == "day":
+                entry["scope"] = "day"
+                entry["week"] = t.get("week", 1)
+                entry["day"] = t.get("day", "Monday")
+            running.append(entry)
+        return {"status": "success", "tasks": running}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting running tasks: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @brand_personalities_router.get("/campaigns/{campaign_id}/generate-content/status/{task_id}")
 async def get_content_generation_status(
     campaign_id: str,
@@ -1911,6 +1959,8 @@ async def generate_day(
         "error": None,
         "result": None,
         "scope": "day",
+        "week": week,
+        "day": day,
         "items_total": len(items),
         "items_done": 0,
     }

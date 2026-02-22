@@ -2524,14 +2524,41 @@ async def schedule_campaign_content(
                     schedule_time = schedule_time.astimezone(timezone.utc).replace(tzinfo=None)
                 # If already naive, assume it's UTC and use as-is
                 
-                # Check if content already exists (by campaign_id, week, day, platform)
-                existing_content = db.query(Content).filter(
-                    Content.campaign_id == campaign_id,
-                    Content.week == item.get("week", 1),
-                    Content.day == item.get("day", "Monday"),
-                    Content.platform == item.get("platform", "linkedin").lower(),
-                    Content.user_id == current_user.id
-                ).first()
+                # Prefer matching by content id (database_id) when frontend sends it so we update the exact row
+                content_id = item.get("id") or item.get("database_id")
+                if content_id is not None:
+                    try:
+                        if isinstance(content_id, int):
+                            cid = content_id
+                        elif isinstance(content_id, str) and "-" in content_id:
+                            # Composite id e.g. "week-1-Tuesday-wordpress-190" -> use trailing number
+                            cid = int(content_id.rsplit("-", 1)[-1])
+                        else:
+                            cid = int(content_id)
+                        existing_content = db.query(Content).filter(
+                            Content.id == cid,
+                            Content.campaign_id == campaign_id,
+                            Content.user_id == current_user.id
+                        ).first()
+                    except (TypeError, ValueError, IndexError):
+                        existing_content = None
+                else:
+                    existing_content = None
+                if not existing_content:
+                    # Normalize day to title case so "tuesday" and "Tuesday" both match
+                    day_val = item.get("day", "Monday")
+                    if isinstance(day_val, str) and day_val:
+                        day_val = day_val.strip().capitalize()
+                    else:
+                        day_val = "Monday"
+                    # Match by campaign_id, week, day, platform
+                    existing_content = db.query(Content).filter(
+                        Content.campaign_id == campaign_id,
+                        Content.week == item.get("week", 1),
+                        Content.day == day_val,
+                        Content.platform == (item.get("platform", "linkedin") or "linkedin").lower(),
+                        Content.user_id == current_user.id
+                    ).first()
                 
                 if existing_content:
                     # Update existing content
