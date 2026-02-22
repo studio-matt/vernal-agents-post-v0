@@ -1720,8 +1720,41 @@ async def generate_campaign_content(
                         if result.get("status") == "error":
                             CONTENT_GEN_TASKS[tid]["status"] = "error"
                             CONTENT_GEN_TASKS[tid]["error"] = result.get("error") or "Unknown error"
-                    
-                        
+                        elif result.get("status") == "success" and req_data.get("generate_image", False):
+                            # Batch/single piece with image: persist copy then generate image in same task (like generate-day)
+                            week = req_data.get("week", 1)
+                            day = req_data.get("day", "Monday")
+                            platform = (req_data.get("platform") or "linkedin").lower()
+                            result_data = result.get("data") or {}
+                            content_id = _persist_generated_content(
+                                session, cid, user_id, week, day, platform, result_data, None
+                            )
+                            if content_id and not check_deadline():
+                                copy_for_image = result_data.get("final_content") or result_data.get("content") or result_data.get("quality_control") or result_data.get("writing") or ""
+                                if isinstance(copy_for_image, dict):
+                                    copy_for_image = copy_for_image.get("content") or copy_for_image.get("text") or str(copy_for_image)
+                                copy_for_image = str(copy_for_image) if copy_for_image else ""
+                                if copy_for_image:
+                                    update_task_status(
+                                        agent="Generate Content",
+                                        task="Generating image for this piece",
+                                        progress=70,
+                                        status="in_progress",
+                                    )
+                                    image_settings = req_data.get("image_settings") or req_data.get("imageSettings")
+                                    image_url = _generate_image_for_content(session, user_id, copy_for_image, image_settings)
+                                    if image_url:
+                                        _set_content_image_url(session, content_id, image_url)
+                                        result_data["image_url"] = image_url
+                                        CONTENT_GEN_TASKS[tid]["result"]["data"] = result_data
+                                        logger.info(f"✅ generate-content: image saved for content_id={content_id}")
+                                    else:
+                                        logger.warning("⚠️ generate-content: image generation skipped or failed")
+                            if tid in CONTENT_GEN_TASKS:
+                                CONTENT_GEN_TASKS[tid]["progress"] = 100
+                                CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                                CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
+
                 except Exception as bg_error:
                     logger.error(f"Background generation error: {bg_error}")
                     import traceback
