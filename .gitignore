@@ -1,2 +1,6 @@
 # Refactoring backups - keep local, don't commit
 .refactor_backups/
+
+# System / deployment paths (not our code; exclude from guard rails and repo)
+/home/ubuntu/
+ubuntu/

@@ -3,11 +3,14 @@ Code Health Scanner - Detects files exceeding LOC threshold.
 
 Scans Python files in the codebase and identifies files that exceed
 the configured line count threshold (default 3000).
+Excludes paths that would be ignored by .gitignore and system/dependency
+paths (e.g. /home/ubuntu/*, site-packages) so only "our" code is considered.
 """
 
 import os
 import json
 import subprocess
+import fnmatch
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -15,10 +18,74 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Path prefixes and segments that indicate non-repo / system code (excluded from guard rails)
+NON_REPO_PATH_PREFIXES = ("/home/ubuntu/",)
+NON_REPO_PATH_SEGMENTS = ("site-packages", "vernal_env", "vernal-env", ".venv")
+
 # Default threshold: 3000 lines
 DEFAULT_LOC_THRESHOLD = int(os.getenv("CODE_HEALTH_LOC_THRESHOLD", "3000"))
 ENABLE_PYLINT = os.getenv("CODE_HEALTH_ENABLE_PYLINT", "0") == "1"
 PYLINT_TARGETS = os.getenv("CODE_HEALTH_PYLINT_TARGETS", "").split(",") if os.getenv("CODE_HEALTH_PYLINT_TARGETS") else []
+
+
+def _load_gitignore_patterns(root_path: Path) -> List[str]:
+    """Load .gitignore patterns from repo root (and optional subdir .gitignore)."""
+    patterns: List[str] = []
+    gitignore_path = root_path / ".gitignore"
+    if not gitignore_path.is_file():
+        return patterns
+    try:
+        with open(gitignore_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                patterns.append(line)
+    except Exception as e:
+        logger.warning(f"Could not read .gitignore at {gitignore_path}: {e}")
+    return patterns
+
+
+def _path_matches_gitignore(file_path: Path, root_path: Path, patterns: List[str]) -> bool:
+    """
+    Return True if file_path should be ignored according to .gitignore-style patterns.
+    Uses simple fnmatch-style matching; ** is treated as match-any number of path segments.
+    """
+    try:
+        rel = file_path.resolve().relative_to(root_path.resolve())
+    except ValueError:
+        return False
+    rel_parts = rel.parts
+    rel_str = str(rel).replace("\\", "/")
+
+    for raw in patterns:
+        p = raw.strip()
+        if not p or p.startswith("#"):
+            continue
+        if p.endswith("/"):
+            p = p[:-1]
+        if p.startswith("/"):
+            p = p[1:]
+        match_pattern = p.replace("**", "*")
+        if fnmatch.fnmatch(rel_str, match_pattern):
+            return True
+        if fnmatch.fnmatch(rel_str, f"**/{match_pattern}"):
+            return True
+        if "/" not in match_pattern and any(fnmatch.fnmatch(part, match_pattern) for part in rel_parts):
+            return True
+    return False
+
+
+def _should_skip_path(file_path: Path, root_path: Path, gitignore_patterns: List[str]) -> bool:
+    """Return True if this path should be excluded from scanning (non-repo / gitignored)."""
+    path_str = str(file_path)
+    if any(path_str.startswith(prefix) for prefix in NON_REPO_PATH_PREFIXES):
+        return True
+    if any(seg in file_path.parts for seg in NON_REPO_PATH_SEGMENTS):
+        return True
+    if gitignore_patterns and _path_matches_gitignore(file_path, root_path, gitignore_patterns):
+        return True
+    return False
 
 
 def count_lines(file_path: Path) -> int:
@@ -94,22 +161,29 @@ def scan_codebase(
     root_path = Path(root_dir)
     violations = []
     scanned_files = []
-    
+
+    # Load .gitignore once so we only scan repo-tracked code (exclude gitignored + non-repo paths)
+    gitignore_patterns = _load_gitignore_patterns(root_path)
+
     # Scan Python files
     for py_file in root_path.rglob("*.py"):
+        # Skip paths that are non-repo (e.g. /home/ubuntu/*, site-packages) or gitignored
+        if _should_skip_path(py_file, root_path, gitignore_patterns):
+            continue
+
         # Skip excluded directories
         if any(excluded in py_file.parts for excluded in exclude_dirs):
             continue
-        
+
         # Skip backup directories (pattern: *-bak-* or *-backup-*)
         file_path_str = str(py_file)
         if '-bak-' in file_path_str or '-backup-' in file_path_str or file_path_str.endswith('.bak'):
             continue
-        
+
         # Skip if in a hidden directory
         if any(part.startswith('.') and part != '.' for part in py_file.parts):
             continue
-        
+
         scanned_files.append(str(py_file))
         violation = scan_file(py_file, threshold)
         if violation:
