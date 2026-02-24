@@ -45,8 +45,20 @@ def _safe_float(value: str, default: float) -> float:
     except (ValueError, TypeError):
         return default
 
-EC2_HOURLY_RATE = _safe_float(os.getenv("EC2_HOURLY_RATE_USD", "0.0416"), 0.0416)  # Default: t3.medium
-EC2_UTILIZATION_FACTOR = _safe_float(os.getenv("EC2_UTILIZATION_FACTOR", "1.0"), 1.0)
+def _get_ec2_rate() -> float:
+    try:
+        from env_override import get_effective_env
+        return _safe_float(get_effective_env("EC2_HOURLY_RATE_USD", "0.0416"), 0.0416)
+    except ImportError:
+        return _safe_float(os.getenv("EC2_HOURLY_RATE_USD", "0.0416"), 0.0416)
+
+
+def _get_ec2_utilization() -> float:
+    try:
+        from env_override import get_effective_env
+        return _safe_float(get_effective_env("EC2_UTILIZATION_FACTOR", "1.0"), 1.0)
+    except ImportError:
+        return _safe_float(os.getenv("EC2_UTILIZATION_FACTOR", "1.0"), 1.0)
 
 
 class GasMeterTracker:
@@ -114,10 +126,10 @@ class GasMeterTracker:
             }
         """
         with self._lock:
-            # Calculate EC2 cost based on runtime
+            # Calculate EC2 cost based on runtime (Admin > Environment Variables or process env)
             runtime_seconds = time.time() - self._start_time
             runtime_hours = runtime_seconds / 3600.0
-            ec2_cost = runtime_hours * EC2_HOURLY_RATE * EC2_UTILIZATION_FACTOR
+            ec2_cost = runtime_hours * _get_ec2_rate() * _get_ec2_utilization()
             
             total_cost = self._llm_cost_usd + ec2_cost
             

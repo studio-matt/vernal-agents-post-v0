@@ -89,7 +89,8 @@ def should_block_injection() -> bool:
     Returns:
         True if blocking is enabled, False for warn-only mode
     """
-    return os.getenv("GUARDRAILS_BLOCK_INJECTION", "0") == "1"
+    from env_override import get_effective_env
+    return get_effective_env("GUARDRAILS_BLOCK_INJECTION", "0") == "1"
 
 
 class GuardrailsBlocked(Exception):
@@ -135,8 +136,9 @@ def guard_or_raise(text: str, max_len: int = 12000) -> Tuple[str, dict]:
     # Run detection
     is_inj, matched = detect_prompt_injection(sanitized)
     
-    # Read blocking flag
-    block = os.getenv("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
+    # Read blocking flag (Admin > Environment Variables or process env)
+    from env_override import get_effective_env
+    block = get_effective_env("GUARDRAILS_BLOCK_INJECTION", "0").strip() == "1"
     
     # Build audit dict (safe - no prompt content, only metadata)
     audit_dict = {

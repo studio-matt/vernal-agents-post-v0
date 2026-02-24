@@ -87,10 +87,15 @@ def check_environment_variables(admin_user = Depends(get_admin_user)):
     """
     Check which environment variables are set and which are missing - ADMIN ONLY
     Returns a comprehensive report of all environment variables used by the system.
+    Uses get_effective_env so values set on this page (Admin > Environment Variables) are shown.
     """
     import os
     from dotenv import load_dotenv
     load_dotenv()
+    try:
+        from env_override import get_effective_env
+    except ImportError:
+        get_effective_env = os.getenv  # fallback if module missing
     
     # Define all environment variables used by the system
     env_vars = {
@@ -330,8 +335,10 @@ def check_environment_variables(admin_user = Depends(get_admin_user)):
     
     for category, vars_dict in env_vars.items():
         for var_name, var_info in vars_dict.items():
-            value = os.getenv(var_name)
-            is_set = value is not None and value.strip() != ""
+            # Use effective value (Admin Settings env_* first, then process env) so the page reflects what the app uses
+            raw = get_effective_env(var_name, "") if callable(get_effective_env) else os.getenv(var_name, "")
+            value = (raw if raw is not None else "") or ""
+            is_set = str(value).strip() != ""
             
             result = {
                 "name": var_name,
@@ -435,6 +442,13 @@ def update_environment_variable(key: str, value: str, admin_user = Depends(get_a
             db.add(new_setting)
         
         db.commit()
+
+        # So all consumers (guardrails, code_health, gas_meter, email, etc.) see the new value on next read
+        try:
+            from env_override import refresh_env_overrides
+            refresh_env_overrides()
+        except Exception as refresh_err:
+            logger.warning("Could not refresh env overrides cache: %s", refresh_err)
         
         logger.info(f"✅ Admin {admin_user.id} updated environment variable {key} in system_settings")
         

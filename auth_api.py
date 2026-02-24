@@ -225,6 +225,23 @@ def verify_campaign_ownership(
         )
     return campaign
 
+
+def _get_mail_config_from_admin_settings(db: Session) -> Optional[dict]:
+    """Load MAIL_* from Admin > Environment Variables (SystemSettings env_MAIL_*). Returns dict or None."""
+    try:
+        from models import SystemSettings
+        keys = ["MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM", "MAIL_SERVER", "MAIL_PORT"]
+        out = {}
+        for key in keys:
+            row = db.query(SystemSettings).filter(SystemSettings.setting_key == f"env_{key}").first()
+            if row and row.setting_value and str(row.setting_value).strip():
+                out[key] = str(row.setting_value).strip()
+        return out if out else None
+    except Exception as e:
+        logger.warning(f"Could not load mail config from Admin Settings: {e}")
+        return None
+
+
 # Authentication endpoints
 @auth_router.post("/signup", response_model=SignupResponse)
 async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
@@ -296,7 +313,8 @@ async def signup_user(user_data: UserSignup, db: Session = Depends(get_db)):
         
         try:
             from email_service import get_email_service
-            email_service = get_email_service()
+            mail_overrides = _get_mail_config_from_admin_settings(db)
+            email_service = get_email_service(config_overrides=mail_overrides)
             email_sent = await email_service.send_otp_email(
                 email=new_user.email,
                 otp_code=otp_code,
@@ -498,7 +516,8 @@ async def resend_otp(request: ResendOtpRequest, db: Session = Depends(get_db)):
         # Send OTP email
         try:
             from email_service import get_email_service
-            email_service = get_email_service()
+            mail_overrides = _get_mail_config_from_admin_settings(db)
+            email_service = get_email_service(config_overrides=mail_overrides)
             email_sent = await email_service.send_otp_email(
                 email=request.email,
                 otp_code=otp_code,
@@ -568,7 +587,8 @@ async def forget_password(request: ForgetPasswordRequest, db: Session = Depends(
         
         # Send password reset email
         from email_service import get_email_service
-        email_service = get_email_service()
+        mail_overrides = _get_mail_config_from_admin_settings(db)
+        email_service = get_email_service(config_overrides=mail_overrides)
         email_sent = await email_service.send_password_reset_email(
             email=request.email,
             otp_code=otp_code,

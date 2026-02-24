@@ -1,28 +1,41 @@
 """
 Email Service for Authentication
-Handles OTP and password reset emails
+Handles OTP and password reset emails.
+Uses MAIL_* from process env, or from Admin Settings (SystemSettings env_MAIL_*) when passed via config_overrides.
 """
 
 import os
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from fastapi_mail.errors import ConnectionErrors
 import asyncio
 
 logger = logging.getLogger(__name__)
 
+def _get_mail_value(key: str, config_overrides: Optional[Dict[str, str]] = None, default: str = None) -> Optional[str]:
+    """Get MAIL_* value: config_overrides first (Admin Settings), then os.getenv."""
+    if config_overrides and config_overrides.get(key):
+        return config_overrides[key].strip() or None
+    return (os.getenv(key) or "").strip() or (default if default is not None else None)
+
 class EmailService:
-    def __init__(self):
-        port = int(os.getenv("MAIL_PORT", "587"))
+    def __init__(self, config_overrides: Optional[Dict[str, str]] = None):
+        port_val = _get_mail_value("MAIL_PORT", config_overrides) or "587"
+        port = int(port_val)
         use_ssl = port == 465  # SSL for port 465, TLS for port 587
-        
+
+        username = _get_mail_value("MAIL_USERNAME", config_overrides)
+        password = _get_mail_value("MAIL_PASSWORD", config_overrides)
+        from_addr = _get_mail_value("MAIL_FROM", config_overrides) or "noreply@vernalcontentum.com"
+        server = _get_mail_value("MAIL_SERVER", config_overrides) or "smtp.gmail.com"
+
         self.mail_config = ConnectionConfig(
-            MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-            MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
-            MAIL_FROM=os.getenv("MAIL_FROM", "noreply@vernalcontentum.com"),
+            MAIL_USERNAME=username,
+            MAIL_PASSWORD=password,
+            MAIL_FROM=from_addr,
             MAIL_PORT=port,
-            MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
+            MAIL_SERVER=server,
             MAIL_STARTTLS=not use_ssl,  # TLS for port 587
             MAIL_SSL_TLS=use_ssl,       # SSL for port 465
             USE_CREDENTIALS=True,
@@ -136,24 +149,32 @@ class MockEmailService:
         return True
 
 # Use real email service if configured, otherwise mock
-def get_email_service():
+# config_overrides: optional dict of MAIL_USERNAME, MAIL_PASSWORD, MAIL_FROM, MAIL_SERVER, MAIL_PORT from Admin > Environment Variables
+def get_email_service(config_overrides: Optional[Dict[str, str]] = None):
     global email_service
-    
-    # Check if email credentials are configured
-    mail_username = os.getenv("MAIL_USERNAME")
-    mail_password = os.getenv("MAIL_PASSWORD")
-    
+
+    mail_username = _get_mail_value("MAIL_USERNAME", config_overrides)
+    mail_password = _get_mail_value("MAIL_PASSWORD", config_overrides)
+
     if not mail_username or not mail_password:
-        logger.warning("Email credentials not configured, using mock email service")
+        logger.warning("Email credentials not configured (env or Admin Settings), using mock email service")
         return MockEmailService()
-    
-    # Initialize email service if not already initialized
+
+    # When overrides provided (Admin Settings), don't use global cache; build fresh so Admin values are used
+    if config_overrides:
+        try:
+            return EmailService(config_overrides=config_overrides)
+        except Exception as e:
+            logger.error(f"Failed to initialize email service with Admin config: {e}, using mock email service")
+            return MockEmailService()
+
+    # No overrides: use process env and cache
     if email_service is None:
         try:
-            email_service = EmailService()
+            email_service = EmailService(config_overrides=None)
             logger.info("Email service initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize email service: {e}, using mock email service")
             return MockEmailService()
-    
+
     return email_service

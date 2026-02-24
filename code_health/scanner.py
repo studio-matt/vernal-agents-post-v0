@@ -22,10 +22,17 @@ logger = logging.getLogger(__name__)
 NON_REPO_PATH_PREFIXES = ("/home/ubuntu/",)
 NON_REPO_PATH_SEGMENTS = ("site-packages", "vernal_env", "vernal-env", ".venv")
 
-# Default threshold: 3000 lines
-DEFAULT_LOC_THRESHOLD = int(os.getenv("CODE_HEALTH_LOC_THRESHOLD", "3000"))
-ENABLE_PYLINT = os.getenv("CODE_HEALTH_ENABLE_PYLINT", "0") == "1"
-PYLINT_TARGETS = os.getenv("CODE_HEALTH_PYLINT_TARGETS", "").split(",") if os.getenv("CODE_HEALTH_PYLINT_TARGETS") else []
+# Default threshold and options (Admin > Environment Variables or process env)
+def _get_effective_env(key: str, default: str = "") -> str:
+    try:
+        from env_override import get_effective_env as _g
+        return _g(key, default)
+    except ImportError:
+        return os.getenv(key, default)
+
+DEFAULT_LOC_THRESHOLD = int(_get_effective_env("CODE_HEALTH_LOC_THRESHOLD", "3000"))
+ENABLE_PYLINT = _get_effective_env("CODE_HEALTH_ENABLE_PYLINT", "0") == "1"
+PYLINT_TARGETS = _get_effective_env("CODE_HEALTH_PYLINT_TARGETS", "").split(",") if _get_effective_env("CODE_HEALTH_PYLINT_TARGETS") else []
 
 
 def _load_gitignore_patterns(root_path: Path) -> List[str]:
