@@ -23,15 +23,21 @@ app = FastAPI(title="Vernal Agents API", version="1.0.0")
 
 # Configure CORS - CRITICAL for frontend access
 # NOTE: When allow_credentials=True, you CANNOT use allow_origins=["*"]
-# Must specify exact origins
+# Must specify exact origins (add Replit preview so campaigns/personalities load there)
+_cors_origins = [
+    "https://machine.vernalcontentum.com",
+    "https://themachine.vernalcontentum.com",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "https://vernal-post-v0.matt363.repl.co",  # Replit preview
+    "https://replit.com",
+]
+_extra = os.getenv("CORS_EXTRA_ORIGINS", "")
+if _extra:
+    _cors_origins.extend(o.strip() for o in _extra.split(",") if o.strip())
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://machine.vernalcontentum.com",
-        "https://themachine.vernalcontentum.com",
-        "http://localhost:3000",  # For local development
-        "http://localhost:3001",  # Alternative local port
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
