@@ -41,8 +41,8 @@ jobs:
           set -e
           echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
 
-          # 0. Ensure jq is installed for JSON validation
-          sudo apt-get update && sudo apt-get install -y jq
+          # 0. Ensure jq is installed (skip apt if present to avoid dpkg/apt issues on server)
+          command -v jq >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y jq; }
 
           # 1. BULLETPROOF NUKING - Remove entire directory in one command
           echo "🧹 Nuking old code..."
