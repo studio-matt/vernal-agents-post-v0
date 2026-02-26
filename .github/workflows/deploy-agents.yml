@@ -37,6 +37,7 @@ jobs:
         username: ubuntu
         key: ${{ secrets.AGENTS_EC2_SSH_KEY }}
         passphrase: ${{ secrets.EC2_SSH_PASSPHRASE }}
+        command_timeout: 60m
         script: |
           set -e
           echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
@@ -110,10 +111,9 @@ jobs:
           echo "📊 Memory status before pip install:"
           free -h
           
-          # Aggressive memory cleanup
+          # Light memory cleanup (skip apt-get autoremove - can hang and exceed SSH timeout)
           echo "🧹 Cleaning up memory..."
           sudo apt-get clean
-          sudo apt-get autoremove -y
           sudo rm -rf /var/cache/apt/archives/*
           sudo rm -rf /tmp/*
           echo "📊 Memory after cleanup:"
