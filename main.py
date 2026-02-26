@@ -127,6 +127,25 @@ async def root():
     """Root endpoint"""
     return {"message": "Vernal Agents Backend API", "status": "running"}
 
+
+@app.get("/deploy/commit")
+async def deploy_commit():
+    """Return deploy commit hash from marker file (written by GitHub Actions deploy script)."""
+    try:
+        path = os.path.expanduser("~/vernal_agents_deploy_complete.txt")
+        if os.path.isfile(path):
+            with open(path) as f:
+                line = f.read().strip()
+            # Format: DEPLOY_COMPLETE_<timestamp>_<commit_hash>
+            parts = line.split("_")
+            if len(parts) >= 3:
+                return {"commit": parts[-1], "status": "ok"}
+            return {"commit": line, "status": "ok"}
+    except Exception as e:
+        logger.warning(f"Could not read deploy marker: {e}")
+    return {"commit": None, "status": "ok"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
