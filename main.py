@@ -29,7 +29,8 @@ _cors_origins = [
     "https://themachine.vernalcontentum.com",
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://vernal-post-v0.matt363.repl.co",  # Replit preview
+    "https://vernal-post-v0.matt363.repl.co",  # Replit (legacy)
+    "https://51d449b1-ac9a-4a57-8e50-5531c17ab071-00-j0nftplkyfwy.janeway.replit.dev",  # Replit preview (janeway)
     "https://replit.com",
 ]
 _extra = os.getenv("CORS_EXTRA_ORIGINS", "")
