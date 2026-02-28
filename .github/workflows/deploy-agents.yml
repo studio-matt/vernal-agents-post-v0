@@ -17,6 +17,7 @@ jobs:
       with:
         submodules: false
 
+    # If this step fails: check log for last line (HOST=... = script ran; HEALTH_CHECK_FAILED = journalctl dump)
     - name: Deploy on Agents Server
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -28,7 +29,8 @@ jobs:
         script: |
           set -e
           REPO_DIR="/home/ubuntu/vernal-agents-post-v0"
-          echo "🔒 BACKEND DEPLOY (simple: no nuke, update in place)"
+          echo "🔒 BACKEND DEPLOY — HOST=$(hostname) USER=$(whoami)"
+          echo "   REPO_DIR .git=$([ -d "$REPO_DIR/.git" ] && echo yes || echo no) venv=$([ -d "$REPO_DIR/venv" ] && echo yes || echo no)"
 
           if [ -f "$REPO_DIR/.env" ]; then
             cp "$REPO_DIR/.env" /home/ubuntu/.env.backup
@@ -37,6 +39,7 @@ jobs:
           fi
           sudo systemctl stop vernal-agents || true
           sudo pkill -9 -f "uvicorn main:app" || true
+          sudo lsof -t -i:8000 2>/dev/null | xargs -r sudo kill -9 || true
           sleep 2
 
           if [ ! -d "$REPO_DIR/.git" ]; then
@@ -74,7 +77,7 @@ jobs:
             [ -f /etc/environment ] && cp /etc/environment .env && chmod 600 .env
             echo "⚠️ .env from /etc/environment (check DB/JWT vars)"
           fi
-          grep -q "DB_HOST\|DB_USER\|DB_PASSWORD" .env || { echo "❌ .env missing DB credentials"; exit 1; }
+          grep -q "DB_HOST\|DB_USER\|DB_PASSWORD" .env || { echo "❌ .env missing DB credentials"; cat .env | sed 's/=.*/=***/' | head -5; exit 1; }
 
           sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'SVC'
           [Unit]
@@ -102,7 +105,12 @@ jobs:
               echo "✅ Health OK"
               break
             fi
-            [ $i -eq 5 ] && { echo "❌ Health check failed"; sudo journalctl -u vernal-agents -n 40 --no-pager; exit 1; }
+            if [ $i -eq 5 ]; then
+              echo "❌ HEALTH_CHECK_FAILED — last 60 lines of vernal-agents:"
+              sudo journalctl -u vernal-agents -n 60 --no-pager
+              echo "--- END LOG ---"
+              exit 1
+            fi
             sleep 3
           done
           COMMIT_HASH=$(git rev-parse HEAD)
