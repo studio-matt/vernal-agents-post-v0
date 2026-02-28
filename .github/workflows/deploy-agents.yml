@@ -15,9 +15,21 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        submodules: false
+        submodules: false  # No submodules in this repo
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
-    # If this step fails: check log for last line (HOST=... = script ran; HEALTH_CHECK_FAILED = journalctl dump)
     - name: Deploy on Agents Server
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -28,61 +40,189 @@ jobs:
         command_timeout: "90m"
         script: |
           set -e
-          REPO_DIR="/home/ubuntu/vernal-agents-post-v0"
-          echo "🔒 BACKEND DEPLOY — HOST=$(hostname) USER=$(whoami)"
-          echo "   REPO_DIR .git=$([ -d "$REPO_DIR/.git" ] && echo yes || echo no) venv=$([ -d "$REPO_DIR/venv" ] && echo yes || echo no)"
+          echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
 
-          if [ -f "$REPO_DIR/.env" ]; then
-            cp "$REPO_DIR/.env" /home/ubuntu/.env.backup
+          # 0. Ensure jq is installed (skip apt if present to avoid dpkg issues)
+          command -v jq >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y jq; }
+
+          # 1. BULLETPROOF NUKING - Remove entire directory in one command
+          echo "🧹 Nuking old code..."
+          
+          # CRITICAL: Backup .env file before deletion (EMERGENCY_NET.md v7)
+          echo "🔐 Backing up .env file before cleanup..."
+          if [ -f /home/ubuntu/vernal-agents-post-v0/.env ]; then
+            sudo cp /home/ubuntu/vernal-agents-post-v0/.env /home/ubuntu/.env.backup
+            sudo chown ubuntu:ubuntu /home/ubuntu/.env.backup
             chmod 600 /home/ubuntu/.env.backup
-            echo "✅ .env backed up"
+            echo "✅ .env file backed up to /home/ubuntu/.env.backup"
+          else
+            echo "⚠️ No existing .env file found to backup"
           fi
+          
+          # Stop service and wait for it to fully stop
           sudo systemctl stop vernal-agents || true
-          sudo pkill -9 -f "uvicorn main:app" || true
-          sudo lsof -t -i:8000 2>/dev/null | xargs -r sudo kill -9 || true
-          sleep 2
-
-          if [ ! -d "$REPO_DIR/.git" ]; then
-            echo "📦 First deploy: cloning..."
-            sudo rm -rf "$REPO_DIR"
-            git clone https://github.com/studio-matt/vernal-agents-post-v0.git "$REPO_DIR"
-            cd "$REPO_DIR"
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install --upgrade pip --no-cache-dir -q
-            pip install -r requirements.txt --no-cache-dir --progress-bar off -q
-          else
-            echo "📦 Updating existing repo..."
-            cd "$REPO_DIR"
-            git fetch origin
-            git checkout main
-            git reset --hard origin/main
-            if [ ! -d "venv" ]; then
-              echo "🐍 Creating venv..."
-              python3 -m venv venv
-              source venv/bin/activate
-              pip install --upgrade pip --no-cache-dir -q
-              pip install -r requirements.txt --no-cache-dir --progress-bar off -q
-            else
-              source venv/bin/activate
-              pip install -r requirements.txt --no-cache-dir --progress-bar off -q
+          echo "⏳ Waiting for service to stop..."
+          sleep 5
+          
+          # Kill any stuck Python processes more aggressively
+          sudo pkill -9 -f python || true
+          sudo pkill -9 -f uvicorn || true
+          sudo pkill -9 -f main.py || true
+          echo "⏳ Waiting for processes to terminate..."
+          sleep 3
+          
+          # BULLETPROOF NUKING - Remove entire directory in one command
+          echo "🧹 Removing entire directory..."
+          sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+          
+          # Retry if directory still exists
+          for i in {1..3}; do
+            if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
+              echo "❌ Directory still exists, trying again (attempt $i)..."
+              sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+              sleep 2
             fi
+          done
+          
+          # Verify directory is gone
+          if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
+            echo "❌ Directory could not be fully deleted. Showing contents:"
+            sudo find /home/ubuntu/vernal-agents-post-v0
+            exit 1
           fi
 
+          # Clean up old backup directories
+          echo "🧹 Cleaning up old backup directories..."
+          find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
+          find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
+          echo "✅ Backup directories cleaned up"
+
+          # 2. Clone fresh from GitHub
+          echo "📦 Cloning fresh from GitHub..."
+          git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
+          cd /home/ubuntu/vernal-agents-post-v0
+
+          # 3. Setup venv from scratch with memory optimization
+          echo "🐍 Setting up virtual environment..."
+          python3 -m venv venv
+          source venv/bin/activate
+          
+          # Memory monitoring and optimization
+          echo "📊 Memory status before pip install:"
+          free -h
+          
+          # Aggressive memory cleanup
+          echo "🧹 Cleaning up memory..."
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /tmp/*
+          echo "📊 Memory after cleanup:"
+          free -h
+          
+          # Memory optimization: upgrade pip and install with no cache
+          echo "⬆️ Upgrading pip..."
+          pip install --upgrade pip --no-cache-dir
+          
+          # Install packages in chunks to reduce memory pressure
+          echo "📦 Installing core dependencies..."
+          pip install fastapi uvicorn sqlalchemy pymysql python-multipart --no-cache-dir --progress-bar off
+          echo "📊 Memory after core:"
+          free -h
+          
+          echo "📦 Installing AI dependencies..."
+          pip install openai anthropic tiktoken --no-cache-dir --progress-bar off
+          echo "📊 Memory after AI:"
+          free -h
+          
+          echo "📦 Installing remaining dependencies..."
+          pip install -r requirements.txt --no-cache-dir --progress-bar off
+          echo "📊 Memory after all:"
+          free -h
+          
+          # Note: No pip cache purge needed - using --no-cache-dir already
+          
+          echo "📊 Memory status after pip install:"
+          free -h
+          
+          # Check if we're running low on memory
+          AVAILABLE_MEM=$(free -m | awk 'NR==2{printf "%.0f", $7}')
+          if [ "$AVAILABLE_MEM" -lt 100 ]; then
+            echo "⚠️ WARNING: Low memory detected ($AVAILABLE_MEM MB available)"
+            echo "🧹 Running additional cleanup..."
+            sudo sync
+            echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+            echo "📊 Memory after emergency cleanup:"
+            free -h
+          fi
+
+          # CRITICAL: Validate main.py defines FastAPI app
+          echo "🔍 Validating main.py..."
+          MAIN_PY="/home/ubuntu/vernal-agents-post-v0/main.py"
+          test -f "$MAIN_PY" || { echo "ERROR: main.py not found at $MAIN_PY!"; exit 1; }
+          sleep 2  # Ensure file is fully written
+          test -s "$MAIN_PY" || { echo "ERROR: main.py is empty!"; exit 1; }
+          grep -q "app = FastAPI()" "$MAIN_PY" || { echo "ERROR: main.py must define app = FastAPI()! Showing contents:"; head -30 "$MAIN_PY"; exit 1; }
+          grep -E "(from fastapi import FastAPI|import FastAPI)" "$MAIN_PY" || { echo "ERROR: main.py must import FastAPI! Showing contents:"; head -30 "$MAIN_PY"; exit 1; }
+          echo "✅ main.py validation passed"
+
+          # 4. Restore and validate environment variables (EMERGENCY_NET.md v7)
+          echo "🔐 Setting up environment..."
+          
+          # CRITICAL: Restore .env from backup if it exists, otherwise use /etc/environment
           if [ -f /home/ubuntu/.env.backup ]; then
-            cp /home/ubuntu/.env.backup .env
+            echo "✅ Restoring .env from backup..."
+            sudo cp /home/ubuntu/.env.backup .env
+            sudo chown ubuntu:ubuntu .env
             chmod 600 .env
-            echo "✅ .env restored"
+            echo "✅ .env file restored from backup with preserved credentials"
           else
-            [ -f /etc/environment ] && cp /etc/environment .env && chmod 600 .env
-            echo "⚠️ .env from /etc/environment (check DB/JWT vars)"
+            echo "⚠️ No .env backup found, creating from /etc/environment..."
+            sudo cp /etc/environment .env
+            sudo chown ubuntu:ubuntu .env
+            chmod 600 .env
+            echo "⚠️ WARNING: .env created from /etc/environment - DB and JWT credentials may be missing!"
+            echo "⚠️ Please verify .env contains DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, and JWT_SECRET_KEY"
           fi
-          grep -q "DB_HOST\|DB_USER\|DB_PASSWORD" .env || { echo "❌ .env missing DB credentials"; cat .env | sed 's/=.*/=***/' | head -5; exit 1; }
 
-          sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'SVC'
+          # Validate critical environment variables (EMERGENCY_NET.md v7)
+          echo "🔍 Validating environment variables..."
+          REQUIRED_VARS=("DB_HOST" "DB_USER" "DB_PASSWORD" "DB_NAME" "OPENAI_API_KEY")
+          MISSING_VARS=()
+
+          # Check for presence of required variables
+          for var in "${REQUIRED_VARS[@]}"; do
+              if ! grep -q "^${var}=" .env; then
+                  MISSING_VARS+=("$var")
+              fi
+          done
+
+          if [ ${#MISSING_VARS[@]} -ne 0 ]; then
+              echo "❌ Missing required environment variables:"
+              printf '%s\n' "${MISSING_VARS[@]}"
+              echo "Please update /etc/environment or restore .env from backup"
+              exit 1
+          fi
+
+          # CRITICAL: Validate no placeholder values (EMERGENCY_NET.md)
+          echo "🔍 Validating no placeholder values..."
+          if grep -E "myuser|localhost|dummy|mypassword" .env > /dev/null; then
+              echo "❌ CRITICAL: Placeholder values detected in .env file!"
+              echo "❌ Detected placeholders:"
+              grep -E "myuser|localhost|dummy|mypassword" .env || true
+              echo "❌ This will cause database connection failures!"
+              echo "❌ Please restore .env from backup or manually configure with real credentials"
+              exit 1
+          fi
+
+          echo "✅ All required environment variables present with real values"
+
+          # 5. Overwrite systemd unit (always)
+          echo "⚙️ Configuring systemd service..."
+          sudo tee /etc/systemd/system/vernal-agents.service > /dev/null << 'SERVICE_EOF'
           [Unit]
           Description=Vernal Agents Backend
           After=network.target
+
           [Service]
           Type=simple
           User=ubuntu
@@ -92,27 +232,113 @@ jobs:
           RestartSec=10
           Environment=PYTHONPATH=/home/ubuntu/vernal-agents-post-v0
           EnvironmentFile=/home/ubuntu/vernal-agents-post-v0/.env
+
           [Install]
           WantedBy=multi-user.target
-          SVC
+          SERVICE_EOF
+
+          # 6. Reload and start service
+          echo "🔄 Starting service..."
           sudo systemctl daemon-reload
           sudo systemctl start vernal-agents
 
-          echo "⏳ Waiting for service..."
+          # 7. Wait for startup
+          echo "⏳ Waiting for service startup..."
           sleep 10
-          for i in 1 2 3 4 5; do
-            if curl -sf http://localhost:8000/health >/dev/null; then
-              echo "✅ Health OK"
+
+          # Check service status and logs
+          echo "🔍 Checking service status..."
+          sudo systemctl status vernal-agents --no-pager
+          echo "🔍 Checking service logs..."
+          sudo journalctl -u vernal-agents -n 20 --no-pager
+
+          # 8. Automated post-deploy validation (MANDATORY)
+          echo "✅ Running post-deploy validation..."
+
+          # Health check with retry
+          echo "🔍 Testing health endpoint..."
+          for i in {1..5}; do
+            echo "Attempt $i/5..."
+            if curl -f http://localhost:8000/health; then
+              echo "✅ Health check passed on attempt $i"
               break
+            else
+              echo "❌ Health check failed on attempt $i, waiting 3 seconds..."
+              sleep 3
+              if [ $i -eq 5 ]; then
+                echo "❌ Health check failed after 5 attempts!"
+                exit 1
+              fi
             fi
-            if [ $i -eq 5 ]; then
-              echo "❌ HEALTH_CHECK_FAILED — last 60 lines of vernal-agents:"
-              sudo journalctl -u vernal-agents -n 60 --no-pager
-              echo "--- END LOG ---"
-              exit 1
-            fi
-            sleep 3
           done
+          echo "✅ Health check passed"
+
+          # Version check
+          echo "🔍 Testing version endpoint..."
+          VERSION_RESPONSE=$(curl -s http://localhost:8000/version)
+          echo "$VERSION_RESPONSE" | jq . || { echo "❌ Version endpoint returned invalid JSON!"; exit 1; }
+          echo "✅ Version check passed"
+
+          # Database test
+          echo "🔍 Testing database connectivity..."
+          curl -f http://localhost:8000/mcp/enhanced/health || { echo "❌ Database test failed!"; exit 1; }
+          echo "✅ Database test passed"
+
+          # Systemd status
+          echo "🔍 Checking systemd status..."
+          sudo systemctl status vernal-agents --no-pager || { echo "❌ Service not running!"; exit 1; }
+          echo "✅ Service is running"
+
+          # Port check
+          echo "🔍 Checking port 8000..."
+          if ! sudo lsof -i :8000 >/dev/null 2>&1; then
+            echo "❌ Port 8000 is not listening!"
+            echo "🔍 Checking systemd logs for errors..."
+            sudo journalctl -u vernal-agents -n 50 --no-pager
+            echo "🔍 Verifying main.py defines app = FastAPI()..."
+            grep -q "app = FastAPI" /home/ubuntu/vernal-agents-post-v0/main.py || echo "❌ main.py does not define app = FastAPI()!"
+            echo "🔍 Common causes: code bug, missing dependency, or main.py does not define app = FastAPI()"
+            exit 1
+          fi
+          echo "✅ Port 8000 is listening"
+
+          # External access test
+          echo "🔍 Testing external access..."
+          curl -f https://themachine.vernalcontentum.com/health || { echo "❌ External health check failed!"; exit 1; }
+          curl -f https://themachine.vernalcontentum.com/version || { echo "❌ External version check failed!"; exit 1; }
+          curl -f https://themachine.vernalcontentum.com/mcp/enhanced/health || { echo "❌ External database test failed!"; exit 1; }
+          echo "✅ External access working"
+
+          # 9. Verify deployment completion with commit hash
+          echo "🔍 Verifying deployment completion..."
           COMMIT_HASH=$(git rev-parse HEAD)
+          PYTHON_VERSION=$(python --version)
+          
+          # Final memory check
+          echo "📊 Final memory status:"
+          free -h
+          
+          # Write completion marker file
           echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
-          echo "🎉 DEPLOY SUCCESS: $COMMIT_HASH"
+          
+          # Copy verification script for manual use
+          cp verify_deployment.sh /home/ubuntu/verify_deployment.sh
+          chmod +x /home/ubuntu/verify_deployment.sh
+          
+          # Copy lightweight deployment script
+          cp deploy_lightweight.sh /home/ubuntu/deploy_lightweight.sh
+          chmod +x /home/ubuntu/deploy_lightweight.sh
+          
+          # Log successful deployment
+          echo "$(date) - BULLETPROOF Backend deployed successfully via GitHub Actions, commit: $COMMIT_HASH, Python: $PYTHON_VERSION" >> ~/vernal_agents_deploy.log
+          
+          # Final verification - test commit hash endpoint
+          echo "🔍 Testing commit hash endpoint..."
+          curl -sf http://localhost:8000/deploy/commit || echo "⚠️ Commit endpoint skipped (non-fatal)"
+          
+          echo "🎉 BULLETPROOF BACKEND DEPLOYMENT SUCCESSFUL!"
+          echo "📝 Deployment logged to ~/vernal_agents_deploy.log"
+          echo "📝 Completion marker: /home/ubuntu/vernal_agents_deploy_complete.txt"
+          echo "🔗 Commit hash: $COMMIT_HASH"
+          echo "🔧 Manual verification: /home/ubuntu/verify_deployment.sh"
+          echo "🚀 Lightweight deploy: /home/ubuntu/deploy_lightweight.sh"
