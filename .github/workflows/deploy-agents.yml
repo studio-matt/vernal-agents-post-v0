@@ -40,69 +40,58 @@ jobs:
         command_timeout: "90m"
         script: |
           set -e
-          echo "🔒 BULLETPROOF BACKEND DEPLOYMENT STARTING..."
-
-          # 0. Ensure jq is installed (skip apt if present to avoid dpkg/apt issues on server)
+          echo "🔒 BACKEND DEPLOYMENT STARTING..."
           command -v jq >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y jq; }
 
-          # 1. BULLETPROOF NUKING - Remove entire directory in one command
-          echo "🧹 Nuking old code..."
-          
-          # CRITICAL: Backup .env file before deletion (EMERGENCY_NET.md v7)
-          echo "🔐 Backing up .env file before cleanup..."
+          # Backup .env before any destructive step
           if [ -f /home/ubuntu/vernal-agents-post-v0/.env ]; then
             sudo cp /home/ubuntu/vernal-agents-post-v0/.env /home/ubuntu/.env.backup
             sudo chown ubuntu:ubuntu /home/ubuntu/.env.backup
             chmod 600 /home/ubuntu/.env.backup
-            echo "✅ .env file backed up to /home/ubuntu/.env.backup"
-          else
-            echo "⚠️ No existing .env file found to backup"
+            echo "✅ .env backed up"
           fi
-          
-          # Stop service and wait for it to fully stop
           sudo systemctl stop vernal-agents || true
-          echo "⏳ Waiting for service to stop..."
-          sleep 5
-          
-          # Kill any stuck Python processes more aggressively
           sudo pkill -9 -f python || true
           sudo pkill -9 -f uvicorn || true
-          sudo pkill -9 -f main.py || true
-          echo "⏳ Waiting for processes to terminate..."
-          sleep 3
-          
-          # BULLETPROOF NUKING - Remove entire directory in one command
-          echo "🧹 Removing entire directory..."
-          sudo rm -rf /home/ubuntu/vernal-agents-post-v0
-          
-          # Retry if directory still exists
-          for i in {1..3}; do
-            if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
-              echo "❌ Directory still exists, trying again (attempt $i)..."
-              sudo rm -rf /home/ubuntu/vernal-agents-post-v0
-              sleep 2
-            fi
-          done
-          
-          # Verify directory is gone
-          if [ -d /home/ubuntu/vernal-agents-post-v0 ]; then
-            echo "❌ Directory could not be fully deleted. Showing contents:"
-            sudo find /home/ubuntu/vernal-agents-post-v0
-            exit 1
+          sleep 2
+
+          # FAST PATH: repo + venv exist → git pull, pip install, restart (finishes in ~5–15 min)
+          if [ -d /home/ubuntu/vernal-agents-post-v0/.git ] && [ -d /home/ubuntu/vernal-agents-post-v0/venv ]; then
+            echo "🚀 FAST PATH: updating existing install..."
+            cd /home/ubuntu/vernal-agents-post-v0
+            git fetch origin
+            git checkout main
+            git reset --hard origin/main
+            source venv/bin/activate
+            pip install -r requirements.txt --no-cache-dir --progress-bar off -q
+            sudo systemctl start vernal-agents
+            echo "⏳ Waiting for service..."
+            sleep 10
+            for i in {1..5}; do
+              curl -sf http://localhost:8000/health >/dev/null && break
+              [ $i -eq 5 ] && { echo "❌ Health check failed"; exit 1; }
+              sleep 3
+            done
+            COMMIT_HASH=$(git rev-parse HEAD)
+            echo "DEPLOY_COMPLETE_$(date +%s)_$COMMIT_HASH" > /home/ubuntu/vernal_agents_deploy_complete.txt
+            echo "✅ FAST PATH DEPLOY SUCCESS: $COMMIT_HASH"
+            exit 0
           fi
 
-          # Clean up old backup directories
-          echo "🧹 Cleaning up old backup directories..."
+          # FULL PATH: nuke and clone (first deploy or broken state)
+          echo "🧹 FULL PATH: nuking and cloning..."
+          sudo rm -rf /home/ubuntu/vernal-agents-post-v0
+          for i in {1..3}; do
+            [ -d /home/ubuntu/vernal-agents-post-v0 ] && sudo rm -rf /home/ubuntu/vernal-agents-post-v0 && sleep 2
+          done
+          [ -d /home/ubuntu/vernal-agents-post-v0 ] && { echo "❌ Could not remove dir"; exit 1; }
           find /home/ubuntu -maxdepth 1 -name "vernal-agents*backup*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
-          find /home/ubuntu -maxdepth 1 -name "vernal-agents*corrupted*" -type d -exec sudo rm -rf {} + 2>/dev/null || true
-          echo "✅ Backup directories cleaned up"
 
-          # 2. Clone fresh from GitHub
-          echo "📦 Cloning fresh from GitHub..."
+          echo "📦 Cloning..."
           git clone https://github.com/studio-matt/vernal-agents-post-v0.git /home/ubuntu/vernal-agents-post-v0
           cd /home/ubuntu/vernal-agents-post-v0
 
-          # 3. Setup venv from scratch with memory optimization
+          # 3. Setup venv from scratch
           echo "🐍 Setting up virtual environment..."
           python3 -m venv venv
           source venv/bin/activate
