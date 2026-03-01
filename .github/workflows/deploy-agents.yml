@@ -1,8 +1,9 @@
 name: Deploy Agents Backend
 
+# Manual deploy only: use "Run workflow" in Actions or on server: cd /home/ubuntu/vernal-agents-post-v0 && bash scripts/safe_deploy.sh
 on:
-  push:
-    branches: [ "main", "mcp-conversion" ]
+  # push:
+  #   branches: [ "main", "mcp-conversion" ]
   workflow_dispatch:
 
 jobs:
