@@ -26,6 +26,7 @@ app = FastAPI(title="Vernal Agents API", version="1.0.0")
 # Must specify exact origins (add Replit preview so campaigns/personalities load there)
 _cors_origins = [
     "https://machine.vernalcontentum.com",
+    "https://sapling.vernalcontentum.com",  # Staging (develop branch)
     "https://themachine.vernalcontentum.com",
     "http://localhost:3000",
     "http://localhost:3001",
