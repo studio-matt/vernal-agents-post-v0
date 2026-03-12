@@ -1715,12 +1715,15 @@ async def generate_campaign_content(
                         session, cid, user_id, req_data, tid,
                         update_task_status, check_deadline, normalize_result_data
                     )
+                    # Hard guarantee: every task ends in completed or error, never stuck in pending/in_progress
                     if result:
                         CONTENT_GEN_TASKS[tid]["result"] = result
-                        if result.get("status") == "error":
+                        status_val = result.get("status")
+                        if status_val == "error":
                             CONTENT_GEN_TASKS[tid]["status"] = "error"
                             CONTENT_GEN_TASKS[tid]["error"] = result.get("error") or "Unknown error"
-                        elif result.get("status") == "success":
+                            CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {CONTENT_GEN_TASKS[tid]['error']}"
+                        elif status_val == "success":
                             # Always mark task completed when generation succeeded (so frontend gets result and can save)
                             if tid in CONTENT_GEN_TASKS:
                                 CONTENT_GEN_TASKS[tid]["progress"] = 100
@@ -1756,6 +1759,21 @@ async def generate_campaign_content(
                                             logger.info(f"✅ generate-content: image saved for content_id={content_id}")
                                         else:
                                             logger.warning("⚠️ generate-content: image generation skipped or failed")
+                        else:
+                            # Unexpected result.status; mark as error so frontend gets a terminal state
+                            msg = f"Content generation returned unknown status: {status_val!r}"
+                            CONTENT_GEN_TASKS[tid]["status"] = "error"
+                            CONTENT_GEN_TASKS[tid]["error"] = msg
+                            CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
+                            logger.warning(f"❌ Task {tid} failed (unknown status): {msg}")
+                    else:
+                        # No result object at all (None/empty) – treat as error so we never leave task in limbo
+                        msg = "Content generation returned empty result"
+                        if tid in CONTENT_GEN_TASKS:
+                            CONTENT_GEN_TASKS[tid]["status"] = "error"
+                            CONTENT_GEN_TASKS[tid]["error"] = msg
+                            CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
+                            logger.warning(f"❌ Task {tid} failed (empty result)")
 
                 except Exception as bg_error:
                     logger.error(f"Background generation error: {bg_error}")
