@@ -1,10 +1,12 @@
 # Vernal Agents Backend — Emergency Net (v13)
 
+**Quick entry:** See **[Emergency Rails](EMERGENCY_RAILS.md)** for a single-page quick reference (servers, deploy commands, emergency resets, .env/CORS rules, SIGKILL recovery).
+
 ## Project repositories and servers (three repos)
 
 | Name | Server IP | Git repo | Notes |
 |------|-----------|----------|--------|
-| **Front End** (or "front end") | `98.87.57.133` | https://github.com/studio-matt/vernal-post-v0.git | Machine front end. See EMERGENCY_NET.md. |
+| **Front End** (or "front end") | `98.87.57.133` | https://github.com/studio-matt/vernal-post-v0.git | Machine (prod) + Sapling (staging); both use this backend. See EMERGENCY_NET.md. |
 | **Back End** (or "back end") | `18.235.104.132` | https://github.com/studio-matt/vernal-agents-post-v0.git | THEMACHINE backend. This doc. |
 | **WordPress** | — | https://machine.vernalcontentum.com/admin | WordPress Plugin only. |
 
@@ -33,6 +35,11 @@ Use these names consistently: **Front End Server** / **Back End Server** / **Wor
 - **Git repo:** `https://github.com/studio-matt/vernal-agents-post-v0.git`
 - **Deploy flow:** Pull from repo → activate venv → restart systemd service
 - **Verify:** Health endpoints, database connectivity, CORS, and auth flows.
+
+### **Typical deploy (short)**
+- **On the Back End Server:** `cd /home/ubuntu/vernal-agents-post-v0 && bash scripts/safe_deploy.sh`
+- This fetches/pulls main, activates venv, installs deps, runs insert_visualizer_settings, restarts `vernal-agents`. Use this for routine backend deploys after pushing to the repo.
+- **Frontend** is deployed via GitHub Action (see EMERGENCY_NET.md); no manual server command for front end.
 
 ---
 
@@ -812,12 +819,30 @@ cd /home/ubuntu/vernal-agents-post-v0
 ### **Progress stuck at 0% (status % used to move, now doesn’t)**
 - **Cause:** The frontend only updates progress when it **polls** the status endpoint. It only polls when the backend has returned a **real task_id** from `POST .../generate-content`. If the backend runs the **full pipeline synchronously** (Research → Writer → QC, then return), it does not return until the end, so the frontend never receives task_id during the run. The modal stays in "waiting for task_id" state (placeholder ID), **polling is skipped**, and progress stays 0%.
 - **Fix (backend):** Return **task_id immediately** (or right after enqueueing the job) from `POST .../generate-content`, and run the pipeline in a **background task**. Write progress/status to whatever store the `GET .../generate-content/status/{task_id}` endpoint reads from, so the frontend can poll and show 20% → 100%. This is the same async pattern that made progress move before; if a recent change made the route synchronous, revert or re-add the async path.
-- **Frontend:** Shows an indeterminate "Starting agents…" state when waiting for task_id so the UI doesn’t look stuck at 0%; real % still requires backend returning task_id and updating status.
+- **Multi-worker:** `CONTENT_GEN_TASKS` is in-memory per process. If the app runs with **multiple workers** (e.g. gunicorn workers), the worker that handles `POST generate-content` holds the task; the worker that handles `GET .../status/{task_id}` may be different and will not see the task (returns pending/0 forever). Fix: store task state in **Redis or DB** so all workers can read/write it.
+- **Frontend:** Shows an indeterminate "Starting agents…" state when waiting for task_id. Completion is accepted when `status === "completed"` and `result` is present, even if `agent_statuses` is empty or not all "completed"/"error".
+
+### **Content-generation tasks must not run indefinitely**
+- **Principle:** The backend should **not** leave content-generation tasks in a "running" state forever. If an agent hangs (e.g. LLM timeout, deadlock, external API never responding), the task should eventually transition to **failed** so the frontend can stop polling and the user can retry.
+- **Recommendation (backend / themachine):**
+  - Enforce a **max duration per task** (e.g. 5–10 minutes). If the pipeline has not completed by then, mark the task as **failed** in the status store (Redis/DB), set `status: "error"` and `error: "Task exceeded maximum duration"` (or similar). The frontend will then receive `status === "error"` on the next poll and show the error + allow retry.
+  - Optionally: per-agent or per-step timeouts (e.g. no single agent step runs longer than 2–3 minutes). On timeout, mark that agent as error and either fail the whole task or continue with a clear "partial failure" state.
+- **Why:** Otherwise one stuck task leaves the UI in "5 of 6 complete, 1 remaining" with a spinner until the frontend gives up (frontend now uses a 5‑min timeout when only one task is left and offers "Skip this task"). Fixing it on the backend is better: the status endpoint returns a terminal state (`completed` or `error`), so the user sees a clear outcome and can retry cleanly.
+- **Implementation checklist (backend repo / themachine):**
+  1. Where the content-generation pipeline runs (background task / worker): record task **start time** when the run starts.
+  2. Before or after each step (or in a timer/watchdog): if `elapsed = now - start_time` exceeds max (e.g. 10 minutes), **stop the pipeline**, write to the task status store: `status: "error"`, `error: "Task exceeded maximum duration (10 min)"` (and optionally `result: null`). Ensure the status store is the same one `GET .../generate-content/status/{task_id}` reads from (Redis/DB).
+  3. Ensure `GET .../generate-content/status/{task_id}` returns that stored state so the frontend gets `status === "error"` on the next poll.
+  4. (Optional) Per-step timeout: if a single agent step runs longer than e.g. 3 minutes, cancel it and mark the task as failed with a step-specific error message.
+
+- **Implemented (backend repo):**
+  - **Fail-fast in background:** In `run_generation_background` (brand_personalities.py), a `check_deadline()` helper runs after init and before author-voice and before CrewAI. If elapsed time ≥ `MAX_CONTENT_GEN_DURATION_SEC - 60` (9 min), the task is marked `status: "error"` with a clear message so the next status poll returns a terminal state without waiting for the full 10 min.
+  - **Result shape for frontend:** `normalize_result_data(data)` ensures `result.data` has `final_content` and `content` from whatever keys the pipeline produced (writing, quality_control, content), so the frontend can always extract the body for save and for image trigger.
+  - **Status endpoint:** When `status === "error"`, the response includes `result: null` explicitly. Completion and failure are logged (`✅ Task {tid} completed` / `❌ Task {tid} failed`).
 
 ### **Backend slow after big runs (e.g. 1000 articles/day)**
 - **Symptoms:** After a large batch (Generate Day’s Content, many articles), the server is very slow: `GET campaigns`, `GET .../generate-content/status/{task_id}`, and other endpoints take a long time or time out.
-- **Frontend (vernal-post-v0):** Status polling is optimized to reduce load: **adaptive interval** (2s when ≤8 tasks, 4s when 9–20, 6s when 21+) and **staggered first poll** (first requests spread over ~800ms). So 50 tasks no longer cause 25 req/s; they poll every 6s and start staggered.
-- **Backend recommendations (implement in this repo):**
+- **Frontend (this repo):** Status polling is optimized to reduce load: **adaptive interval** (2s when ≤8 tasks, 4s when 9–20, 6s when 21+) and **staggered first poll** (first requests spread over ~800ms). So 50 tasks no longer cause 25 req/s; they poll every 6s and start staggered.
+- **Backend recommendations (to implement on themachine):**
   - **Status endpoint:** Store task state in **Redis or DB** (not in-memory per worker) so `GET .../generate-content/status/{task_id}` is a fast lookup; add a short TTL cache (e.g. 5–10s) per task_id if needed.
   - **Batch status (optional):** If supported, frontend could call one `GET .../generate-content/status?task_ids=id1,id2,...` to reduce round-trips; backend returns a map of statuses.
   - **Campaigns list:** Ensure `GET campaigns` uses indexed queries and minimal joins; consider caching campaign list (e.g. Redis, 30–60s TTL) when under heavy load.
@@ -853,8 +878,11 @@ cd /home/ubuntu/vernal-agents-post-v0
 
 ## 📧 Email/OTP Verification Flow
 
+### **Admin > Environment Variables (unified behavior)**
+All environment variables listed on **Admin > Environment Variables** (https://machine.vernalcontentum.com/admin) behave the same: the backend reads them from **Admin Settings first** (stored in `system_settings` as `env_<KEY>`), then falls back to process env. Changing a value on that page takes effect on the next use (no server restart). This applies to: **MAIL_*** (email), **GUARDRAILS_BLOCK_INJECTION**, **CODE_HEALTH_***, **EC2_*** (gas meter), and any other editable vars on that page.
+
 ### **Email Service Configuration**
-- **SMTP Settings:** Must be configured in `.env` file
+- **SMTP Settings:** Configure in **Admin > Environment Variables** (or in `.env` on the server)
 - **OTP Storage:** MySQL `otp` table with expiration
 - **Email Templates:** Include verification URL with OTP parameter
 
@@ -898,6 +926,39 @@ curl -X POST https://themachine.vernalcontentum.com/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"test@example.com","password":"testpass123"}'
 ```
+
+### **Never received signup/verification email**
+
+If a user reports they never got the OTP email after registering:
+
+1. **Set email credentials in Admin Settings (primary)**
+   - **Admin > Environment Variables:** https://machine.vernalcontentum.com/admin → System Settings → **Environment Variables**
+   - Set **`MAIL_USERNAME`**, **`MAIL_PASSWORD`**, and optionally **`MAIL_FROM`**, **`MAIL_SERVER`** (e.g. `mail.vernalcontentum.com`), **`MAIL_PORT`** (e.g. `465`). The backend uses these for signup OTP, resend OTP, and password-reset emails.
+   - If either `MAIL_USERNAME` or `MAIL_PASSWORD` is missing (in Admin or in server env), the app uses a **mock** email service (no real email is sent; OTP is only logged).
+   - For Gmail: use an [App Password](https://support.google.com/accounts/answer/185833), not the normal account password.
+
+2. **Optional: server .env**
+   - You can also set `MAIL_*` in the Back End Server `.env`; the backend uses Admin Settings first, then process env.
+
+3. **Check server logs**
+   ```bash
+   sudo journalctl -u vernal-agents -f | grep -i email
+   ```
+   - "Email credentials not configured (env or Admin Settings), using mock email service" → set `MAIL_USERNAME` and `MAIL_PASSWORD` in **Admin > Environment Variables** (or in `.env`), then retry signup or Resend OTP.
+   - "OTP email sent successfully to …" → email was sent; suggest user check **spam/junk** and use **Resend OTP** on the signup page.
+   - "Failed to send OTP email" or connection errors → fix SMTP (credentials, firewall, Gmail “less secure app” / App Password).
+
+4. **Resend OTP**
+   - User can use **Resend OTP** on the signup page (after fixing credentials if mock was used).
+
+5. **Manual verification (unblock user immediately)**
+   - On the Back End Server DB:  
+     `UPDATE user SET is_verified = 1 WHERE email = 'user@example.com';`  
+   - Then the user can log in and use the app without the OTP email.
+
+6. **Debug endpoint (process env only)**
+   - `GET https://themachine.vernalcontentum.com/auth/debug/env`  
+   - Shows process env (password redacted). Admin-stored values are used at send time and are not shown here; confirm **Admin > Environment Variables** has `MAIL_USERNAME` and `MAIL_PASSWORD` set.
 
 ---
 
@@ -1645,11 +1706,20 @@ echo "🎉 Full System Health Check PASSED!"
 
 ## 🚨 CRITICAL: SIGKILL (STATUS 137) PREVENTION (v5)
 
-### **THE #1 CAUSE OF CI DEPLOYMENT FAILURES**
+### **IMMEDIATE FAILURES ARE NOT TIMEOUT**
+
+If the "Deploy on Agents Server" step fails **within 1–2 minutes**, the cause is **not** the 90m workflow timeout. It is one of:
+
+1. **SSH / secrets** — Wrong or missing `EC2_HOST`, `AGENTS_EC2_SSH_KEY`, or `EC2_SSH_PASSPHRASE` in repo Secrets. The step may fail before any script output.
+2. **First script commands** — Script runs but exits on an early line (e.g. before "SSH_OK" you never see; or right after it). Check the Actions log for the **exact** error line.
+
+**Diagnostic:** The deploy script prints `SSH_OK — script running on <hostname>` as its first line. If you never see that, the failure is SSH or secrets. If you see it and then failure, the failure is a later command — use the log to find the line.
+
+### **THE #1 CAUSE OF CI DEPLOYMENT FAILURES (long-running)**
 
 **PROBLEM:** GitHub Actions runner killed with SIGKILL (status 137) before deployment completes, even though the script is bulletproof.
 
-**ROOT CAUSE:** CI runner runs out of RAM (<7GB) or hits timeout during heavy Python package installation.
+**ROOT CAUSE:** CI runner runs out of RAM (<7GB) or hits timeout during heavy Python package installation. (This applies when the job runs for many minutes then dies — not when it fails immediately.)
 
 **SYMPTOMS:**
 - GitHub Action shows "Process exited with status 137 from signal KILL"
