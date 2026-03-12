@@ -1188,14 +1188,9 @@ Generate content for {platform} based on the content queue items and campaign co
                     if validation_result:
                         response_data["validation"] = validation_result
                     normalize_result_data(response_data)
-                    CONTENT_GEN_TASKS[tid]["result"] = {
-                        "status": "success",
-                        "data": response_data,
-                        "error": None
-                    }
                     logger.info(f"✅ Task {tid} completed with result (author voice)")
                     update_task_status(progress=100, status="completed", task="Content generation completed")
-                    return
+                    return {"status": "success", "data": response_data, "error": None}
             except Exception as av_error:
                 logger.error(f"Author voice generation error: {av_error}")
                 update_task_status(
@@ -1767,13 +1762,17 @@ async def generate_campaign_content(
                             CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
                             logger.warning(f"❌ Task {tid} failed (unknown status): {msg}")
                     else:
-                        # No result object at all (None/empty) – treat as error so we never leave task in limbo
-                        msg = "Content generation returned empty result"
+                        # No result object (None/empty) – treat as error only if task isn't already completed (e.g. inner path set state and returned None)
                         if tid in CONTENT_GEN_TASKS:
-                            CONTENT_GEN_TASKS[tid]["status"] = "error"
-                            CONTENT_GEN_TASKS[tid]["error"] = msg
-                            CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
-                            logger.warning(f"❌ Task {tid} failed (empty result)")
+                            existing = CONTENT_GEN_TASKS[tid]
+                            if existing.get("status") == "completed" and existing.get("result"):
+                                logger.info(f"Task {tid} already completed with result; skipping overwrite")
+                            else:
+                                msg = "Content generation returned empty result"
+                                existing["status"] = "error"
+                                existing["error"] = msg
+                                existing["current_task"] = f"Error: {msg}"
+                                logger.warning(f"❌ Task {tid} failed (empty result)")
 
                 except Exception as bg_error:
                     logger.error(f"Background generation error: {bg_error}")
