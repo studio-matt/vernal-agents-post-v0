@@ -1841,6 +1841,7 @@ async def get_running_content_tasks(
         raw = CONTENT_GEN_TASK_INDEX.get(campaign_id) or []
         task_ids = raw if isinstance(raw, list) else ([raw] if raw else [])
         running = []
+        still_running = []
         for tid in task_ids:
             if tid not in CONTENT_GEN_TASKS:
                 continue
@@ -1848,6 +1849,7 @@ async def get_running_content_tasks(
             status = t.get("status", "pending")
             if status in ("completed", "error"):
                 continue
+            still_running.append(tid)
             entry = {
                 "task_id": tid,
                 "progress": t.get("progress", 0),
@@ -1860,6 +1862,7 @@ async def get_running_content_tasks(
                 entry["week"] = t.get("week", 1)
                 entry["day"] = t.get("day", "Monday")
             running.append(entry)
+        CONTENT_GEN_TASK_INDEX[campaign_id] = still_running
         return {"status": "success", "tasks": running}
     except HTTPException:
         raise
