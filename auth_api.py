@@ -671,14 +671,16 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
 
 @auth_router.get("/me", response_model=UserResponse)
 async def get_current_user_info(current_user = Depends(get_current_user)):
-    """Get current user information"""
+    """Get current user information (is_admin from DB each request)."""
+    is_admin = getattr(current_user, 'is_admin', False)
+    logger.info(f"[auth/me] user_id={current_user.id} email={current_user.email} is_admin={is_admin}")
     return UserResponse(
         id=current_user.id,
         username=current_user.username,
         email=current_user.email,
         contact=current_user.contact,
         is_verified=current_user.is_verified,
-        is_admin=getattr(current_user, 'is_admin', False),
+        is_admin=is_admin,
         created_at=current_user.created_at
     )
 
