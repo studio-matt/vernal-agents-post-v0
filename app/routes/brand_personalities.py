@@ -1733,6 +1733,10 @@ async def generate_campaign_content(
                                 content_id = _persist_generated_content(
                                     session, cid, user_id, week, day, platform, result_data, None
                                 )
+                                if content_id is not None:
+                                    # So frontend can resolve batch-* task keys to the right content item
+                                    result_data["id"] = content_id
+                                    result_data["database_id"] = content_id
                                 if content_id and not check_deadline():
                                     copy_for_image = result_data.get("final_content") or result_data.get("content") or result_data.get("quality_control") or result_data.get("writing") or ""
                                     if isinstance(copy_for_image, dict):
