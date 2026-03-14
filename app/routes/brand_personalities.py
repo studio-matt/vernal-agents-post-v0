@@ -1758,6 +1758,11 @@ async def generate_campaign_content(
                                             logger.info(f"✅ generate-content: image saved for content_id={content_id}")
                                         else:
                                             logger.warning("⚠️ generate-content: image generation skipped or failed")
+                                        # Mark task completed so frontend gets status=completed + result (with image_url) and closes modal
+                                        if tid in CONTENT_GEN_TASKS:
+                                            CONTENT_GEN_TASKS[tid]["progress"] = 100
+                                            CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                                            CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
                         else:
                             # Unexpected result.status; mark as error so frontend gets a terminal state
                             msg = f"Content generation returned unknown status: {status_val!r}"
