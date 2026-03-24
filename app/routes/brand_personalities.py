@@ -1018,7 +1018,53 @@ Sample Text (first 500 characters):
         cornerstone_url_section = f"\nCornerstone URL (insert an inline link to this in the copy):\n{cornerstone_url}"
         if cornerstone_post_title:
             cornerstone_url_section += f"\nSuggested link text: {cornerstone_post_title}"
-    writing_context = f"""Content Queue Foundation (for this article only):
+
+    cornerstone_plat = (campaign.cornerstone_platform or "").strip().lower()
+    platform_l = platform.lower()
+    is_supporting = bool(cornerstone_plat) and platform_l != cornerstone_plat
+    item_type_hint = str(req_data.get("content_item_type") or "").lower()
+    if item_type_hint == "secondary":
+        if cornerstone_plat and platform_l == cornerstone_plat:
+            logger.warning(
+                "content_item_type=secondary but platform matches cornerstone_platform; using cornerstone (full-context) prompt."
+            )
+        else:
+            is_supporting = True
+    has_cornerstone_text = bool(cornerstone_content.strip())
+
+    if is_supporting and has_cornerstone_text:
+        # Secondary: re-imagine cornerstone only; research queue + campaign scrape are for cornerstone piece
+        writing_context = f"""You are writing SUPPORTING (secondary) content for {platform}.
+
+SOURCE OF TRUTH: The CORNERSTONE ARTICLE section below is the only substantive source. Re-imagine that piece for {platform}: keep the same core message, factual claims, and narrative arc. Do not introduce new topics, products, angles, or statistics that are not present in or clearly implied by the cornerstone.
+
+LINGUISTIC RE-INTERPRETATION ("drift"): Adapt syntax, diction, pacing, and emotional register so the copy feels native to {platform} and distinct from the long-form cornerstone—without changing substance. Follow Brand Voice and author-personality guidance (including LIWC-relevant dimensions: formality, authenticity, analytical vs narrative tone, concision, social vs analytical focus) as applied by the author-voice layer.
+
+CONTENT QUEUE / RAW CAMPAIGN RESEARCH: Do not use separate research threads for this piece; they informed the cornerstone only.
+
+WORKING TITLE (orientation only; you may refine for {platform}): {parent_idea or "N/A"}
+{brand_guidelines}{platform_settings_text}
+
+{cornerstone_content}{cornerstone_url_section}
+
+Write the final {platform} post now."""
+    elif is_supporting and not has_cornerstone_text:
+        logger.warning(
+            f"Supporting platform {platform} but no cornerstone body (campaign {cid}, week {week}, day {day}); "
+            "using fallback context with queue + campaign."
+        )
+        writing_context = f"""Content Queue Foundation (for this article only):
+{queue_context}
+
+{f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}{platform_settings_text}
+
+Campaign Context:
+{campaign_context}
+{cornerstone_content}{cornerstone_url_section}
+
+Generate content for {platform}. NOTE: Cornerstone copy for this day was not available—this is a fallback; re-run after the cornerstone exists so secondaries can follow the intended rewrite-from-cornerstone flow."""
+    else:
+        writing_context = f"""Content Queue Foundation (for this article only):
 {queue_context}
 
 {f'Parent Idea: {parent_idea}' if parent_idea else ''}{brand_guidelines}{platform_settings_text}
@@ -2135,8 +2181,10 @@ def _run_generate_day_background(tid: str, campaign_id: str, user_id: int, reque
         cornerstone_permalink = None
         cornerstone_post_title = None
         completed = 0
+        stopped_early = False
         for idx, item in enumerate(items):
             if check_deadline():
+                stopped_early = True
                 break
             item_type = (item.get("type") or "cornerstone").lower()
             platform = (item.get("platform") or "linkedin").lower()
@@ -2147,15 +2195,18 @@ def _run_generate_day_background(tid: str, campaign_id: str, user_id: int, reque
                 progress=progress_base,
                 status="in_progress",
             )
-            content_queue_items = item.get("content_queue_items")
-            if not content_queue_items and item.get("title"):
+            content_queue_items = item.get("content_queue_items") or []
+            if item_type == "secondary":
+                content_queue_items = []
+            elif not content_queue_items and item.get("title"):
                 content_queue_items = [{"title": item.get("title"), "text": item.get("title")}]
             req_data = {
                 "platform": platform,
                 "week": week,
                 "day": day,
                 "parent_idea": item.get("parent_idea") or "",
-                "content_queue_items": content_queue_items or [],
+                "content_queue_items": content_queue_items,
+                "content_item_type": item_type,
                 "author_personality_id": author_personality_id,
                 "brand_personality_id": brand_personality_id,
                 "platformSettings": platform_settings,
@@ -2215,15 +2266,29 @@ def _run_generate_day_background(tid: str, campaign_id: str, user_id: int, reque
                     else:
                         logger.warning(f"⚠️ generate-day: image generation skipped or failed for item {idx + 1}")
         if tid in CONTENT_GEN_TASKS:
-            CONTENT_GEN_TASKS[tid]["status"] = "completed"
-            CONTENT_GEN_TASKS[tid]["progress"] = 100
-            CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
-            CONTENT_GEN_TASKS[tid]["result"] = {
-                "status": "success",
-                "data": {"items_completed": completed, "items_total": total},
-                "error": None,
-            }
-        logger.info(f"✅ generate-day {tid} completed: {completed}/{total} items")
+            if stopped_early or completed < total:
+                missing = max(0, total - completed)
+                msg = f"Generate day ended early: completed {completed}/{total} item(s), missing {missing}."
+                CONTENT_GEN_TASKS[tid]["status"] = "error"
+                CONTENT_GEN_TASKS[tid]["progress"] = min(99, CONTENT_GEN_TASKS[tid].get("progress", 0))
+                CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
+                CONTENT_GEN_TASKS[tid]["error"] = msg
+                CONTENT_GEN_TASKS[tid]["result"] = {
+                    "status": "error",
+                    "data": {"items_completed": completed, "items_total": total},
+                    "error": msg,
+                }
+                logger.warning(f"❌ generate-day {tid} incomplete: {completed}/{total} items")
+            else:
+                CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                CONTENT_GEN_TASKS[tid]["progress"] = 100
+                CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
+                CONTENT_GEN_TASKS[tid]["result"] = {
+                    "status": "success",
+                    "data": {"items_completed": completed, "items_total": total},
+                    "error": None,
+                }
+                logger.info(f"✅ generate-day {tid} completed: {completed}/{total} items")
     except Exception as e:
         logger.error(f"generate-day background error: {e}")
         import traceback
