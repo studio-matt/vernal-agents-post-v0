@@ -13,6 +13,8 @@ import os
 import json
 import logging
 
+from openai_model_config import get_openai_default_model
+
 logger = logging.getLogger(__name__)
 
 # Platform to adapter key mapping
@@ -205,13 +207,13 @@ Additional Platform-Specific Instructions:
                     raise ValueError("OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys.")
                 
                 llm = ChatOpenAI(
-                    model="gpt-4o-mini",
+                    model=get_openai_default_model(),
                     temperature=adjusted_temperature,
                     api_key=api_key
                 )
                 # Track OpenAI API usage for gas meter
                 from gas_meter.openai_wrapper import track_langchain_call
-                response = track_langchain_call(llm, model="gpt-4o-mini", prompt=prompt)
+                response = track_langchain_call(llm, model=get_openai_default_model(), prompt=prompt)
                 return response.content
             
             logger.info(f"Using temperature={adjusted_temperature:.2f} (featureWeight={feature_weight:.2f})")

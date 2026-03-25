@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Request
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
 from database import SessionLocal
+from openai_model_config import get_openai_default_model
 
 logger = logging.getLogger(__name__)
 
@@ -2083,14 +2084,14 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         try:
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
-                model="gpt-4o-mini", 
+                model=get_openai_default_model(), 
                 api_key=api_key, 
                 temperature=0.4, 
                 max_tokens=1000
             )
             # Track OpenAI API usage for gas meter
             from gas_meter.openai_wrapper import track_langchain_call
-            response = track_langchain_call(llm, model="gpt-4o-mini", prompt=prompt)
+            response = track_langchain_call(llm, model=get_openai_default_model(), prompt=prompt)
             recommendations_text = response.content if hasattr(response, 'content') else str(response)
         except Exception as e:
             logger.error(f"Error calling LLM for {agent_type} recommendations: {e}")

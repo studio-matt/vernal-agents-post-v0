@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Request, Form
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
 from database import SessionLocal
+from openai_model_config import get_openai_default_model
 
 logger = logging.getLogger(__name__)
 
@@ -1886,7 +1887,7 @@ async def generate_ideas_endpoint(
             return {"status": "error", "message": "Number of ideas must be at least 1"}
         
         # Initialize LLM and agent
-        llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
+        llm = ChatOpenAI(model=get_openai_default_model(), api_key=api_key.strip(), temperature=0.7)
         agent = IdeaGeneratorAgent(llm, db_session=db)
         
         # Generate ideas - pass num_ideas and recommendations context

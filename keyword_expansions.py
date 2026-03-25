@@ -20,6 +20,8 @@ import os
 import logging
 from typing import Optional
 
+from openai_model_config import get_openai_default_model
+
 logger = logging.getLogger(__name__)
 
 def _get_keyword_expansion_prompt() -> str:
@@ -177,7 +179,7 @@ def _expand_with_llm(keyword: str) -> Optional[str]:
         
         # Use cheap, fast model for simple abbreviation expansion
         llm = ChatOpenAI(
-            model="gpt-4o-mini",
+            model=get_openai_default_model(),
             api_key=api_key,
             temperature=0.1,  # Low temperature for factual expansion
             max_tokens=20     # Very short response needed

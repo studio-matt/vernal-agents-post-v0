@@ -24,6 +24,7 @@ import posixpath
 from guardrails.sftp_rules import safe_filename, validate_remote_path
 import logging
 import paramiko
+from openai_image_model_config import get_openai_default_image_model
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -654,7 +655,7 @@ def generate_image(query, content, api_key=None):
     try:
         # Generate image with DALL·E
         response = client.images.generate(
-            model="dall-e-3",
+            model=get_openai_default_image_model(),
             prompt=final_prompt,
             size="1024x1024",
             n=1

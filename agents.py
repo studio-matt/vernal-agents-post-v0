@@ -4,6 +4,8 @@ import traceback
 from crewai import Agent, Task, Crew
 from typing import Optional, Tuple
 
+from openai_model_config import get_openai_default_model
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -68,7 +70,7 @@ try:
             logger.warning("⚠️ OpenAI API key not found - agents may fail. Please set OPENAI_API_KEY environment variable or configure in Admin Settings > System > Platform Keys.")
     else:
         os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-        os.environ["OPENAI_MODEL_NAME"] = "gpt-4o-mini"
+        os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-4o-mini")
         logger.info("OpenAI API key configured successfully")
 except Exception as e:
     logger.error(f"Failed to configure OpenAI API key: {e}")
@@ -173,7 +175,7 @@ def create_agent_safely(agent_name: str, default_role: str, default_goal: str, d
             role=role,
             goal=goal,
             backstory=backstory,
-            llm="gpt-4o-mini",
+            llm=get_openai_default_model(),
             memory=True,
             verbose=True,
             reasoning=True,  # Enable explicit reasoning for verbose logs
@@ -189,7 +191,7 @@ def create_agent_safely(agent_name: str, default_role: str, default_goal: str, d
             role=default_role,
             goal=default_goal,
             backstory=default_backstory,
-            llm="gpt-4o-mini",
+            llm=get_openai_default_model(),
             memory=True,
             verbose=True,
             reasoning=True,  # Enable explicit reasoning for verbose logs

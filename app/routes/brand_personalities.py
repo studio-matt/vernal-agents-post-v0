@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Body
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
 from database import SessionLocal
+from openai_model_config import get_openai_default_model
 from app.schemas.models import BrandPersonalityCreate, BrandPersonalityUpdate
 from app.utils.openai_helpers import get_openai_api_key
 from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX, MAX_CONTENT_GEN_DURATION_SEC
@@ -558,7 +559,7 @@ Return the knowledge graph location (node name or entity) that should be used fo
         if not api_key:
             raise HTTPException(status_code=400, detail="OpenAI API key not configured. Please set a global key in Admin Settings > System > Platform Keys, or add your personal key in Account Settings.")
         
-        llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key.strip(), temperature=0.7)
+        llm = ChatOpenAI(model=get_openai_default_model(), api_key=api_key.strip(), temperature=0.7)
         
         # Build context from content queue items
         queue_context = "\n".join([
@@ -605,7 +606,7 @@ Return only the parent idea, no additional text."""
 
                 # Track OpenAI API usage for gas meter
                 from gas_meter.openai_wrapper import track_langchain_call
-                parent_response = track_langchain_call(llm, model="gpt-4o-mini", prompt=parent_prompt)
+                parent_response = track_langchain_call(llm, model=get_openai_default_model(), prompt=parent_prompt)
                 parent_idea = parent_response.content.strip()
                 
                 # Generate children concepts for this parent
@@ -621,7 +622,7 @@ Return as a numbered list."""
                 # Guardrails: sanitize children_prompt + check for injection (raises GuardrailsBlocked if blocking enabled)
                 children_prompt, audit = guard_or_raise(children_prompt, max_len=12000)
 
-                children_response = track_langchain_call(llm, model="gpt-4o-mini", prompt=children_prompt)
+                children_response = track_langchain_call(llm, model=get_openai_default_model(), prompt=children_prompt)
                 children_text = children_response.content.strip()
                 children = [line.strip() for line in children_text.split("\n") if line.strip() and (line.strip()[0].isdigit() or line.strip().startswith("-"))]
                 
@@ -639,7 +640,7 @@ Select a knowledge graph location for this parent idea."""
                 # Guardrails: sanitize kg_location_prompt_full + check for injection (raises GuardrailsBlocked if blocking enabled)
                 kg_location_prompt_full, audit = guard_or_raise(kg_location_prompt_full, max_len=12000)
 
-                kg_response = track_langchain_call(llm, model="gpt-4o-mini", prompt=kg_location_prompt_full)
+                kg_response = track_langchain_call(llm, model=get_openai_default_model(), prompt=kg_location_prompt_full)
                 kg_location = kg_response.content.strip()
                 
                 week_plan["parent_ideas"].append({

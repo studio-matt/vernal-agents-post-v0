@@ -5,6 +5,8 @@ from typing import Optional, Tuple, List
 import json
 from guardrails.sanitize import guard_or_raise
 
+from openai_model_config import get_openai_default_model
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -150,7 +152,7 @@ Generate the content following the instructions above.
             
             response = track_openai_call(
                 self.client.chat.completions.create,
-                model="gpt-4",
+                model=get_openai_default_model(),
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message}

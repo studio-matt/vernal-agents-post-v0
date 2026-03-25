@@ -6,6 +6,7 @@ from agents import script_research_agent, qc_agent, script_rewriter_agent , rege
 from database import DatabaseManager
 from sqlalchemy.orm import Session
 from openai import OpenAI
+from openai_model_config import get_openai_default_model
 import os
 from dotenv import load_dotenv
 import json
@@ -197,7 +198,7 @@ def analyze_text(prompt, api_key=None):
         
         response = track_openai_call(
             client.chat.completions.create,
-            model="gpt-4o-mini",
+            model=get_openai_default_model(),
             messages=[
                 {"role": "system", "content": "You are a helpful assistant tasked with analyzing documents and producing JSON output."},
                 {"role": "user", "content": prompt}

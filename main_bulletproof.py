@@ -32,7 +32,7 @@ def get_env_var(key: str, default: Optional[str] = None, required: bool = False)
 # Set up OpenAI API key with validation
 OPENAI_API_KEY = get_env_var("OPENAI_API_KEY", required=True)
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
-os.environ["OPENAI_MODEL_NAME"] = "gpt-4o-mini"
+os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-4o-mini")
 
 logger.info("Starting Vernal Agents Backend with bulletproof error handling")
 

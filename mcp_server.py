@@ -22,6 +22,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 import json
 import logging
+from openai_model_config import get_openai_default_model
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
@@ -529,7 +530,7 @@ class VernalContentumMCPServer(MCPServer):
                     api_key = os.getenv("OPENAI_API_KEY")
                     if not api_key:
                         raise ValueError("OPENAI_API_KEY not set")
-                    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, api_key=api_key)
+                    llm = ChatOpenAI(model=get_openai_default_model(), temperature=0.7, api_key=api_key)
                     return llm.invoke(prompt).content
                 
                 harness = GeneratorHarness(invoke_llm)
@@ -709,7 +710,7 @@ Be constructive, specific, and actionable. Focus on preventing problems before t
                 api_key = os.getenv("OPENAI_API_KEY")
                 if api_key:
                     llm = ChatOpenAI(
-                        model="gpt-4o-mini",
+                        model=get_openai_default_model(),
                         temperature=0.7,
                         api_key=api_key
                     )

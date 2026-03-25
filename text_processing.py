@@ -22,6 +22,8 @@ import logging
 import os
 import json
 
+from openai_model_config import get_openai_default_model
+
 # Cache for topic extraction prompt (loaded from database)
 _topic_prompt_cache = None
 _topic_prompt_cache_time = None
@@ -947,7 +949,7 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
         # Initialize the OpenAI model
         logger.info("🔍 Initializing ChatOpenAI model...")
         llm = ChatOpenAI(
-            model="gpt-4o-mini",
+            model=get_openai_default_model(),
             api_key=api_key,
             temperature=0.4,  # Slightly higher temperature for creative phrasing
             max_tokens=500    # Limit tokens to keep responses concise
@@ -978,7 +980,7 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
                 # Call the LLM
                 # Track OpenAI API usage for gas meter
                 from gas_meter.openai_wrapper import track_langchain_call
-                response = track_langchain_call(llm, model="gpt-4o-mini", prompt=prompt)
+                response = track_langchain_call(llm, model=get_openai_default_model(), prompt=prompt)
                 response_text = response.content.strip()
                 logger.info(f"✅ LLM API call successful, response length: {len(response_text)}")
                 logger.debug(f"🔍 Raw LLM response: {response_text[:200]}...")

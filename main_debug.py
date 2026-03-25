@@ -13,7 +13,7 @@ load_dotenv()
 
 # Set OpenAI API key
 os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY", "your-api-key-here")
-os.environ["OPENAI_MODEL_NAME"] = "gpt-4o-mini"
+os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-4o-mini")
 
 logger.info("Starting DEBUG FastAPI app - VERSION 2.0")
 
