@@ -417,6 +417,9 @@ def update_environment_variable(key: str, value: str, admin_user = Depends(get_a
             "MAIL_FROM",
             "MAIL_SERVER",
             "MAIL_PORT",
+            "OPENAI_MODEL_NAME",
+            "OPENAI_DEFAULT_MODEL",
+            "OPENAI_IMAGE_MODEL_NAME",
         ]
         
         if key not in editable_vars:
@@ -923,6 +926,13 @@ def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_
             db.commit()
             db.refresh(setting)
             logger.info(f"✅ Updated system setting: {setting_key}")
+
+            if setting_key.startswith("env_"):
+                try:
+                    from env_override import refresh_env_overrides
+                    refresh_env_overrides()
+                except Exception as refresh_err:
+                    logger.warning("Could not refresh env overrides after env_* update: %s", refresh_err)
             
             # Clear cache if this is the topic extraction prompt
             if setting_key == "topic_extraction_prompt":
@@ -942,6 +952,13 @@ def update_system_setting(setting_key: str, setting_data: Dict[str, Any], admin_
             db.commit()
             db.refresh(setting)
             logger.info(f"✅ Created new system setting: {setting_key}")
+
+            if setting_key.startswith("env_"):
+                try:
+                    from env_override import refresh_env_overrides
+                    refresh_env_overrides()
+                except Exception as refresh_err:
+                    logger.warning("Could not refresh env overrides after env_* create: %s", refresh_err)
         
         return {
             "status": "success",
