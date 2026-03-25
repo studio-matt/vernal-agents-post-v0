@@ -1471,7 +1471,7 @@ async def facebook_auth_v2(
         
         app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
         app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
-        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://machine.vernalcontentum.com/facebook/callback")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("FACEBOOK_REDIRECT_URI", "https://themachine.vernalcontentum.com/facebook/callback")
         
         if not app_id or not app_secret:
             raise HTTPException(
@@ -1712,7 +1712,7 @@ async def instagram_auth_v2(
         
         app_id = app_id_setting.setting_value if app_id_setting and app_id_setting.setting_value else os.getenv("FACEBOOK_APP_ID")
         app_secret = app_secret_setting.setting_value if app_secret_setting and app_secret_setting.setting_value else os.getenv("FACEBOOK_APP_SECRET")
-        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://machine.vernalcontentum.com/instagram/callback")
+        redirect_uri = redirect_uri_setting.setting_value if redirect_uri_setting and redirect_uri_setting.setting_value else os.getenv("INSTAGRAM_REDIRECT_URI", "https://themachine.vernalcontentum.com/instagram/callback")
         
         if not app_id or not app_secret:
             logger.error("❌ Instagram OAuth: Application credentials not configured in Admin Settings")
@@ -1857,35 +1857,36 @@ def build_oauth_error_url(
     platform: str = "instagram",
     additional_debug: dict = None
 ) -> str:
-    """Build a comprehensive OAuth error URL with all debug information"""
-    query_params = dict(additional_debug) if additional_debug else {}
-    query_params.update({
-        "error": error,
-        "error_description": error_description or "",
-        "error_code": error_code or "",
-        "error_reason": error_reason or "",
-        "state": state or "",
-        "platform": platform,
-    })
-    
-    # Build debug info JSON
-    debug_info = {
-        "error": error,
-        "error_code": error_code,
-        "error_description": error_description,
-        "error_reason": error_reason,
-        "state": state,
-        "platform": platform,
-        "timestamp": datetime.now().isoformat(),
-        **query_params
-    }
-    
-    query_params["debug_info"] = json.dumps(debug_info, indent=2)
-    
-    # URL encode all parameters
-    error_query = "&".join([f"{k}={requests.utils.quote(str(v))}" for k, v in query_params.items() if v])
-    
-    return f"https://themachine.vernalcontentum.com/oauth-error?{error_query}"
+    """Send the user back to Machine account settings with a short query string.
+
+    Huge debug payloads in the URL can hit nginx/proxy limits (414) and appear as 502/empty pages.
+    Full details are logged server-side only.
+    """
+    from urllib.parse import quote_plus
+
+    if additional_debug:
+        try:
+            logger.warning(
+                "OAuth error debug (%s): %s",
+                error,
+                json.dumps(additional_debug, default=str)[:4000],
+            )
+        except Exception:
+            logger.warning("OAuth error debug (%s): <unserializable>", error)
+
+    parts = [error_description or "", error_reason or ""]
+    if error_code:
+        parts.append(f"(code {error_code})")
+    message = " ".join(p for p in parts if p).strip() or error
+    message = message[:500]
+
+    q = (
+        "oauth_error=1"
+        f"&platform={quote_plus(platform)}"
+        f"&error={quote_plus(error)}"
+        f"&message={quote_plus(message)}"
+    )
+    return f"https://machine.vernalcontentum.com/account-settings?{q}"
 
 @platforms_router.get("/instagram/callback")
 async def instagram_callback(
@@ -1925,9 +1926,14 @@ async def instagram_callback(
             logger.error(f"❌ Error building OAuth error URL: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            # Fallback to simple error redirect
-            safe_error_desc = (error_description or "OAuth error occurred").replace(" ", "%20")
-            return RedirectResponse(url=f"https://themachine.vernalcontentum.com/oauth-error?error={error}&error_description={safe_error_desc}&error_code={error_code or ''}&error_reason={error_reason or ''}&platform=instagram&state={state or ''}")
+            return RedirectResponse(url=build_oauth_error_url(
+                error=error,
+                error_description=error_description or "OAuth error occurred",
+                error_code=error_code or "",
+                error_reason=error_reason or "",
+                state=state or "",
+                platform="instagram",
+            ))
     
     # If no code, that's also an error
     if not code:
@@ -2338,7 +2344,7 @@ async def instagram_callback(
         logger.info(f"✅ Instagram connection successful for user {user_id}")
         logger.info(f"📝 Stored user's Instagram Business Account ID: {instagram_business_account_id} (numeric ID for posting)")
         logger.info(f"📝 Note: This is the USER's Instagram Business Account ID, not the application's App ID")
-        return RedirectResponse(url="https://themachine.vernalcontentum.com/account-settings?instagram=connected")
+        return RedirectResponse(url="https://machine.vernalcontentum.com/account-settings?instagram=connected")
     except HTTPException:
         raise
     except Exception as e:

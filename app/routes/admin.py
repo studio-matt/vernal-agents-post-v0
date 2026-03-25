@@ -256,12 +256,12 @@ def check_environment_variables(admin_user = Depends(get_admin_user)):
             "FACEBOOK_REDIRECT_URI": {
                 "description": "Facebook OAuth redirect URI",
                 "required": False,
-                "default": "https://machine.vernalcontentum.com/facebook/callback"
+                "default": "https://themachine.vernalcontentum.com/facebook/callback"
             },
             "INSTAGRAM_REDIRECT_URI": {
                 "description": "Instagram OAuth redirect URI",
                 "required": False,
-                "default": "https://machine.vernalcontentum.com/instagram/callback"
+                "default": "https://themachine.vernalcontentum.com/instagram/callback"
             },
         },
         # Guardrails Configuration
