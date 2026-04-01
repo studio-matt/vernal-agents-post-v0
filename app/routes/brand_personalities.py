@@ -1766,13 +1766,18 @@ async def generate_campaign_content(
                             CONTENT_GEN_TASKS[tid]["error"] = result.get("error") or "Unknown error"
                             CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {CONTENT_GEN_TASKS[tid]['error']}"
                         elif status_val == "success":
-                            # Always mark task completed when generation succeeded (so frontend gets result and can save)
+                            wants_image = req_data.get("generate_image", False)
                             if tid in CONTENT_GEN_TASKS:
-                                CONTENT_GEN_TASKS[tid]["progress"] = 100
-                                CONTENT_GEN_TASKS[tid]["status"] = "completed"
-                                CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
-                            if req_data.get("generate_image", False):
-                                # Batch/single piece with image: persist copy then generate image in same task (like generate-day)
+                                if wants_image:
+                                    # Copy done — keep in_progress while image runs so frontend
+                                    # doesn't see a premature "completed" then a reopen.
+                                    CONTENT_GEN_TASKS[tid]["progress"] = 50
+                                    CONTENT_GEN_TASKS[tid]["current_task"] = "Copy generated, preparing image…"
+                                else:
+                                    CONTENT_GEN_TASKS[tid]["progress"] = 100
+                                    CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                                    CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
+                            if wants_image:
                                 week = req_data.get("week", 1)
                                 day = req_data.get("day", "Monday")
                                 platform = (req_data.get("platform") or "linkedin").lower()
@@ -1781,7 +1786,6 @@ async def generate_campaign_content(
                                     session, cid, user_id, week, day, platform, result_data, None
                                 )
                                 if content_id is not None:
-                                    # So frontend can resolve batch-* task keys to the right content item
                                     result_data["id"] = content_id
                                     result_data["database_id"] = content_id
                                 if content_id and not check_deadline():
@@ -1805,11 +1809,11 @@ async def generate_campaign_content(
                                             logger.info(f"✅ generate-content: image saved for content_id={content_id}")
                                         else:
                                             logger.warning("⚠️ generate-content: image generation skipped or failed")
-                                        # Mark task completed so frontend gets status=completed + result (with image_url) and closes modal
-                                        if tid in CONTENT_GEN_TASKS:
-                                            CONTENT_GEN_TASKS[tid]["progress"] = 100
-                                            CONTENT_GEN_TASKS[tid]["status"] = "completed"
-                                            CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
+                                # Always reach terminal state after the image block
+                                if tid in CONTENT_GEN_TASKS and CONTENT_GEN_TASKS[tid].get("status") not in ("completed", "error"):
+                                    CONTENT_GEN_TASKS[tid]["progress"] = 100
+                                    CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                                    CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
                         else:
                             # Unexpected result.status; mark as error so frontend gets a terminal state
                             msg = f"Content generation returned unknown status: {status_val!r}"
