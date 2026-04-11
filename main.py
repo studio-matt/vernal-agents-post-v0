@@ -75,6 +75,13 @@ except Exception as e:
     logger.error(f"❌ Failed to include content router: {e}")
 
 try:
+    from app.routes.content_generation import content_generation_router
+    app.include_router(content_generation_router)
+    logger.info("✅ Content generation router included successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to include content generation router: {e}")
+
+try:
     from app.routes.campaigns import campaigns_router
     app.include_router(campaigns_router)
     logger.info("✅ Campaigns router included successfully")
