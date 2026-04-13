@@ -1536,33 +1536,19 @@ async def facebook_auth_v2(
             logger.info(f"ℹ️ No existing Facebook connection found for user {current_user.id} - proceeding with fresh authorization")
         
         # Build Facebook OAuth URL
-        # CRITICAL: Facebook Pages permissions required for posting
-        # Scopes needed:
-        #   - pages_show_list: To list user's Facebook Pages
-        #   - pages_read_engagement: To read page engagement data
-        #   - pages_manage_posts: To post to Facebook Pages
-        # 
-        # IMPORTANT: Facebook caches permissions on their side. Even if we delete our DB record
-        # and revoke the token, Facebook may still show "You previously logged in" and only grant
-        # basic permissions. The user MUST manually revoke permissions in Facebook Settings:
-        # Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook > 
-        # Find "Vernal Contentum" > Remove
-        # 
-        # auth_type=rerequest forces Facebook to show permission screen again, even if user previously granted permissions
-        # This ensures we get fresh consent for all requested scopes
-        # If user sees "You previously logged in", they MUST click "Continue" to see permission screen
-        # AND ensure they grant ALL requested permissions (especially pages_show_list, pages_read_engagement, pages_manage_posts)
+        # Only request pages_manage_posts — this implicitly grants /me/accounts access
+        # Do NOT request pages_show_list or pages_read_engagement (triggers unnecessary App Review)
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list&"
+            f"scope=pages_manage_posts&"
             f"auth_type=rerequest&"
             f"response_type=code"
         )
         
-        logger.info(f"✅ Facebook auth URL generated with scopes: pages_manage_posts,pages_read_engagement,pages_show_list")
+        logger.info(f"✅ Facebook auth URL generated with scope: pages_manage_posts")
         logger.warning(f"⚠️ CRITICAL: If Facebook shows 'You previously logged in' and only grants 'public_profile':")
         logger.warning(f"   1. User must manually revoke permissions in Facebook Settings:")
         logger.warning(f"      Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook")
@@ -1777,55 +1763,22 @@ async def instagram_auth_v2(
             logger.info(f"ℹ️ No existing Instagram connection found for user {current_user.id} - proceeding with fresh authorization")
         
         # Build Facebook OAuth URL (Instagram uses Facebook OAuth)
-        # CRITICAL: Instagram Business Accounts require Facebook Pages permissions
-        # Scopes needed:
-        #   - pages_show_list: To list user's Facebook Pages
-        #   - pages_read_engagement: To read page engagement data
-        #   - pages_manage_posts: To post to Facebook Pages (required for Instagram)
-        #   - instagram_basic: Basic Instagram access
-        #   - instagram_content_publish: To publish to Instagram
-        # 
-        # CRITICAL ISSUE: If Facebook only grants 'public_profile', it's likely because:
-        #   1. Facebook App is in Development mode - only admins/testers get full permissions
-        #   2. Permissions are not approved by Facebook App Review
-        #   3. User is not an admin/tester of the Facebook App
-        #   4. Facebook caches permissions server-side (even with auth_type=rerequest)
-        # 
-        # SOLUTION:
-        #   A. Check Facebook App Dashboard:
-        #      - Go to developers.facebook.com/apps
-        #      - Select your app
-        #      - Check "App Review" > "Permissions and Features"
-        #      - Ensure pages_show_list, pages_read_engagement, pages_manage_posts are APPROVED
-        #      - If in Development mode, add user as Admin or Tester in "Roles" > "Roles"
-        #   
-        #   B. Manually revoke permissions (if cached):
-        #      - Facebook Settings > Apps and Websites > Logged in with Facebook
-        #      - Find "Vernal Contentum" > Remove
-        #      - Then reconnect
-        # 
-        #   C. When connecting, ensure:
-        #      - User clicks "Continue" on "You previously logged in" dialog
-        #      - User grants ALL requested permissions
-        #      - User has Admin/Editor role on the Facebook Page
+        # Only request the minimum scopes needed:
+        #   - pages_manage_posts: access to /me/accounts + posting (implicitly includes page listing)
+        #   - instagram_basic: read Instagram account info
+        #   - instagram_content_publish: publish to Instagram
+        # Do NOT request pages_show_list or pages_read_engagement (triggers unnecessary App Review)
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={app_id}&"
             f"redirect_uri={redirect_uri}&"
             f"state={state}&"
-            f"scope=pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish&"
+            f"scope=pages_manage_posts,instagram_basic,instagram_content_publish&"
             f"auth_type=rerequest&"
             f"response_type=code"
         )
         
-        logger.info(f"🔗 Instagram OAuth URL generated with scopes: pages_manage_posts,pages_read_engagement,pages_show_list,instagram_basic,instagram_content_publish")
-        logger.warning(f"⚠️ CRITICAL: If Facebook shows 'You previously logged in' and only grants 'public_profile':")
-        logger.warning(f"   1. User must manually revoke permissions in Facebook Settings:")
-        logger.warning(f"      Settings & Privacy > Settings > Apps and Websites > Logged in with Facebook")
-        logger.warning(f"      Find 'Vernal Contentum' > Remove")
-        logger.warning(f"   2. Then try connecting again")
-        logger.warning(f"   3. When Facebook shows permission screen, ensure ALL permissions are granted")
-        logger.warning(f"   4. Check Facebook App is in correct mode (Dev vs Live) and user is admin/tester")
+        logger.info(f"🔗 Instagram OAuth URL generated with scopes: pages_manage_posts,instagram_basic,instagram_content_publish")
         
         if existing_connection:
             logger.info(f"🗑️ Connection deleted and auth URL generated for user {current_user.id} (Facebook may still show 'previously logged in' due to their caching)")
@@ -2051,7 +2004,7 @@ async def instagram_callback(
             logger.info(f"📋 Token info: {json.dumps(token_info, indent=2)}")
             
             # Check if we have the required scopes
-            required_scopes = ["pages_show_list", "pages_read_engagement"]
+            required_scopes = ["pages_manage_posts"]
             missing_scopes = [s for s in required_scopes if s not in scopes]
             if missing_scopes:
                 logger.warning(f"⚠️ Missing required scopes: {missing_scopes}")
@@ -2075,7 +2028,7 @@ async def instagram_callback(
             if "permission" in error_message.lower() or "access" in error_message.lower():
                 return RedirectResponse(url=build_oauth_error_url(
                     error="pages_permission",
-                    error_description="Permission denied. Please ensure you grant 'pages_show_list' permission when authorizing the app. Try disconnecting and reconnecting Instagram.",
+                    error_description="Permission denied. Please ensure you grant 'pages_manage_posts' permission when authorizing the app. Try disconnecting and reconnecting Instagram.",
                     state=state or "",
                     platform="instagram",
                     additional_debug={"pages_api_error": error_data, "response_status": pages_response.status_code}
@@ -2099,11 +2052,9 @@ async def instagram_callback(
             logger.warning(f"⚠️ User {user_id} has no Facebook Pages returned by API")
             logger.warning(f"⚠️ This could mean:")
             logger.warning(f"   1. User doesn't have any Facebook Pages")
-            logger.warning(f"   2. Token doesn't have 'pages_show_list' permission")
-            logger.warning(f"   3. User needs to grant page access permissions")
-            logger.warning(f"   4. App is in Development mode and user is not an admin/tester")
-            logger.warning(f"   5. Permissions are not approved in Facebook App Review")
-            logger.warning(f"   6. User is not Admin/Editor on the Facebook Page")
+            logger.warning(f"   2. Token doesn't have pages_manage_posts permission")
+            logger.warning(f"   3. App is in Development mode and user is not an admin/tester")
+            logger.warning(f"   4. User is not Admin/Editor on the Facebook Page")
             
             # Try alternative: check if user has pages via /me/permissions
             granted_permissions = []
@@ -2140,28 +2091,17 @@ async def instagram_callback(
             
             # If still no pages, return error
             if len(pages) == 0:
-                missing_perms = []
-                if "pages_show_list" not in granted_permissions:
-                    missing_perms.append("pages_show_list")
-                if "pages_read_engagement" not in granted_permissions:
-                    missing_perms.append("pages_read_engagement")
+                has_manage_posts = "pages_manage_posts" in granted_permissions
                 
                 error_msg = "No Facebook Pages found. "
-                if missing_perms:
-                    error_msg += f"Missing permissions: {', '.join(missing_perms)}. "
-                error_msg += "CRITICAL: Facebook is only granting 'public_profile' instead of pages permissions. "
-                error_msg += "This usually means: 1) Facebook App is in Development mode (only admins/testers get full permissions), "
-                error_msg += "2) Permissions are not approved in Facebook App Review, "
-                error_msg += "3) User is not an admin/tester of the Facebook App, "
-                error_msg += "4) Facebook caches permissions server-side. "
-                error_msg += "SOLUTION: A) Check Facebook App Dashboard (developers.facebook.com/apps): "
-                error_msg += "Go to App Review > Permissions and Features, ensure pages_show_list, pages_read_engagement, pages_manage_posts are APPROVED. "
-                error_msg += "If in Development mode, add user as Admin or Tester in Roles > Roles. "
-                error_msg += "B) Manually revoke permissions: Facebook Settings > Apps and Websites > Logged in with Facebook, "
-                error_msg += "Find 'Vernal Contentum' > Remove. "
-                error_msg += "C) Create a Facebook Page at facebook.com/pages/create (if you don't have one). "
-                error_msg += "D) Link your Instagram Business Account to that Page in Instagram Settings > Account > Linked Accounts. "
-                error_msg += "E) Disconnect and reconnect Instagram here, ensuring you grant ALL requested permissions when Facebook shows the permission screen."
+                if not has_manage_posts:
+                    error_msg += "Missing pages_manage_posts permission. "
+                error_msg += "This usually means: 1) User does not manage any Facebook Pages, "
+                error_msg += "2) Facebook App is in Development mode (only admins/testers get full permissions), "
+                error_msg += "3) Permissions are not approved in Facebook App Review. "
+                error_msg += "SOLUTION: A) Create a Facebook Page at facebook.com/pages/create. "
+                error_msg += "B) Link your Instagram Business Account to that Page. "
+                error_msg += "C) Disconnect and reconnect, ensuring you grant all requested permissions."
                 
                 return RedirectResponse(url=build_oauth_error_url(
                     error="no_pages",
@@ -2269,7 +2209,7 @@ async def instagram_callback(
                 
                 # Check if it's a permissions issue
                 if "permission" in error_message.lower() or "access" in error_message.lower():
-                    logger.error(f"❌ Permission issue accessing page '{page_name}'. User may need to grant 'pages_show_list' and 'pages_read_engagement' permissions.")
+                    logger.error(f"❌ Permission issue accessing page '{page_name}'. User may need to grant 'pages_manage_posts' permission.")
         
         if not instagram_business_account_id:
             logger.warning(f"⚠️ No Instagram Business Account found for user {user_id} across {len(pages)} Facebook Pages")
@@ -2489,8 +2429,6 @@ async def instagram_debug(
                     
                     # Check for missing required permissions
                     required_permissions = [
-                        "pages_show_list",
-                        "pages_read_engagement", 
                         "pages_manage_posts",
                         "instagram_basic",
                         "instagram_content_publish"

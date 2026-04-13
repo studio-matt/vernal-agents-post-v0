@@ -838,7 +838,7 @@ async def post_content_now(
                     
                     # Check if it's a permissions issue
                     if "permission" in error_message.lower() or error_code in ["200", "10"]:
-                        detail = f"Missing Facebook permissions. The error was: {error_message}. Please disconnect and reconnect your Facebook account, ensuring you grant ALL requested permissions (pages_show_list, pages_read_engagement, pages_manage_posts)."
+                        detail = f"Missing Facebook permissions. The error was: {error_message}. Please disconnect and reconnect your Facebook account, ensuring you grant pages_manage_posts permission."
                     else:
                         detail = f"Failed to get Facebook Pages: {error_message}"
                 except:
@@ -862,7 +862,7 @@ async def post_content_now(
                         granted_perms = [p.get("permission") for p in permissions_data.get("data", []) if p.get("status") == "granted"]
                         logger.info(f"📘 Granted Facebook permissions: {granted_perms}")
                         
-                        required_perms = ["pages_show_list", "pages_read_engagement", "pages_manage_posts"]
+                        required_perms = ["pages_manage_posts"]
                         missing_perms = [p for p in required_perms if p not in granted_perms]
                         
                         if missing_perms:
