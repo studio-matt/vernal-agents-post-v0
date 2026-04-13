@@ -698,7 +698,7 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
     so "Build Campaign Base" is not needed unless you want to re-process.
     """
     try:
-        from models import Campaign, CampaignRawData, CampaignResearchInsights, CampaignResearchData
+        from models import Campaign, CampaignRawData, CampaignResearchInsights, CampaignResearchData, Content
         
         # Get original campaign
         original_campaign = db.query(Campaign).filter(
@@ -747,6 +747,12 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
             gap_analysis_results_json=_safe_get_json(original_campaign, 'gap_analysis_results_json'),
             top_ideas_count=_safe_getattr(original_campaign, 'top_ideas_count') or 10,
         )
+        try:
+            img = _safe_getattr(original_campaign, "image_settings_json", None)
+            if img is not None:
+                new_campaign.image_settings_json = img
+        except (AttributeError, Exception) as e:
+            logger.debug(f"Skipping image_settings_json on duplicate (column may be absent): {e}")
         
         db.add(new_campaign)
         db.flush()  # Flush to get the new campaign ID without committing
@@ -804,9 +810,72 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
             db.add(new_research_data)
             research_data_count = 1
         
+        # Copy generated content items (The Plan / scheduling rows)
+        content_items_count = 0
+        try:
+            original_content_rows = db.query(Content).filter(
+                Content.campaign_id == campaign_id,
+                Content.user_id == current_user.id,
+            ).all()
+            for row in original_content_rows:
+                dup_row = Content(
+                    user_id=current_user.id,
+                    week=row.week,
+                    day=row.day,
+                    content=row.content,
+                    title=row.title,
+                    status=row.status,
+                    date_upload=row.date_upload,
+                    platform=row.platform,
+                    file_name=row.file_name,
+                    file_type=row.file_type,
+                    platform_post_no=row.platform_post_no,
+                    schedule_time=row.schedule_time,
+                    image_url=row.image_url,
+                    campaign_id=new_campaign_id,
+                    is_draft=row.is_draft,
+                    can_edit=row.can_edit,
+                    knowledge_graph_location=row.knowledge_graph_location,
+                    parent_idea=row.parent_idea,
+                    landing_page_url=row.landing_page_url,
+                    post_title=row.post_title,
+                    post_excerpt=row.post_excerpt,
+                    permalink=row.permalink,
+                    category_id=row.category_id,
+                    author_id=row.author_id,
+                    post_url=row.post_url,
+                )
+                db.add(dup_row)
+                content_items_count += 1
+        except Exception as ce:
+            logger.warning(f"Could not copy content items for duplicate: {ce}")
+        
+        # Copy generation logs (optional; table may not exist in all envs)
+        generation_logs_count = 0
+        try:
+            log_rows = db.execute(
+                text(
+                    "SELECT log_text FROM generation_logs WHERE user_id = :uid AND campaign_id = :cid ORDER BY id ASC"
+                ),
+                {"uid": current_user.id, "cid": campaign_id},
+            ).fetchall()
+            for lr in log_rows:
+                db.execute(
+                    text(
+                        "INSERT INTO generation_logs (user_id, campaign_id, log_text) VALUES (:u, :c, :t)"
+                    ),
+                    {"u": current_user.id, "c": new_campaign_id, "t": lr[0]},
+                )
+                generation_logs_count += 1
+        except Exception as ge:
+            logger.warning(f"Could not copy generation_logs for duplicate: {ge}")
+        
         db.commit()
         
-        logger.info(f"✅ Campaign duplicated successfully: {new_campaign_id} (copied {raw_data_count} raw data entries, {insights_count} insights, {research_data_count} research data)")
+        logger.info(
+            f"✅ Campaign duplicated successfully: {new_campaign_id} (raw={raw_data_count}, insights={insights_count}, "
+            f"research_data={research_data_count}, content_items={content_items_count}, gen_logs={generation_logs_count})"
+        )
         
         return {
             "status": "success",
@@ -819,6 +888,8 @@ def duplicate_campaign(campaign_id: str, current_user = Depends(get_current_user
                     "raw_data_entries": raw_data_count,
                     "research_insights": insights_count,
                     "research_data": research_data_count,
+                    "content_items": content_items_count,
+                    "generation_logs": generation_logs_count,
                 }
             }
         }

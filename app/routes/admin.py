@@ -8,9 +8,10 @@ import os
 import secrets
 from datetime import datetime
 from typing import Optional, Dict, Any
+import re
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
-from auth_api import get_admin_user, get_plugin_user
+from auth_api import get_admin_user, get_plugin_user, get_current_user
 from database import SessionLocal
 from app.schemas.models import TransferCampaignRequest
 from dotenv import load_dotenv
@@ -18,6 +19,26 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 admin_router = APIRouter()
+
+# Keys any logged-in user may READ (content planner, account agents UI, helper text).
+# All other GETs still require admin. PUT remains admin-only for all keys.
+_SETTING_KEY_AUTH_READ_PATTERNS = (
+    re.compile(r"^creative_agents_list$"),
+    re.compile(r"^writing_agents_list$"),
+    re.compile(r"^qc_agents_list$"),
+    re.compile(r"^creative_agent_.+"),
+    re.compile(r"^writing_agent_.+"),
+    re.compile(r"^qc_agent_.+"),
+    re.compile(r"^author_personality_.+_global$"),
+    re.compile(r"^brand_personality_.+_global$"),
+    re.compile(r"^helper_text_.+"),
+    re.compile(r"^topic_extraction_method$"),
+)
+
+
+def _setting_key_allows_authenticated_read(setting_key: str) -> bool:
+    return any(p.match(setting_key) for p in _SETTING_KEY_AUTH_READ_PATTERNS)
+
 
 def get_db():
     """Get database session"""
@@ -27,9 +48,25 @@ def get_db():
     finally:
         db.close()
 
+def _require_settings_get_access(setting_key: str, current_user=Depends(get_current_user)):
+    """Allow read for allowlisted keys for any authenticated user; otherwise require admin."""
+    if _setting_key_allows_authenticated_read(setting_key):
+        return current_user
+    if getattr(current_user, "is_admin", False):
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin access required",
+    )
+
+
 @admin_router.get("/admin/settings/{setting_key}")
-def get_system_setting(setting_key: str, admin_user = Depends(get_admin_user), db: Session = Depends(get_db)):
-    """Get a system setting by key - ADMIN ONLY"""
+def get_system_setting(
+    setting_key: str,
+    _user=Depends(_require_settings_get_access),
+    db: Session = Depends(get_db),
+):
+    """Get a system setting by key — authenticated users for UI allowlist; admin for all other keys."""
     try:
         from models import SystemSettings
         setting = db.query(SystemSettings).filter(SystemSettings.setting_key == setting_key).first()

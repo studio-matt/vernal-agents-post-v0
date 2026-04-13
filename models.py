@@ -249,8 +249,7 @@ class Campaign(Base):
     custom_keywords_json = Column(Text, nullable=True)  # JSON string for custom keywords/ideas: ["keyword1", "keyword2"]
     personality_settings_json = Column(Text, nullable=True)  # JSON string for personality settings: {author_personality_id: string, brand_personality_id: string}
     cornerstone_platform = Column(String(50), nullable=True)  # Platform designated as cornerstone (WordPress, Facebook, or LinkedIn) - used to reference cornerstone content in writing agents via {cornerstone} placeholder
-    # image_settings_json = Column(Text, nullable=True)  # JSON string for image generation settings: {style, prompt, color, additionalCreativeAgentId}
-    # NOTE: Column commented out until database migration is run. Access via try-except in code.
+    image_settings_json = Column(Text, nullable=True)  # JSON: {style, prompt, color, additionalCreativeAgentId}; add column in DB if missing (see campaigns route try/except on PUT)
     # Site Builder campaign fields
     site_base_url = Column(String(500), nullable=True)  # Base URL for Site Builder campaigns
     target_keywords_json = Column(Text, nullable=True)  # JSON string for target keywords: ["keyword1", "keyword2"]
