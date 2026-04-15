@@ -6,7 +6,7 @@ import logging
 import json
 import re
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
@@ -27,6 +27,38 @@ def get_db():
 
 # Import get_openai_api_key from utils (moved from main to avoid circular import)
 from app.utils.openai_helpers import get_openai_api_key
+
+
+def _llm_response_to_text(response: Any) -> str:
+    """
+    Normalize LangChain AIMessage (and similar) to plain text.
+    Newer LangChain returns `content` as a list of blocks (e.g. multimodal); reading only
+    `str(response.content)` can yield "" and causes success responses with empty recommendations.
+    """
+    if response is None:
+        return ""
+    if hasattr(response, "content"):
+        c = getattr(response, "content")
+        if isinstance(c, str):
+            return c
+        if isinstance(c, list):
+            parts: List[str] = []
+            for block in c:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict):
+                    t = block.get("text")
+                    if isinstance(t, str):
+                        parts.append(t)
+                    elif t is not None:
+                        parts.append(str(t))
+                else:
+                    parts.append(str(block))
+            return "".join(parts)
+        if c is not None:
+            return str(c)
+    return str(response) if response else ""
+
 
 @campaigns_research_router.get("/campaigns/{campaign_id}/research")
 def get_campaign_research(campaign_id: str, limit: int = 20, current_user = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -2097,7 +2129,22 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
             # Track OpenAI API usage for gas meter
             from gas_meter.openai_wrapper import track_langchain_call
             response = track_langchain_call(llm, model=get_openai_default_model(), prompt=prompt)
-            recommendations_text = response.content if hasattr(response, 'content') else str(response)
+            recommendations_text = _llm_response_to_text(response)
+            recommendations_text = (recommendations_text or "").strip()
+            if not recommendations_text:
+                logger.error(
+                    "LLM returned empty text for research-agent recommendations "
+                    f"(agent_type={agent_type}, campaign_id={campaign_id})"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=(
+                        "The model returned empty insights. Try Re-Run Recommendations, "
+                        "or check the Research Agents prompt and OpenAI key."
+                    ),
+                )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error calling LLM for {agent_type} recommendations: {e}")
             import traceback
