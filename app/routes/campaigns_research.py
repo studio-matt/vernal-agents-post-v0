@@ -2003,15 +2003,20 @@ def get_research_agent_recommendations(
                 CampaignResearchInsights.campaign_id == campaign_id,
                 CampaignResearchInsights.agent_type == agent_type
             ).first()
-            
-            if cached_insight:
+            # Skip empty cache rows — otherwise the UI shows "No insights" with no error detail
+            cached_text = (cached_insight.insights_text or "").strip() if cached_insight else ""
+            if cached_insight and cached_text:
                 logger.info(f"✅ Returning cached {agent_type} insights for campaign {campaign_id}")
                 return {
                     "status": "success",
-                    "recommendations": cached_insight.insights_text,
+                    "recommendations": cached_text,
                     "agent_type": agent_type,
                     "cached": True
                 }
+            if cached_insight and not cached_text:
+                logger.info(
+                    f"Skipping empty cached {agent_type} insights for campaign {campaign_id}; regenerating"
+                )
         
         # Get raw data for context
         rows = db.query(CampaignRawData).filter(
