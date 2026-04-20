@@ -2109,7 +2109,7 @@ async def instagram_callback(
                     state=state or "",
                     platform="instagram",
                     additional_debug={
-                        "missing_permissions": missing_perms,
+                        "has_pages_manage_posts": has_manage_posts,
                         "granted_permissions": granted_permissions,
                         "pages_count": 0,
                         "token_scopes": scopes if 'scopes' in locals() else []
