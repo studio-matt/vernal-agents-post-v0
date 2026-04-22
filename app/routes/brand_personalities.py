@@ -1561,17 +1561,29 @@ def _persist_generated_content(
     now = datetime.utcnow()
     if now.tzinfo:
         now = now.replace(tzinfo=None)
-    existing = session.query(Content).filter(
-        Content.campaign_id == campaign_id,
-        Content.user_id == user_id,
-        Content.week == week,
-        Content.day == day,
-        Content.platform == platform_lower,
-    ).first()
+    existing = None
+    if item_id is not None:
+        try:
+            existing = session.query(Content).filter(
+                Content.id == int(item_id),
+                Content.campaign_id == campaign_id,
+                Content.user_id == user_id,
+            ).first()
+        except Exception:
+            existing = None
+    if existing is None:
+        existing = session.query(Content).filter(
+            Content.campaign_id == campaign_id,
+            Content.user_id == user_id,
+            Content.week == week,
+            Content.day == day,
+            Content.platform == platform_lower,
+        ).first()
     try:
         if existing:
             existing.content = body or existing.content
             existing.title = title or existing.title
+            # Do not change platform/week/day for existing rows; they define the slot.
             if result_data.get("post_title") is not None:
                 existing.post_title = result_data.get("post_title")
             if result_data.get("post_excerpt") is not None:
@@ -1934,8 +1946,9 @@ async def get_running_content_tasks(
                 "items_done": t.get("items_done", 0),
                 "items_total": t.get("items_total", 0),
             }
+            if t.get("scope"):
+                entry["scope"] = t.get("scope")
             if t.get("scope") == "day":
-                entry["scope"] = "day"
                 entry["week"] = t.get("week", 1)
                 entry["day"] = t.get("day", "Monday")
             running.append(entry)
@@ -1960,6 +1973,16 @@ async def get_content_generation_status(
     """
     try:
         from models import Campaign
+        
+        def _remove_task_from_index(campaign_id: str, task_id: str) -> None:
+            try:
+                raw = CONTENT_GEN_TASK_INDEX.get(campaign_id) or []
+                task_ids = raw if isinstance(raw, list) else ([raw] if raw else [])
+                filtered = [tid for tid in task_ids if tid != task_id]
+                CONTENT_GEN_TASK_INDEX[campaign_id] = filtered
+            except Exception:
+                # Best-effort cleanup only; never break status endpoint.
+                return
         
         # Verify campaign ownership
         campaign = db.query(Campaign).filter(
@@ -2003,6 +2026,10 @@ async def get_content_generation_status(
                 except (ValueError, TypeError) as e:
                     logger.debug(f"Could not parse started_at for task {task_id}: {e}")
         
+        # Ensure terminal tasks do not resurrect after reload.
+        if task_status in ("completed", "error"):
+            _remove_task_from_index(campaign_id, task_id)
+        
         # If task is completed, clear current_agent and current_task
         if task_status == "completed":
             # Clear current agent/task when completed
@@ -2021,7 +2048,8 @@ async def get_content_generation_status(
             "agent_statuses": task.get("agent_statuses", []),
             "error": task.get("error")
         }
-        if task.get("scope") == "day":
+        # Provide batch-style progress counters when available (day, batch, etc.)
+        if task.get("items_total") is not None:
             response["items_done"] = task.get("items_done", 0)
             response["items_total"] = task.get("items_total", 0)
         if task_status == "completed" and task.get("result"):
@@ -2094,6 +2122,433 @@ async def generate_day(
         "status": "pending",
         "task_id": task_id,
         "message": "Generate day started. Poll generate-content/status/{task_id} for progress.",
+    }
+
+
+@brand_personalities_router.post("/campaigns/{campaign_id}/generate-piece")
+async def generate_piece(
+    campaign_id: str,
+    request_data: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate copy + image for a single content row (one plan slot), persist both to DB, return task_id.
+    Body: { content_item_id, platform, week, day, parent_idea?, content_queue_items?, author_personality_id?, brand_personality_id?, platformSettings?, image_settings?, generate_image? }.
+    """
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    content_item_id = request_data.get("content_item_id") or request_data.get("id")
+    if content_item_id is None:
+        raise HTTPException(status_code=400, detail="content_item_id is required")
+    task_id = str(uuid.uuid4())
+    CONTENT_GEN_TASKS[task_id] = {
+        "campaign_id": campaign_id,
+        "platform": request_data.get("platform", "linkedin"),
+        "started_at": datetime.utcnow().isoformat(),
+        "progress": 0,
+        "status": "pending",
+        "current_agent": None,
+        "current_task": "Initializing generate-piece",
+        "agent_statuses": [],
+        "error": None,
+        "result": None,
+        "scope": "piece",
+    }
+    if campaign_id not in CONTENT_GEN_TASK_INDEX:
+        CONTENT_GEN_TASK_INDEX[campaign_id] = []
+    CONTENT_GEN_TASK_INDEX[campaign_id].append(task_id)
+
+    def _run_generate_piece_background(tid: str, cid: str, user_id: int, req: Dict[str, Any]):
+        from database import SessionLocal
+        session = SessionLocal()
+        try:
+            week = req.get("week", 1)
+            day = req.get("day", "Monday")
+            platform = (req.get("platform") or "linkedin").lower()
+            author_personality_id = req.get("author_personality_id")
+            brand_personality_id = req.get("brand_personality_id")
+            platform_settings = req.get("platformSettings") or req.get("platform_settings") or {}
+            generate_image = req.get("generate_image", True)
+
+            def update_task_status(agent=None, task=None, progress=None, status=None, error=None, agent_status="running"):
+                if tid not in CONTENT_GEN_TASKS:
+                    return
+                t = CONTENT_GEN_TASKS[tid]
+                if agent:
+                    t["current_agent"] = agent
+                if task:
+                    t["current_task"] = task
+                if progress is not None:
+                    t["progress"] = progress
+                if status:
+                    t["status"] = status
+                if error:
+                    t["error"] = error
+                    t["status"] = "error"
+                if agent:
+                    t["agent_statuses"].append({
+                        "agent": agent,
+                        "task": task or "Processing",
+                        "status": agent_status,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "error": error,
+                    })
+
+            def check_deadline() -> bool:
+                if tid not in CONTENT_GEN_TASKS:
+                    return True
+                started_at_str = CONTENT_GEN_TASKS[tid].get("started_at")
+                if not started_at_str:
+                    return False
+                try:
+                    started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+                    from datetime import timezone
+                    elapsed = (datetime.now(timezone.utc) - started_at).total_seconds() if started_at.tzinfo else (datetime.utcnow() - started_at).total_seconds()
+                    if elapsed >= max(0, MAX_CONTENT_GEN_DURATION_SEC - 60):
+                        msg = f"Task exceeded maximum duration ({MAX_CONTENT_GEN_DURATION_SEC // 60} min)"
+                        CONTENT_GEN_TASKS[tid]["status"] = "error"
+                        CONTENT_GEN_TASKS[tid]["error"] = msg
+                        CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
+                        return True
+                except (ValueError, TypeError):
+                    pass
+                return False
+
+            def normalize_result_data(data: dict):
+                if not data:
+                    return data
+                body = (data.get("final_content") or data.get("content") or data.get("quality_control") or data.get("writing") or "")
+                if isinstance(body, dict):
+                    body = body.get("content") or body.get("text") or body.get("raw") or str(body)
+                body = str(body) if body else ""
+                if not data.get("final_content") and body:
+                    data["final_content"] = body
+                if not data.get("content") and body:
+                    data["content"] = body
+                return data
+
+            update_task_status(agent="Generate Piece", task="Generating copy", progress=5, status="in_progress")
+            req_data = {
+                "platform": platform,
+                "week": week,
+                "day": day,
+                "parent_idea": req.get("parent_idea") or "",
+                "content_queue_items": req.get("content_queue_items") or [],
+                "content_item_type": req.get("content_item_type") or req.get("type") or "secondary",
+                "author_personality_id": author_personality_id,
+                "brand_personality_id": brand_personality_id,
+                "platformSettings": platform_settings,
+                "use_author_voice": req.get("use_author_voice", True),
+                "use_validation": req.get("use_validation", False),
+                "generate_image": False,
+            }
+            result = do_one_content_generation(
+                session, cid, user_id, req_data, tid,
+                update_task_status, check_deadline, normalize_result_data,
+            )
+            if not result or result.get("status") != "success":
+                err = (result or {}).get("error") or "Generation failed"
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    CONTENT_GEN_TASKS[tid]["error"] = err
+                    CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                return
+            data = result.get("data") or {}
+            normalize_result_data(data)
+            content_id = _persist_generated_content(
+                session, cid, user_id, week, day, platform, data, str(content_item_id),
+            )
+            if content_id is not None:
+                data["id"] = content_id
+                data["database_id"] = content_id
+            if generate_image and content_id and not check_deadline():
+                update_task_status(agent="Generate Piece", task="Generating image", progress=70, status="in_progress")
+                copy_for_image = data.get("final_content") or data.get("content") or ""
+                if isinstance(copy_for_image, dict):
+                    copy_for_image = copy_for_image.get("content") or copy_for_image.get("text") or str(copy_for_image)
+                image_settings = req.get("image_settings") or req.get("imageSettings")
+                image_url = _generate_image_for_content(session, user_id, str(copy_for_image), image_settings)
+                if image_url:
+                    _set_content_image_url(session, content_id, image_url)
+                    data["image_url"] = image_url
+            if tid in CONTENT_GEN_TASKS:
+                CONTENT_GEN_TASKS[tid]["result"] = {"status": "success", "data": data, "error": None}
+                CONTENT_GEN_TASKS[tid]["progress"] = 100
+                CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                CONTENT_GEN_TASKS[tid]["current_agent"] = None
+                CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
+        except Exception as e:
+            if tid in CONTENT_GEN_TASKS:
+                CONTENT_GEN_TASKS[tid]["status"] = "error"
+                CONTENT_GEN_TASKS[tid]["error"] = str(e)
+                CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {str(e)}"
+        finally:
+            session.close()
+
+    import threading
+    thread = threading.Thread(
+        target=_run_generate_piece_background,
+        args=(task_id, campaign_id, current_user.id, request_data),
+        daemon=True,
+    )
+    thread.start()
+    return {
+        "status": "pending",
+        "task_id": task_id,
+        "message": "Generate piece started. Poll generate-content/status/{task_id} for progress.",
+    }
+
+
+@brand_personalities_router.post("/campaigns/{campaign_id}/generate-batch")
+async def generate_batch(
+    campaign_id: str,
+    request_data: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate copy + image for an ordered list of content rows (plan slots), persist as it goes, return one task_id.
+    Body:
+      {
+        items: [ { content_item_id, platform, week, day, type, title?, parent_idea?, content_queue_items?, generate_image? } ],
+        author_personality_id?, brand_personality_id?, platformSettings?, image_settings?
+      }
+    """
+    from models import Campaign
+    campaign = db.query(Campaign).filter(
+        Campaign.campaign_id == campaign_id,
+        Campaign.user_id == current_user.id,
+    ).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    items = request_data.get("items") or []
+    if not isinstance(items, list) or len(items) == 0:
+        raise HTTPException(status_code=400, detail="items (ordered list) is required")
+
+    task_id = str(uuid.uuid4())
+    CONTENT_GEN_TASKS[task_id] = {
+        "campaign_id": campaign_id,
+        "platform": request_data.get("platform", "linkedin"),
+        "started_at": datetime.utcnow().isoformat(),
+        "progress": 0,
+        "status": "pending",
+        "current_agent": None,
+        "current_task": "Initializing generate-batch",
+        "agent_statuses": [],
+        "error": None,
+        "result": None,
+        "scope": "batch",
+        "items_total": len(items),
+        "items_done": 0,
+    }
+    if campaign_id not in CONTENT_GEN_TASK_INDEX:
+        CONTENT_GEN_TASK_INDEX[campaign_id] = []
+    CONTENT_GEN_TASK_INDEX[campaign_id].append(task_id)
+
+    def _run_generate_batch_background(tid: str, cid: str, user_id: int, req: Dict[str, Any]):
+        from database import SessionLocal
+        session = SessionLocal()
+        try:
+            author_personality_id = req.get("author_personality_id")
+            brand_personality_id = req.get("brand_personality_id")
+            platform_settings = req.get("platformSettings") or req.get("platform_settings") or {}
+            image_settings_global = req.get("image_settings") or req.get("imageSettings")
+            batch_items = req.get("items") or []
+            total = len(batch_items)
+            completed = 0
+
+            def update_task_status(agent=None, task=None, progress=None, status=None, error=None, agent_status="running"):
+                if tid not in CONTENT_GEN_TASKS:
+                    return
+                t = CONTENT_GEN_TASKS[tid]
+                if agent:
+                    t["current_agent"] = agent
+                if task:
+                    t["current_task"] = task
+                if progress is not None:
+                    t["progress"] = progress
+                if status:
+                    t["status"] = status
+                if error:
+                    t["error"] = error
+                    t["status"] = "error"
+                if agent:
+                    t["agent_statuses"].append({
+                        "agent": agent,
+                        "task": task or "Processing",
+                        "status": agent_status,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "error": error,
+                    })
+
+            def check_deadline() -> bool:
+                if tid not in CONTENT_GEN_TASKS:
+                    return True
+                started_at_str = CONTENT_GEN_TASKS[tid].get("started_at")
+                if not started_at_str:
+                    return False
+                try:
+                    started_at = datetime.fromisoformat(started_at_str.replace("Z", "+00:00"))
+                    from datetime import timezone
+                    elapsed = (datetime.now(timezone.utc) - started_at).total_seconds() if started_at.tzinfo else (datetime.utcnow() - started_at).total_seconds()
+                    if elapsed >= max(0, MAX_CONTENT_GEN_DURATION_SEC - 60):
+                        msg = f"Task exceeded maximum duration ({MAX_CONTENT_GEN_DURATION_SEC // 60} min)"
+                        CONTENT_GEN_TASKS[tid]["status"] = "error"
+                        CONTENT_GEN_TASKS[tid]["error"] = msg
+                        CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {msg}"
+                        return True
+                except (ValueError, TypeError):
+                    pass
+                return False
+
+            def normalize_result_data(data: dict):
+                if not data:
+                    return data
+                body = (data.get("final_content") or data.get("content") or data.get("quality_control") or data.get("writing") or "")
+                if isinstance(body, dict):
+                    body = body.get("content") or body.get("text") or body.get("raw") or str(body)
+                body = str(body) if body else ""
+                if not data.get("final_content") and body:
+                    data["final_content"] = body
+                if not data.get("content") and body:
+                    data["content"] = body
+                return data
+
+            update_task_status(agent="Generate Batch", task=f"Starting batch of {total}", progress=1, status="in_progress")
+
+            cornerstone_content = None
+            cornerstone_permalink = None
+            cornerstone_post_title = None
+            current_day_key = None
+
+            for idx, item in enumerate(batch_items):
+                if check_deadline():
+                    return
+                platform = (item.get("platform") or "linkedin").lower()
+                week = item.get("week", 1)
+                day = item.get("day", "Monday")
+                item_type = (item.get("type") or item.get("content_item_type") or "secondary").lower()
+                content_item_id = item.get("content_item_id") or item.get("id")
+                generate_image = item.get("generate_image", True)
+                day_key = f"{week}:{day}"
+                if current_day_key != day_key:
+                    current_day_key = day_key
+                    cornerstone_content = None
+                    cornerstone_permalink = None
+                    cornerstone_post_title = None
+
+                progress_base = int(100 * idx / total) if total else 0
+                update_task_status(
+                    agent="Generate Batch",
+                    task=f"Generating {item_type} ({platform}) — {idx + 1} of {total}",
+                    progress=progress_base,
+                    status="in_progress",
+                )
+
+                content_queue_items = item.get("content_queue_items") or []
+                if item_type == "secondary":
+                    content_queue_items = []
+                elif not content_queue_items and item.get("title"):
+                    content_queue_items = [{"title": item.get("title"), "text": item.get("title")}]
+
+                req_data = {
+                    "platform": platform,
+                    "week": week,
+                    "day": day,
+                    "parent_idea": item.get("parent_idea") or "",
+                    "content_queue_items": content_queue_items,
+                    "content_item_type": item_type,
+                    "author_personality_id": author_personality_id,
+                    "brand_personality_id": brand_personality_id,
+                    "platformSettings": platform_settings,
+                    "use_author_voice": req.get("use_author_voice", True),
+                    "use_validation": req.get("use_validation", False),
+                    "generate_image": False,
+                }
+                if item_type == "secondary" and (cornerstone_content or cornerstone_permalink):
+                    req_data["cornerstone_content"] = cornerstone_content or ""
+                    req_data["cornerstone_permalink"] = cornerstone_permalink or ""
+                    req_data["cornerstone_post_title"] = cornerstone_post_title or ""
+
+                result = do_one_content_generation(
+                    session, cid, user_id, req_data, tid,
+                    update_task_status, check_deadline, normalize_result_data,
+                )
+                if not result or result.get("status") != "success":
+                    err = (result or {}).get("error") or "Generation failed"
+                    if tid in CONTENT_GEN_TASKS:
+                        CONTENT_GEN_TASKS[tid]["status"] = "error"
+                        CONTENT_GEN_TASKS[tid]["error"] = err
+                        CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                    return
+                data = result.get("data") or {}
+                normalize_result_data(data)
+                if item_type == "cornerstone":
+                    body = data.get("final_content") or data.get("content") or ""
+                    if isinstance(body, dict):
+                        body = body.get("content") or body.get("text") or str(body)
+                    cornerstone_content = str(body) if body else ""
+                    cornerstone_permalink = data.get("permalink") or ""
+                    cornerstone_post_title = data.get("post_title") or ""
+
+                content_id = _persist_generated_content(
+                    session, cid, user_id, week, day, platform, data, str(content_item_id) if content_item_id is not None else None,
+                )
+                if content_id is not None:
+                    completed += 1
+                    if tid in CONTENT_GEN_TASKS:
+                        CONTENT_GEN_TASKS[tid]["items_done"] = completed
+                    data["id"] = content_id
+                    data["database_id"] = content_id
+
+                if generate_image and content_id and not check_deadline():
+                    copy_for_image = data.get("final_content") or data.get("content") or ""
+                    if isinstance(copy_for_image, dict):
+                        copy_for_image = copy_for_image.get("content") or copy_for_image.get("text") or str(copy_for_image)
+                    copy_for_image = str(copy_for_image) if copy_for_image else ""
+                    if copy_for_image:
+                        update_task_status(
+                            agent="Generate Batch",
+                            task=f"Generating image for {platform} — {idx + 1} of {total}",
+                            progress=min(95, progress_base + 5),
+                            status="in_progress",
+                        )
+                        image_settings = item.get("image_settings") or item.get("imageSettings") or image_settings_global
+                        image_url = _generate_image_for_content(session, user_id, copy_for_image, image_settings)
+                        if image_url:
+                            _set_content_image_url(session, content_id, image_url)
+
+            if tid in CONTENT_GEN_TASKS:
+                CONTENT_GEN_TASKS[tid]["result"] = {"status": "success", "data": {"items_completed": completed}, "error": None}
+                CONTENT_GEN_TASKS[tid]["progress"] = 100
+                CONTENT_GEN_TASKS[tid]["status"] = "completed"
+                CONTENT_GEN_TASKS[tid]["current_agent"] = None
+                CONTENT_GEN_TASKS[tid]["current_task"] = "Content generation completed"
+        except Exception as e:
+            if tid in CONTENT_GEN_TASKS:
+                CONTENT_GEN_TASKS[tid]["status"] = "error"
+                CONTENT_GEN_TASKS[tid]["error"] = str(e)
+                CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {str(e)}"
+        finally:
+            session.close()
+
+    import threading
+    thread = threading.Thread(
+        target=_run_generate_batch_background,
+        args=(task_id, campaign_id, current_user.id, request_data),
+        daemon=True,
+    )
+    thread.start()
+    return {
+        "status": "pending",
+        "task_id": task_id,
+        "message": "Generate batch started. Poll generate-content/status/{task_id} for progress.",
     }
 
 
