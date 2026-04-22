@@ -30,7 +30,7 @@ from app.utils.openai_helpers import get_openai_api_key
 
 
 def _extract_block_text(block: Any) -> str:
-    """Pull human-readable text from one LangChain / OpenAI content block."""
+    """Pull human-readable text from one LangChain / OpenAI content block (incl. nested typed dicts)."""
     if block is None:
         return ""
     if isinstance(block, str):
@@ -40,28 +40,68 @@ def _extract_block_text(block: Any) -> str:
         if isinstance(t, str) and t.strip():
             return t
     if isinstance(block, dict):
-        for key in ("text", "output_text", "value"):
+        ref = block.get("refusal")
+        if isinstance(ref, str) and ref.strip():
+            return ref
+        for key in ("text", "output_text", "value", "input_text"):
             v = block.get(key)
             if isinstance(v, str) and v.strip():
                 return v
-            if isinstance(v, list):
+            if isinstance(v, dict):
+                inner = _extract_block_text(v)
+                if inner.strip():
+                    return inner
+            if isinstance(v, (list, tuple)):
                 inner = "".join(_extract_block_text(x) for x in v)
                 if inner.strip():
                     return inner
         nested = block.get("content")
         if isinstance(nested, str) and nested.strip():
             return nested
-        if isinstance(nested, list):
+        if isinstance(nested, (list, tuple)):
             return "".join(_extract_block_text(x) for x in nested)
+        return ""
+    if isinstance(block, (list, tuple)):
+        return "".join(_extract_block_text(x) for x in block)
     return str(block) if block else ""
+
+
+def _unwrap_lc_invoke_output(response: Any) -> Any:
+    """Normalize invoke() return value to a single message-like object when possible."""
+    if response is None:
+        return None
+    if isinstance(response, (list, tuple)) and len(response) == 1:
+        return response[0]
+    if hasattr(response, "generations") and response.generations:
+        try:
+            row = response.generations[0]
+            if row:
+                g0 = row[0]
+                if hasattr(g0, "message") and g0.message is not None:
+                    return g0.message
+                if hasattr(g0, "text") and isinstance(g0.text, str) and g0.text.strip():
+
+                    class _TextPayload:
+                        __slots__ = ("content",)
+
+                        def __init__(self, t: str):
+                            self.content = t
+
+                    return _TextPayload(g0.text)
+        except (IndexError, TypeError, AttributeError):
+            pass
+    return response
 
 
 def _llm_response_to_text(response: Any) -> str:
     """
     Normalize LangChain AIMessage (and similar) to plain text.
-    Newer LangChain / OpenAI responses use `content` as a list of blocks (multimodal, typed dicts);
-    reading only `str(response.content)` can yield "" and triggers false "empty insights" errors.
+    Handles str content, list/tuple multimodal blocks (incl. nested ``text: {value: ...}``),
+    LLMResult-style wrappers, refusals on ``additional_kwargs``, and singleton message lists.
     """
+    if response is None:
+        return ""
+    response = _unwrap_lc_invoke_output(response)
     if response is None:
         return ""
     for attr in ("text", "output_text"):
@@ -71,17 +111,22 @@ def _llm_response_to_text(response: Any) -> str:
                 return v
     if hasattr(response, "content"):
         c = getattr(response, "content")
-        if isinstance(c, str):
+        if isinstance(c, str) and c.strip():
             return c
-        if isinstance(c, list):
+        if isinstance(c, (list, tuple)):
             parts = [_extract_block_text(block) for block in c]
             joined = "".join(parts)
             if joined.strip():
                 return joined
-        if c is not None:
+        if c is not None and not isinstance(c, (list, tuple)):
             s = str(c)
-            if s.strip():
+            if s.strip() and s not in ("[]", "()", "{}"):
                 return s
+    add_kw = getattr(response, "additional_kwargs", None)
+    if isinstance(add_kw, dict):
+        ref = add_kw.get("refusal")
+        if isinstance(ref, str) and ref.strip():
+            return ref
     return str(response) if response else ""
 
 
@@ -2145,36 +2190,42 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         
         try:
             from langchain_openai import ChatOpenAI
-            from langchain_core.messages import HumanMessage
 
+            model_name = get_openai_default_model()
             llm = ChatOpenAI(
-                model=get_openai_default_model(), 
-                api_key=api_key, 
-                temperature=0.4, 
-                max_tokens=1000
+                model=model_name,
+                api_key=api_key,
+                temperature=0.4,
+                # Keyword / topical / hashtag insights can be long; avoid truncation to blank edge cases
+                max_tokens=4096,
             )
-            # Track OpenAI API usage for gas meter
+            # Plain string input avoids HumanMessage + multimodal edge cases with invoke()
             from gas_meter.openai_wrapper import track_langchain_call
+
             response = track_langchain_call(
                 llm,
-                model=get_openai_default_model(),
-                prompt=HumanMessage(content=prompt),
+                model=model_name,
+                prompt=prompt,
             )
             recommendations_text = _llm_response_to_text(response)
             recommendations_text = (recommendations_text or "").strip()
             if not recommendations_text:
+                meta = getattr(response, "response_metadata", None) or {}
+                finish = meta.get("finish_reason") if isinstance(meta, dict) else None
                 logger.error(
                     "LLM returned empty text for research-agent recommendations "
                     f"(agent_type={agent_type}, campaign_id={campaign_id}) "
                     f"response_type={type(response).__name__} "
                     f"content_repr={repr(getattr(response, 'content', None))[:2500]} "
-                    f"response_metadata={getattr(response, 'response_metadata', None)}"
+                    f"response_metadata={meta}"
                 )
+                suffix = f" finish_reason={finish!r}" if finish else ""
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=(
                         "The model returned empty insights. Try Re-Run Recommendations, "
                         "or check the Research Agents prompt and OpenAI key."
+                        f"{suffix}"
                     ),
                 )
         except HTTPException:
