@@ -4,9 +4,10 @@ Moved from main.py to preserve API contract parity
 """
 import logging
 import json
+import re
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, HTTPException, Depends, status, Body
 from sqlalchemy.orm import Session
 from auth_api import get_current_user
@@ -1530,6 +1531,27 @@ def _generate_image_for_content(
         return None
 
 
+def _normalize_content_item_id(raw: Any) -> Optional[str]:
+    """Return numeric DB id as string, or None. Accepts int or composite frontend ids ending in -{dbid}."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    if re.match(r"^\d+$", s):
+        return s
+    m = re.search(r"-(\d+)$", s)
+    if m:
+        return m.group(1)
+    try:
+        n = int(s, 10)
+        if n > 0:
+            return str(n)
+    except ValueError:
+        pass
+    return None
+
+
 def _persist_generated_content(
     session,
     campaign_id: str,
@@ -1538,7 +1560,7 @@ def _persist_generated_content(
     day: str,
     platform: str,
     result_data: Dict[str, Any],
-    item_id: Optional[str] = None,
+    item_id: Optional[Union[str, int]] = None,
 ) -> Optional[int]:
     """
     Persist one generated content piece to the Content table (find-or-create/update).
@@ -1561,24 +1583,49 @@ def _persist_generated_content(
     now = datetime.utcnow()
     if now.tzinfo:
         now = now.replace(tzinfo=None)
+    normalized_item_id = _normalize_content_item_id(item_id)
     existing = None
-    if item_id is not None:
+    if normalized_item_id is not None:
         try:
             existing = session.query(Content).filter(
-                Content.id == int(item_id),
+                Content.id == int(normalized_item_id),
                 Content.campaign_id == campaign_id,
                 Content.user_id == user_id,
             ).first()
         except Exception:
             existing = None
+        if existing is None:
+            logger.error(
+                "Persist: no Content row for id=%s (campaign=%s user=%s)",
+                normalized_item_id,
+                campaign_id,
+                user_id,
+            )
+            return None
     if existing is None:
-        existing = session.query(Content).filter(
-            Content.campaign_id == campaign_id,
-            Content.user_id == user_id,
-            Content.week == week,
-            Content.day == day,
-            Content.platform == platform_lower,
-        ).first()
+        slot_rows = (
+            session.query(Content)
+            .filter(
+                Content.campaign_id == campaign_id,
+                Content.user_id == user_id,
+                Content.week == week,
+                Content.day == day,
+                Content.platform == platform_lower,
+            )
+            .all()
+        )
+        if len(slot_rows) > 1:
+            logger.error(
+                "Persist: ambiguous slot week=%s day=%s platform=%s for campaign=%s (%s rows); require content_item_id",
+                week,
+                day,
+                platform_lower,
+                campaign_id,
+                len(slot_rows),
+            )
+            return None
+        if len(slot_rows) == 1:
+            existing = slot_rows[0]
     try:
         if existing:
             existing.content = body or existing.content
@@ -2271,12 +2318,27 @@ async def generate_piece(
                     CONTENT_GEN_TASKS[tid]["error"] = err
                     CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
                 return
+            raw_piece_id = req.get("content_item_id") or req.get("id")
+            norm_piece_id = _normalize_content_item_id(raw_piece_id)
+            if not norm_piece_id:
+                err = "Invalid content_item_id — cannot persist generated copy"
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    CONTENT_GEN_TASKS[tid]["error"] = err
+                    CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                return
             content_id = _persist_generated_content(
-                session, cid, user_id, week, day, platform, data, str(content_item_id),
+                session, cid, user_id, week, day, platform, data, norm_piece_id,
             )
-            if content_id is not None:
-                data["id"] = content_id
-                data["database_id"] = content_id
+            if content_id is None:
+                err = "Failed to persist generated content to the database"
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    CONTENT_GEN_TASKS[tid]["error"] = err
+                    CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                return
+            data["id"] = content_id
+            data["database_id"] = content_id
             if generate_image and content_id and not check_deadline():
                 update_task_status(agent="Generate Piece", task="Generating image", progress=70, status="in_progress")
                 copy_for_image = data.get("final_content") or data.get("content") or ""
@@ -2444,7 +2506,8 @@ async def generate_batch(
                 week = item.get("week", 1)
                 day = item.get("day", "Monday")
                 item_type = (item.get("type") or item.get("content_item_type") or "secondary").lower()
-                content_item_id = item.get("content_item_id") or item.get("id")
+                raw_content_item_id = item.get("content_item_id") or item.get("id")
+                content_item_id = _normalize_content_item_id(raw_content_item_id)
                 generate_image = item.get("generate_image", True)
                 day_key = f"{week}:{day}"
                 if current_day_key != day_key:
@@ -2518,14 +2581,20 @@ async def generate_batch(
                     cornerstone_post_title = data.get("post_title") or ""
 
                 content_id = _persist_generated_content(
-                    session, cid, user_id, week, day, platform, data, str(content_item_id) if content_item_id is not None else None,
+                    session, cid, user_id, week, day, platform, data, content_item_id,
                 )
-                if content_id is not None:
-                    completed += 1
+                if content_id is None:
+                    err = "Failed to persist generated content to the database"
                     if tid in CONTENT_GEN_TASKS:
-                        CONTENT_GEN_TASKS[tid]["items_done"] = completed
-                    data["id"] = content_id
-                    data["database_id"] = content_id
+                        CONTENT_GEN_TASKS[tid]["status"] = "error"
+                        CONTENT_GEN_TASKS[tid]["error"] = err
+                        CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                    return
+                completed += 1
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["items_done"] = completed
+                data["id"] = content_id
+                data["database_id"] = content_id
 
                 if generate_image and content_id and not check_deadline():
                     copy_for_image = data.get("final_content") or data.get("content") or ""
@@ -2729,11 +2798,20 @@ def _run_generate_day_background(tid: str, campaign_id: str, user_id: int, reque
                 cornerstone_content = str(body) if body else ""
                 cornerstone_permalink = data.get("permalink") or ""
                 cornerstone_post_title = data.get("post_title") or ""
+            raw_day_item_id = item.get("id") or item.get("content_item_id")
+            norm_day_item_id = _normalize_content_item_id(raw_day_item_id)
             content_id = _persist_generated_content(
-                session, campaign_id, user_id, week, day, platform, data, item.get("id"),
+                session, campaign_id, user_id, week, day, platform, data, norm_day_item_id,
             )
-            if content_id:
-                completed += 1
+            if content_id is None:
+                err = f"Failed to persist generated content for day item {idx + 1} ({item_type}, {platform})"
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    CONTENT_GEN_TASKS[tid]["error"] = err
+                    CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                logger.warning(f"❌ generate-day persist failed item {idx + 1}: {err}")
+                return
+            completed += 1
             if tid in CONTENT_GEN_TASKS:
                 CONTENT_GEN_TASKS[tid]["items_done"] = completed
             # Image: generate and persist to same content row (integral to day flow)
