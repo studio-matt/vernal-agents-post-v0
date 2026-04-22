@@ -24,6 +24,21 @@ from typing import Callable, Any, Optional
 from gas_meter.tracker import get_gas_meter_tracker
 
 
+def _normalize_langchain_invoke_input(prompt: Any) -> Any:
+    """
+    ChatModel.invoke accepts str, PromptValue, or list of BaseMessages — not a
+    single BaseMessage (raises Invalid input type ... HumanMessage).
+    """
+    try:
+        from langchain_core.messages import BaseMessage
+
+        if isinstance(prompt, BaseMessage):
+            return [prompt]
+    except ImportError:
+        pass
+    return prompt
+
+
 def track_openai_call(
     openai_func: Callable,
     model: str,
@@ -126,6 +141,8 @@ def track_langchain_call(
     tracker = get_gas_meter_tracker()
     import logging
     logger = logging.getLogger(__name__)
+
+    invoke_input = _normalize_langchain_invoke_input(prompt)
     
     # Make the LangChain call with callbacks to capture token usage
     try:
@@ -146,10 +163,10 @@ def track_langchain_call(
         callbacks.append(callback)
         
         # Invoke with callbacks
-        response = llm.invoke(prompt, *args, config={"callbacks": callbacks}, **kwargs)
+        response = llm.invoke(invoke_input, *args, config={"callbacks": callbacks}, **kwargs)
     except Exception as callback_error:
         logger.warning(f"⚠️ Gas Meter: Could not set up callbacks, using direct invoke: {callback_error}")
-        response = llm.invoke(prompt, *args, **kwargs)
+        response = llm.invoke(invoke_input, *args, **kwargs)
         token_usage_data = {}
     
     # Extract token usage from LangChain response
@@ -212,7 +229,7 @@ def track_langchain_call(
             content_length = len(response.content)
             # Rough estimate: ~4 characters per token
             estimated_output_tokens = max(1, content_length // 4)
-            estimated_input_tokens = max(1, len(str(prompt)) // 4)
+            estimated_input_tokens = max(1, len(str(invoke_input)) // 4)
             
             logger.warning(f"⚠️ Gas Meter: No token usage found, estimating from content length. Input: ~{estimated_input_tokens}, Output: ~{estimated_output_tokens}")
             logger.warning(f"⚠️ Gas Meter: Response type: {type(response)}, attributes: {[attr for attr in dir(response) if not attr.startswith('_')]}")
