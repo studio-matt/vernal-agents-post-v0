@@ -2261,6 +2261,16 @@ async def generate_piece(
                 return
             data = result.get("data") or {}
             normalize_result_data(data)
+            body_check = data.get("final_content") or data.get("content") or ""
+            if isinstance(body_check, dict):
+                body_check = body_check.get("content") or body_check.get("text") or str(body_check)
+            if not str(body_check or "").strip():
+                err = "Generated empty content"
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    CONTENT_GEN_TASKS[tid]["error"] = err
+                    CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                return
             content_id = _persist_generated_content(
                 session, cid, user_id, week, day, platform, data, str(content_item_id),
             )
@@ -2489,6 +2499,16 @@ async def generate_batch(
                     return
                 data = result.get("data") or {}
                 normalize_result_data(data)
+                body_check = data.get("final_content") or data.get("content") or ""
+                if isinstance(body_check, dict):
+                    body_check = body_check.get("content") or body_check.get("text") or str(body_check)
+                if not str(body_check or "").strip():
+                    err = "Generated empty content"
+                    if tid in CONTENT_GEN_TASKS:
+                        CONTENT_GEN_TASKS[tid]["status"] = "error"
+                        CONTENT_GEN_TASKS[tid]["error"] = err
+                        CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                    return
                 if item_type == "cornerstone":
                     body = data.get("final_content") or data.get("content") or ""
                     if isinstance(body, dict):
@@ -2691,6 +2711,17 @@ def _run_generate_day_background(tid: str, campaign_id: str, user_id: int, reque
                 return
             data = result.get("data") or {}
             normalize_result_data(data)
+            body_check = data.get("final_content") or data.get("content") or ""
+            if isinstance(body_check, dict):
+                body_check = body_check.get("content") or body_check.get("text") or str(body_check)
+            if not str(body_check or "").strip():
+                err = "Generated empty content"
+                if tid in CONTENT_GEN_TASKS:
+                    CONTENT_GEN_TASKS[tid]["status"] = "error"
+                    CONTENT_GEN_TASKS[tid]["error"] = err
+                    CONTENT_GEN_TASKS[tid]["current_task"] = f"Error: {err}"
+                logger.warning(f"❌ generate-day item {idx + 1} produced empty body")
+                return
             if item_type == "cornerstone":
                 body = data.get("final_content") or data.get("content") or ""
                 if isinstance(body, dict):
