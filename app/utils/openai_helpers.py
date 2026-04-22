@@ -14,49 +14,73 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
+def _looks_like_openai_secret(value: Optional[str]) -> bool:
+    if not value:
+        return False
+    s = value.strip()
+    # OpenAI issued secrets are sk-… and are much longer than placeholders.
+    return s.startswith("sk-") and len(s) >= 20
+
+
 def get_openai_api_key(current_user=None, db: Session = None) -> Optional[str]:
     """
-    Get OpenAI API key with priority:
-    1. User's personal API key (if provided and available)
-    2. Global API key from system_settings table (openai_api_key)
-    3. Environment variable (OPENAI_API_KEY)
-    
+    Resolve the OpenAI API key for LLM calls.
+
+    Default: admin/system key from ``system_settings`` (``openai_api_key``).
+
+    Override: only when the authenticated user has stored a personal key on
+    their account (``User.openai_key``) that looks like a real OpenAI secret.
+
+    Fallback: ``OPENAI_API_KEY`` environment variable.
+
     Args:
-        current_user: Current user object (optional, for user-specific key)
-        db: Database session (optional, for global key lookup)
-    
+        current_user: User ORM instance (optional). Non-user values (e.g. raw
+            ids) are ignored for BYOK so the system key remains the default.
+        db: Database session (optional, required to load the system key).
+
     Returns:
-        API key string or None if not found
+        API key string or None if not found.
     """
-    # Priority 1: User's personal API key
-    if current_user and hasattr(current_user, 'openai_key') and current_user.openai_key:
-        user_key = current_user.openai_key.strip()
-        if user_key and len(user_key) > 50:
-            logger.info(f"✅ Using user's personal OpenAI API key (user_id: {current_user.id})")
-            return user_key
-    
-    # Priority 2: Global API key from system_settings
+    system_key: Optional[str] = None
     if db:
         try:
             from models import SystemSettings
-            global_setting = db.query(SystemSettings).filter(
-                SystemSettings.setting_key == "openai_api_key"
-            ).first()
+
+            global_setting = (
+                db.query(SystemSettings)
+                .filter(SystemSettings.setting_key == "openai_api_key")
+                .first()
+            )
             if global_setting and global_setting.setting_value:
-                global_key = global_setting.setting_value.strip()
-                if global_key and len(global_key) > 50:
-                    logger.info("✅ Using global OpenAI API key from system_settings")
-                    return global_key
+                candidate = global_setting.setting_value.strip()
+                if _looks_like_openai_secret(candidate):
+                    system_key = candidate
         except Exception as e:
-            logger.warning(f"Could not retrieve global API key from database: {e}")
-    
-    # Priority 3: Environment variable
-    env_key = os.getenv("OPENAI_API_KEY")
-    if env_key and len(env_key.strip()) > 50:
-        logger.info("✅ Using OpenAI API key from environment variable")
-        return env_key.strip()
-    
-    logger.warning("⚠️  No OpenAI API key found (user, global, or env)")
+            logger.warning("Could not retrieve global API key from database: %s", e)
+
+    user_key: Optional[str] = None
+    if current_user is not None and hasattr(current_user, "openai_key"):
+        raw = getattr(current_user, "openai_key", None)
+        if raw:
+            candidate = str(raw).strip()
+            if _looks_like_openai_secret(candidate):
+                user_key = candidate
+
+    env_raw = os.getenv("OPENAI_API_KEY")
+    env_key = env_raw.strip() if env_raw and _looks_like_openai_secret(env_raw) else None
+
+    if user_key:
+        uid = getattr(current_user, "id", None)
+        logger.info("Using user-provided OpenAI API key (BYOK override, user_id=%s)", uid)
+        return user_key
+    if system_key:
+        logger.info("Using system OpenAI API key from admin settings")
+        return system_key
+    if env_key:
+        logger.info("Using OpenAI API key from environment variable")
+        return env_key
+
+    logger.warning("No OpenAI API key found (system admin key, user BYOK, or env)")
     return None
 
 

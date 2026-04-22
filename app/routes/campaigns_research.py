@@ -2136,7 +2136,7 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         prompt = prompt_template.format(context=context)
         
         # Call LLM
-        api_key = get_openai_api_key(current_user.id, db)
+        api_key = get_openai_api_key(current_user=current_user, db=db)
         if not api_key:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
