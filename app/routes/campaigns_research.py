@@ -29,34 +29,59 @@ def get_db():
 from app.utils.openai_helpers import get_openai_api_key
 
 
+def _extract_block_text(block: Any) -> str:
+    """Pull human-readable text from one LangChain / OpenAI content block."""
+    if block is None:
+        return ""
+    if isinstance(block, str):
+        return block
+    if hasattr(block, "text"):
+        t = getattr(block, "text", None)
+        if isinstance(t, str) and t.strip():
+            return t
+    if isinstance(block, dict):
+        for key in ("text", "output_text", "value"):
+            v = block.get(key)
+            if isinstance(v, str) and v.strip():
+                return v
+            if isinstance(v, list):
+                inner = "".join(_extract_block_text(x) for x in v)
+                if inner.strip():
+                    return inner
+        nested = block.get("content")
+        if isinstance(nested, str) and nested.strip():
+            return nested
+        if isinstance(nested, list):
+            return "".join(_extract_block_text(x) for x in nested)
+    return str(block) if block else ""
+
+
 def _llm_response_to_text(response: Any) -> str:
     """
     Normalize LangChain AIMessage (and similar) to plain text.
-    Newer LangChain returns `content` as a list of blocks (e.g. multimodal); reading only
-    `str(response.content)` can yield "" and causes success responses with empty recommendations.
+    Newer LangChain / OpenAI responses use `content` as a list of blocks (multimodal, typed dicts);
+    reading only `str(response.content)` can yield "" and triggers false "empty insights" errors.
     """
     if response is None:
         return ""
+    for attr in ("text", "output_text"):
+        if hasattr(response, attr):
+            v = getattr(response, attr, None)
+            if isinstance(v, str) and v.strip():
+                return v
     if hasattr(response, "content"):
         c = getattr(response, "content")
         if isinstance(c, str):
             return c
         if isinstance(c, list):
-            parts: List[str] = []
-            for block in c:
-                if isinstance(block, str):
-                    parts.append(block)
-                elif isinstance(block, dict):
-                    t = block.get("text")
-                    if isinstance(t, str):
-                        parts.append(t)
-                    elif t is not None:
-                        parts.append(str(t))
-                else:
-                    parts.append(str(block))
-            return "".join(parts)
+            parts = [_extract_block_text(block) for block in c]
+            joined = "".join(parts)
+            if joined.strip():
+                return joined
         if c is not None:
-            return str(c)
+            s = str(c)
+            if s.strip():
+                return s
     return str(response) if response else ""
 
 
@@ -2120,6 +2145,8 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
         
         try:
             from langchain_openai import ChatOpenAI
+            from langchain_core.messages import HumanMessage
+
             llm = ChatOpenAI(
                 model=get_openai_default_model(), 
                 api_key=api_key, 
@@ -2128,13 +2155,20 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
             )
             # Track OpenAI API usage for gas meter
             from gas_meter.openai_wrapper import track_langchain_call
-            response = track_langchain_call(llm, model=get_openai_default_model(), prompt=prompt)
+            response = track_langchain_call(
+                llm,
+                model=get_openai_default_model(),
+                prompt=HumanMessage(content=prompt),
+            )
             recommendations_text = _llm_response_to_text(response)
             recommendations_text = (recommendations_text or "").strip()
             if not recommendations_text:
                 logger.error(
                     "LLM returned empty text for research-agent recommendations "
-                    f"(agent_type={agent_type}, campaign_id={campaign_id})"
+                    f"(agent_type={agent_type}, campaign_id={campaign_id}) "
+                    f"response_type={type(response).__name__} "
+                    f"content_repr={repr(getattr(response, 'content', None))[:2500]} "
+                    f"response_metadata={getattr(response, 'response_metadata', None)}"
                 )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

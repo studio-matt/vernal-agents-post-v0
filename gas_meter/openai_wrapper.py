@@ -104,7 +104,7 @@ def track_openai_call(
 def track_langchain_call(
     llm: Any,
     model: str,
-    prompt: str,
+    prompt: Any,
     *args,
     **kwargs
 ) -> Any:
@@ -114,7 +114,7 @@ def track_langchain_call(
     Args:
         llm: LangChain ChatOpenAI instance
         model: Model name (e.g., "gpt-4o-mini")
-        prompt: The prompt to send
+        prompt: Plain string or LangChain message (e.g. HumanMessage) passed to llm.invoke
         *args, **kwargs: Additional arguments for llm.invoke
     
     Returns:
