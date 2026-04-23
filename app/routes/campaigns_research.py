@@ -2213,8 +2213,15 @@ Number of Scraped Texts: {len(texts)}
 Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
 """
         
-        # Format prompt with context
-        prompt = prompt_template.format(context=context)
+        from app.utils.prompt_template import build_research_agent_prompt
+
+        try:
+            prompt = build_research_agent_prompt(prompt_template, context)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
         
         # Call LLM
         api_key = get_openai_api_key(current_user=current_user, db=db)

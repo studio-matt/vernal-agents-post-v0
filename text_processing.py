@@ -970,8 +970,17 @@ def llm_model(texts: List[str], num_topics: int, query: str = "", keywords: List
         # Load prompt from database, with fallback to default
         prompt_template = get_topic_extraction_prompt()
         
-        # Format the prompt with actual values
-        prompt = prompt_template.format(num_topics=num_topics, context=context)
+        try:
+            from app.utils.prompt_template import apply_safe_prompt_template
+
+            prompt = apply_safe_prompt_template(
+                prompt_template,
+                {"num_topics": str(num_topics), "context": context},
+                max_field_chars={"context": 50_000, "num_topics": 40},
+            )
+        except ValueError as exc:
+            logger.error("Topic extraction prompt invalid: %s", exc)
+            return []
 
         max_attempts = 3
         for attempt in range(max_attempts):

@@ -213,8 +213,20 @@ Example output:
 Context:
 {context}"""
             
-            # Format the prompt with context and num_ideas
-            prompt = prompt_template.format(num_ideas=num_ideas, context=context)
+            try:
+                from app.utils.prompt_template import apply_safe_prompt_template
+
+                prompt = apply_safe_prompt_template(
+                    prompt_template,
+                    {"num_ideas": str(num_ideas), "context": context},
+                    max_field_chars={"context": 120_000, "num_ideas": 40},
+                )
+            except ValueError as exc:
+                logger.warning(
+                    "Idea generator prompt validation failed; falling back to str.format: %s",
+                    exc,
+                )
+                prompt = prompt_template.format(num_ideas=num_ideas, context=context)
 
             # Call the LLM
             response = await self.llm.ainvoke(prompt)

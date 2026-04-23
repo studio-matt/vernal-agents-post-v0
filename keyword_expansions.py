@@ -174,8 +174,20 @@ def _expand_with_llm(keyword: str) -> Optional[str]:
         # Get prompt from database, with fallback to default
         prompt_template = _get_keyword_expansion_prompt()
         
-        # Format prompt with keyword
-        prompt = prompt_template.format(keyword=keyword)
+        try:
+            from app.utils.prompt_template import apply_safe_prompt_template
+
+            prompt = apply_safe_prompt_template(
+                prompt_template,
+                {"keyword": keyword},
+                max_field_chars={"keyword": 500},
+            )
+        except ValueError as exc:
+            logger.warning(
+                "Keyword expansion prompt validation failed; using naive {keyword} replace: %s",
+                exc,
+            )
+            prompt = prompt_template.replace("{keyword}", str(keyword)[:500])
         
         # Use cheap, fast model for simple abbreviation expansion
         llm = ChatOpenAI(
