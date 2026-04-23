@@ -2580,11 +2580,46 @@ async def generate_batch(
                     cornerstone_permalink = data.get("permalink") or ""
                     cornerstone_post_title = data.get("post_title") or ""
 
+                # Harden persistence: if a numeric-looking content_item_id doesn't exist for this campaign/user,
+                # fall back to slot-based persist (week/day/platform) when unambiguous.
+                item_id_for_persist = content_item_id
+                slot_row_count = None
+                if item_id_for_persist is not None:
+                    try:
+                        from models import Content
+                        existing_row = session.query(Content).filter(
+                            Content.id == int(item_id_for_persist),
+                            Content.campaign_id == cid,
+                            Content.user_id == user_id,
+                        ).first()
+                        if existing_row is None:
+                            # Only fall back if slot is not ambiguous; otherwise require explicit id.
+                            slot_rows = session.query(Content).filter(
+                                Content.campaign_id == cid,
+                                Content.user_id == user_id,
+                                Content.week == week,
+                                Content.day == day,
+                                Content.platform == platform,
+                            ).all()
+                            slot_row_count = len(slot_rows)
+                            if slot_row_count <= 1:
+                                item_id_for_persist = None
+                    except Exception:
+                        # If anything goes wrong, proceed with original id; _persist_generated_content will log.
+                        pass
+
                 content_id = _persist_generated_content(
-                    session, cid, user_id, week, day, platform, data, content_item_id,
+                    session, cid, user_id, week, day, platform, data, item_id_for_persist,
                 )
                 if content_id is None:
-                    err = "Failed to persist generated content to the database"
+                    err = (
+                        "Failed to persist generated content to the database "
+                        f"(week={week} day={day} platform={platform} "
+                        f"content_item_id_raw={raw_content_item_id!r} "
+                        f"content_item_id_norm={content_item_id!r}"
+                        + (f" slot_row_count={slot_row_count}" if slot_row_count is not None else "")
+                        + ")"
+                    )
                     if tid in CONTENT_GEN_TASKS:
                         CONTENT_GEN_TASKS[tid]["status"] = "error"
                         CONTENT_GEN_TASKS[tid]["error"] = err
