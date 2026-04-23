@@ -29,6 +29,42 @@ def get_db():
 from app.utils.openai_helpers import get_openai_api_key
 
 
+def _is_openai_reasoning_style_model(model_name: str) -> bool:
+    """GPT-5 / o-series use completion-token budget for hidden reasoning as well as visible content."""
+    m = (model_name or "").lower()
+    return "gpt-5" in m or m.startswith("o1") or m.startswith("o3") or m.startswith("o4")
+
+
+def _research_recommendations_chat_params(model_name: str) -> Dict[str, Any]:
+    """
+    If max_tokens is too small, reasoning models can spend the entire budget on
+    reasoning_tokens and return content='' with finish_reason=length.
+    """
+    if _is_openai_reasoning_style_model(model_name):
+        return {
+            "max_tokens": 32768,
+            "model_kwargs": {"reasoning_effort": "low"},
+        }
+    return {"max_tokens": 8192, "model_kwargs": {}}
+
+
+def _response_reasoning_output_tokens(response: Any) -> int:
+    """Best-effort count of output tokens attributed to internal reasoning (OpenAI metadata)."""
+    um = getattr(response, "usage_metadata", None)
+    if um is not None:
+        otd = getattr(um, "output_token_details", None)
+        if isinstance(otd, dict):
+            return int(otd.get("reasoning") or 0)
+        if otd is not None:
+            return int(getattr(otd, "reasoning", 0) or 0)
+    meta = getattr(response, "response_metadata", None) or {}
+    if isinstance(meta, dict):
+        tu = (meta.get("token_usage") or {}).get("completion_tokens_details") or {}
+        if isinstance(tu, dict):
+            return int(tu.get("reasoning_tokens") or tu.get("reasoning") or 0)
+    return 0
+
+
 def _extract_block_text(block: Any) -> str:
     """Pull human-readable text from one LangChain / OpenAI content block (incl. nested typed dicts)."""
     if block is None:
@@ -2192,26 +2228,49 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
             from langchain_openai import ChatOpenAI
 
             model_name = get_openai_default_model()
+            _rcfg = _research_recommendations_chat_params(model_name)
+            from gas_meter.openai_wrapper import track_langchain_call
+
             llm = ChatOpenAI(
                 model=model_name,
                 api_key=api_key,
                 temperature=0.4,
-                # Keyword / topical / hashtag insights can be long; avoid truncation to blank edge cases
-                max_tokens=4096,
+                max_tokens=_rcfg["max_tokens"],
+                model_kwargs=_rcfg["model_kwargs"],
             )
-            # Plain string input avoids HumanMessage + multimodal edge cases with invoke()
-            from gas_meter.openai_wrapper import track_langchain_call
-
-            response = track_langchain_call(
-                llm,
-                model=model_name,
-                prompt=prompt,
-            )
+            try:
+                response = track_langchain_call(
+                    llm,
+                    model=model_name,
+                    prompt=prompt,
+                )
+            except Exception as first_err:
+                if _rcfg.get("model_kwargs") and _is_openai_reasoning_style_model(model_name):
+                    logger.warning(
+                        "Research LLM invoke failed with reasoning params; retrying without "
+                        "reasoning_effort: %s",
+                        first_err,
+                    )
+                    llm = ChatOpenAI(
+                        model=model_name,
+                        api_key=api_key,
+                        temperature=0.4,
+                        max_tokens=_rcfg["max_tokens"],
+                        model_kwargs={},
+                    )
+                    response = track_langchain_call(
+                        llm,
+                        model=model_name,
+                        prompt=prompt,
+                    )
+                else:
+                    raise
             recommendations_text = _llm_response_to_text(response)
             recommendations_text = (recommendations_text or "").strip()
             if not recommendations_text:
                 meta = getattr(response, "response_metadata", None) or {}
                 finish = meta.get("finish_reason") if isinstance(meta, dict) else None
+                r_tokens = _response_reasoning_output_tokens(response)
                 logger.error(
                     "LLM returned empty text for research-agent recommendations "
                     f"(agent_type={agent_type}, campaign_id={campaign_id}) "
@@ -2220,6 +2279,13 @@ Sample Text (first 500 chars): {texts[0][:500] if texts else 'N/A'}
                     f"response_metadata={meta}"
                 )
                 suffix = f" finish_reason={finish!r}" if finish else ""
+                if finish == "length" and r_tokens > 0:
+                    suffix += (
+                        f" reasoning_output_tokens≈{r_tokens}. "
+                        "The model used the output budget for internal reasoning before writing visible text. "
+                        "Re-run after deploy, shorten the Research prompt, or set OPENAI_MODEL_NAME to a "
+                        "non-reasoning model (e.g. gpt-4o-mini) for this workload."
+                    )
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=(
