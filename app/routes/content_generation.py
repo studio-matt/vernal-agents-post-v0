@@ -8,9 +8,10 @@ import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from fastapi import APIRouter, HTTPException, Depends, status, Request, Form
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from auth_api import get_current_user
 from database import SessionLocal
 from openai_model_config import get_openai_default_model
@@ -32,8 +33,785 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from app.utils.openai_helpers import get_openai_api_key
-from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX
+from app.utils.content_tasks import CONTENT_GEN_TASKS, CONTENT_GEN_TASK_INDEX, MAX_CONTENT_GEN_DURATION_SEC
 from app.schemas.models import AnalyzeRequest
+
+DAY_ORDER = {
+    "monday": 1,
+    "tuesday": 2,
+    "wednesday": 3,
+    "thursday": 4,
+    "friday": 5,
+    "saturday": 6,
+    "sunday": 7,
+}
+
+
+def _now_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+
+def _task_index_add(campaign_id: str, task_id: str) -> None:
+    existing = CONTENT_GEN_TASK_INDEX.get(campaign_id)
+    if isinstance(existing, list):
+        if task_id not in existing:
+            existing.insert(0, task_id)
+    elif existing:
+        CONTENT_GEN_TASK_INDEX[campaign_id] = [task_id, existing]
+    else:
+        CONTENT_GEN_TASK_INDEX[campaign_id] = [task_id]
+
+
+def _task_index_remove(campaign_id: str, task_id: str) -> None:
+    existing = CONTENT_GEN_TASK_INDEX.get(campaign_id)
+    if isinstance(existing, list):
+        CONTENT_GEN_TASK_INDEX[campaign_id] = [tid for tid in existing if tid != task_id]
+    elif existing == task_id:
+        CONTENT_GEN_TASK_INDEX.pop(campaign_id, None)
+
+
+def _set_content_task(task_id: str, **updates: Any) -> None:
+    task = CONTENT_GEN_TASKS.get(task_id)
+    if not task:
+        return
+    task.update(updates)
+    task["updated_at"] = _now_iso()
+
+
+def _set_step_status(task_id: str, step_id: str, status_value: str, **updates: Any) -> None:
+    task = CONTENT_GEN_TASKS.get(task_id)
+    if not task:
+        return
+    for step in task.get("steps", []):
+        if step.get("id") == step_id:
+            step.update(updates)
+            step["status"] = status_value
+            step["updated_at"] = _now_iso()
+            break
+    task["agent_statuses"] = [
+        {
+            "agent": step.get("agent", "Content Generation"),
+            "task": step.get("label", ""),
+            "status": step.get("status", "pending"),
+            "timestamp": step.get("updated_at") or task.get("updated_at"),
+            "error": step.get("error"),
+            "content_item_id": step.get("content_item_id"),
+            "database_id": step.get("database_id"),
+            "image_url": step.get("image_url"),
+        }
+        for step in task.get("steps", [])
+    ]
+    task["updated_at"] = _now_iso()
+
+
+def _normalize_generation_item(raw: Dict[str, Any], index: int) -> Dict[str, Any]:
+    platform = (raw.get("platform") or "linkedin").lower()
+    week = int(raw.get("week") or 1)
+    day = raw.get("day") or "Monday"
+    item_type = (raw.get("type") or "secondary").lower()
+    if item_type not in {"cornerstone", "secondary"}:
+        item_type = "secondary"
+    content_item_id = raw.get("content_item_id", raw.get("contentItemId", raw.get("id")))
+    return {
+        "content_item_id": content_item_id,
+        "platform": platform,
+        "week": week,
+        "day": day,
+        "type": item_type,
+        "title": raw.get("title") or raw.get("parent_idea") or raw.get("parentIdea") or f"{platform.title()} content",
+        "parent_idea": raw.get("parent_idea") or raw.get("parentIdea") or raw.get("title") or "",
+        "content_queue_items": raw.get("content_queue_items") or raw.get("contentQueueItems") or [],
+        "generate_image": raw.get("generate_image", raw.get("generateImage", True)) is not False,
+        "_input_index": index,
+    }
+
+
+def _ordered_generation_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(
+        items,
+        key=lambda item: (
+            int(item.get("week") or 1),
+            DAY_ORDER.get(str(item.get("day") or "Monday").lower(), 99),
+            str(item.get("day") or "Monday"),
+            0 if item.get("type") == "cornerstone" else 1,
+            item.get("_input_index", 0),
+        ),
+    )
+
+
+def _build_steps(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    steps: List[Dict[str, Any]] = []
+    for idx, item in enumerate(items):
+        label_prefix = "Cornerstone" if item["type"] == "cornerstone" else "Secondary"
+        title = item.get("title") or item["platform"].title()
+        copy_id = f"{idx}-copy"
+        image_id = f"{idx}-image"
+        steps.append({
+            "id": copy_id,
+            "phase": "copy",
+            "agent": "Content Generation",
+            "label": f"{label_prefix} copy: {title}",
+            "status": "pending",
+            "content_item_id": item.get("content_item_id"),
+            "platform": item.get("platform"),
+            "week": item.get("week"),
+            "day": item.get("day"),
+        })
+        if item.get("generate_image") is not False:
+            steps.append({
+                "id": image_id,
+                "phase": "image",
+                "agent": "Image Generation",
+                "label": f"{label_prefix} image: {title}",
+                "status": "pending",
+                "content_item_id": item.get("content_item_id"),
+                "platform": item.get("platform"),
+                "week": item.get("week"),
+                "day": item.get("day"),
+            })
+    return steps
+
+
+def _create_generation_task(
+    *,
+    campaign_id: str,
+    user_id: int,
+    scope: str,
+    items: List[Dict[str, Any]],
+    week: Optional[int] = None,
+    day: Optional[str] = None,
+    author_personality_id: Optional[str] = None,
+    brand_personality_id: Optional[str] = None,
+    platform_settings: Optional[Dict[str, Any]] = None,
+    image_settings: Optional[Dict[str, Any]] = None,
+) -> str:
+    task_id = f"content-{uuid.uuid4()}"
+    ordered = _ordered_generation_items(items)
+    CONTENT_GEN_TASKS[task_id] = {
+        "task_id": task_id,
+        "campaign_id": campaign_id,
+        "user_id": user_id,
+        "scope": scope,
+        "week": week,
+        "day": day,
+        "status": "pending",
+        "progress": 0,
+        "current_agent": "Content Generation",
+        "current_task": "Queued content generation",
+        "agent_statuses": [],
+        "steps": _build_steps(ordered),
+        "items": ordered,
+        "items_done": 0,
+        "items_total": len(ordered),
+        "result": None,
+        "error": None,
+        "author_personality_id": author_personality_id,
+        "brand_personality_id": brand_personality_id,
+        "platform_settings": platform_settings or {},
+        "image_settings": image_settings,
+        "started_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+    _task_index_add(campaign_id, task_id)
+    return task_id
+
+
+def _verify_campaign_access(campaign_id: str, current_user: Any, db: Session):
+    from models import Campaign
+    query = db.query(Campaign).filter(Campaign.campaign_id == campaign_id)
+    if not getattr(current_user, "is_admin", False):
+        query = query.filter(Campaign.user_id == current_user.id)
+    campaign = query.first()
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaign not found or access denied")
+    return campaign
+
+
+def _content_source_text(campaign: Any, item: Dict[str, Any], cornerstone_content: Optional[str]) -> str:
+    queue_items = item.get("content_queue_items") or []
+    queue_text = "\n".join(
+        str(q.get("text") or q.get("name") or q.get("title") or q)
+        for q in queue_items
+        if q
+    ).strip()
+    campaign_context = "\n".join(
+        str(value)
+        for value in [
+            getattr(campaign, "campaign_name", ""),
+            getattr(campaign, "description", ""),
+            getattr(campaign, "query", ""),
+            getattr(campaign, "keywords", ""),
+            getattr(campaign, "topics", ""),
+        ]
+        if value
+    ).strip()
+    parts = [
+        f"Title/idea: {item.get('title') or item.get('parent_idea') or ''}",
+        f"Campaign context: {campaign_context}",
+    ]
+    if queue_text:
+        parts.append(f"Selected research/content queue inputs:\n{queue_text}")
+    if cornerstone_content:
+        parts.append(f"Cornerstone content to reference:\n{cornerstone_content}")
+    return "\n\n".join(parts)
+
+
+def _generate_copy(
+    *,
+    db: Session,
+    user: Any,
+    campaign: Any,
+    item: Dict[str, Any],
+    cornerstone_content: Optional[str],
+) -> Dict[str, Any]:
+    from langchain_openai import ChatOpenAI
+    api_key = get_openai_api_key(current_user=user, db=db)
+    if not api_key:
+        raise ValueError("OpenAI API key is not configured.")
+
+    platform = item["platform"]
+    item_type = item["type"]
+    source_text = _content_source_text(campaign, item, cornerstone_content)
+    if item_type == "secondary" and not cornerstone_content:
+        source_text += "\n\nNo cornerstone copy was available; write the best standalone secondary content possible."
+
+    prompt = f"""You are generating production-ready campaign content.
+
+Platform: {platform}
+Content type: {item_type}
+Week: {item.get('week')}
+Day: {item.get('day')}
+
+Requirements:
+- Write only the final content, with no preamble.
+- Respect the platform format.
+- If this is secondary content, support and reference the cornerstone direction without repeating it verbatim.
+- If this is WordPress, include a strong article body with useful structure.
+
+Inputs:
+{source_text}
+"""
+    llm = ChatOpenAI(model=get_openai_default_model(), api_key=api_key.strip(), temperature=0.7)
+    response = llm.invoke(prompt)
+    content = (getattr(response, "content", "") or "").strip()
+    if not content:
+        raise ValueError("Generated content was empty.")
+
+    title = item.get("title") or content.splitlines()[0][:80] or f"{platform.title()} content"
+    data = {
+        "title": title,
+        "content": content,
+        "platform_content": {"title": title, "content": content},
+        "content_item_id": item.get("content_item_id"),
+    }
+    if platform == "wordpress":
+        slug = "-".join(title.lower().split())[:80]
+        data.update({
+            "post_title": title,
+            "post_excerpt": content[:240],
+            "permalink": slug,
+        })
+    return data
+
+
+def _lookup_cornerstone_content(db: Session, campaign_id: str, user_id: int, week: int, day: str, exclude_platform: str) -> Optional[str]:
+    row = db.execute(text("""
+        SELECT content
+        FROM content
+        WHERE campaign_id = :campaign_id
+          AND user_id = :user_id
+          AND week = :week
+          AND day = :day
+          AND platform != :platform
+          AND content IS NOT NULL
+          AND TRIM(content) != ''
+        ORDER BY id ASC
+        LIMIT 1
+    """), {
+        "campaign_id": campaign_id,
+        "user_id": user_id,
+        "week": week,
+        "day": day,
+        "platform": exclude_platform,
+    }).first()
+    return row[0] if row else None
+
+
+def _upsert_generated_content(
+    db: Session,
+    *,
+    campaign_id: str,
+    user_id: int,
+    item: Dict[str, Any],
+    copy_data: Dict[str, Any],
+    image_url: Optional[str] = None,
+) -> int:
+    content_item_id = item.get("content_item_id")
+    platform = (item.get("platform") or "linkedin").lower()
+    week = int(item.get("week") or 1)
+    day = item.get("day") or "Monday"
+    now = datetime.utcnow()
+
+    existing_id: Optional[int] = None
+    if content_item_id is not None and str(content_item_id).isdigit():
+        row = db.execute(text("""
+            SELECT id FROM content
+            WHERE id = :id AND campaign_id = :campaign_id AND user_id = :user_id
+            LIMIT 1
+        """), {"id": int(content_item_id), "campaign_id": campaign_id, "user_id": user_id}).first()
+        if row:
+            existing_id = int(row[0])
+
+    if existing_id is None:
+        row = db.execute(text("""
+            SELECT id FROM content
+            WHERE campaign_id = :campaign_id AND user_id = :user_id AND week = :week AND day = :day AND platform = :platform
+            LIMIT 1
+        """), {
+            "campaign_id": campaign_id,
+            "user_id": user_id,
+            "week": week,
+            "day": day,
+            "platform": platform,
+        }).first()
+        if row:
+            existing_id = int(row[0])
+
+    values = {
+        "user_id": user_id,
+        "campaign_id": campaign_id,
+        "week": week,
+        "day": day,
+        "platform": platform,
+        "content": copy_data.get("content") or "",
+        "title": copy_data.get("title") or item.get("title") or f"{platform.title()} content",
+        "image_url": image_url,
+        "date_upload": now,
+        "schedule_time": now.replace(hour=9, minute=0, second=0, microsecond=0),
+        "file_name": f"{platform}_{week}_{day}.txt",
+        "file_type": "text",
+        "platform_post_no": "1",
+        "status": "draft",
+        "is_draft": True,
+        "can_edit": True,
+        "parent_idea": item.get("parent_idea") or item.get("title") or "",
+        "post_title": copy_data.get("post_title"),
+        "post_excerpt": copy_data.get("post_excerpt"),
+        "permalink": copy_data.get("permalink"),
+    }
+
+    if existing_id is not None:
+        values["id"] = existing_id
+        db.execute(text("""
+            UPDATE content
+            SET title = :title,
+                content = :content,
+                image_url = COALESCE(:image_url, image_url),
+                status = :status,
+                is_draft = :is_draft,
+                can_edit = :can_edit,
+                parent_idea = :parent_idea,
+                post_title = :post_title,
+                post_excerpt = :post_excerpt,
+                permalink = :permalink
+            WHERE id = :id
+        """), values)
+        db.commit()
+        return existing_id
+
+    result = db.execute(text("""
+        INSERT INTO content (
+            user_id, campaign_id, week, day, platform, content, title, status,
+            date_upload, schedule_time, file_name, file_type, platform_post_no,
+            image_url, is_draft, can_edit, parent_idea, post_title, post_excerpt, permalink
+        ) VALUES (
+            :user_id, :campaign_id, :week, :day, :platform, :content, :title, :status,
+            :date_upload, :schedule_time, :file_name, :file_type, :platform_post_no,
+            :image_url, :is_draft, :can_edit, :parent_idea, :post_title, :post_excerpt, :permalink
+        )
+    """), values)
+    db.commit()
+    return int(result.lastrowid)
+
+
+def _generate_image_for_copy(db: Session, user: Any, copy_text: str, image_settings: Optional[Dict[str, Any]]) -> str:
+    from tools import generate_image
+    api_key = get_openai_api_key(current_user=user, db=db)
+    if not api_key:
+        raise ValueError("OpenAI API key is not configured.")
+    article_summary = copy_text[:500]
+    style_parts: List[str] = []
+    if image_settings:
+        if image_settings.get("style"):
+            style_parts.append(f"in {image_settings.get('style')} style")
+        if image_settings.get("color"):
+            style_parts.append(f"with {image_settings.get('color')} color palette")
+        if image_settings.get("prompt") or image_settings.get("additionalPrompt"):
+            style_parts.append(str(image_settings.get("prompt") or image_settings.get("additionalPrompt")))
+    final_prompt = article_summary
+    if style_parts:
+        final_prompt += "\n\nCreative direction: " + ", ".join(style_parts)
+    return generate_image(query=copy_text, content=final_prompt, api_key=api_key)
+
+
+def _save_backend_generation_log(db: Session, task: Dict[str, Any]) -> None:
+    """Persist a backend-owned generation task log without requiring the modal to open."""
+    try:
+        steps = task.get("steps", [])
+        step_lines = "\n".join(
+            "- {label}: {status}{db}{image}{error}".format(
+                label=step.get("label"),
+                status=step.get("status"),
+                db=f" db={step.get('database_id')}" if step.get("database_id") else "",
+                image=f" image={step.get('image_url')}" if step.get("image_url") else "",
+                error=f" error={step.get('error')}" if step.get("error") else "",
+            )
+            for step in steps
+        )
+        result = task.get("result") or {}
+        log_text = (
+            "Backend Content Generation Log\n"
+            "============================================================\n"
+            f"Task ID: {task.get('task_id')}\n"
+            f"Campaign ID: {task.get('campaign_id')}\n"
+            f"Scope: {task.get('scope')}\n"
+            f"Status: {task.get('status')}\n"
+            f"Progress: {task.get('progress')}%\n"
+            f"Items: {task.get('items_done')} / {task.get('items_total')}\n"
+            f"Error: {task.get('error') or ''}\n\n"
+            "Steps:\n"
+            f"{step_lines}\n\n"
+            "Result:\n"
+            f"{json.dumps(result, default=str)[:8000]}\n"
+        )
+        db.execute(text("""
+            INSERT INTO generation_logs (user_id, campaign_id, log_text)
+            VALUES (:user_id, :campaign_id, :log_text)
+        """), {
+            "user_id": task.get("user_id"),
+            "campaign_id": task.get("campaign_id"),
+            "log_text": log_text,
+        })
+        db.commit()
+    except Exception:
+        logger.exception("Failed to persist backend generation log for task %s", task.get("task_id"))
+        db.rollback()
+
+
+def _run_generation_task(task_id: str) -> None:
+    task = CONTENT_GEN_TASKS.get(task_id)
+    if not task:
+        return
+
+    db = SessionLocal()
+    try:
+        from models import Campaign, User
+        user = db.query(User).filter(User.id == task["user_id"]).first()
+        campaign = db.query(Campaign).filter(Campaign.campaign_id == task["campaign_id"]).first()
+        if not user or not campaign:
+            raise ValueError("Campaign or user was not found for generation task.")
+
+        _set_content_task(task_id, status="in_progress", current_task="Starting content generation", progress=1)
+        generated_cornerstones: Dict[Tuple[int, str], str] = {}
+        results: List[Dict[str, Any]] = []
+        total_steps = max(1, len(task.get("steps", [])))
+        completed_steps = 0
+
+        for idx, item in enumerate(task.get("items", [])):
+            copy_step_id = f"{idx}-copy"
+            image_step_id = f"{idx}-image"
+            day_key = (int(item.get("week") or 1), item.get("day") or "Monday")
+            cornerstone_content = generated_cornerstones.get(day_key)
+            if item.get("type") == "secondary" and not cornerstone_content:
+                cornerstone_content = _lookup_cornerstone_content(
+                    db,
+                    task["campaign_id"],
+                    task["user_id"],
+                    day_key[0],
+                    day_key[1],
+                    item.get("platform") or "",
+                )
+
+            _set_step_status(task_id, copy_step_id, "running")
+            _set_content_task(
+                task_id,
+                current_agent="Content Generation",
+                current_task=f"Generating {'cornerstone' if item.get('type') == 'cornerstone' else 'secondary'} copy {idx + 1} of {len(task.get('items', []))}",
+            )
+            copy_data = _generate_copy(db=db, user=user, campaign=campaign, item=item, cornerstone_content=cornerstone_content)
+            database_id = _upsert_generated_content(
+                db,
+                campaign_id=task["campaign_id"],
+                user_id=task["user_id"],
+                item=item,
+                copy_data=copy_data,
+                image_url=None,
+            )
+            if item.get("type") == "cornerstone":
+                generated_cornerstones[day_key] = copy_data["content"]
+
+            completed_steps += 1
+            _set_step_status(task_id, copy_step_id, "completed", database_id=database_id)
+            _set_content_task(
+                task_id,
+                progress=int((completed_steps / total_steps) * 100),
+                result={"status": "success", "data": {**copy_data, "id": database_id, "database_id": database_id, "content_item_id": item.get("content_item_id")}},
+            )
+
+            image_url = None
+            if item.get("generate_image") is not False:
+                _set_step_status(task_id, image_step_id, "running", database_id=database_id)
+                _set_content_task(
+                    task_id,
+                    current_agent="Image Generation",
+                    current_task=f"Generating image {idx + 1} of {len(task.get('items', []))}",
+                )
+                image_url = _generate_image_for_copy(db, user, copy_data["content"], task.get("image_settings"))
+                database_id = _upsert_generated_content(
+                    db,
+                    campaign_id=task["campaign_id"],
+                    user_id=task["user_id"],
+                    item={**item, "content_item_id": database_id},
+                    copy_data=copy_data,
+                    image_url=image_url,
+                )
+                completed_steps += 1
+                _set_step_status(task_id, image_step_id, "completed", database_id=database_id, image_url=image_url)
+
+            results.append({
+                **copy_data,
+                "id": database_id,
+                "database_id": database_id,
+                "content_item_id": item.get("content_item_id"),
+                "image_url": image_url,
+                "platform": item.get("platform"),
+                "week": item.get("week"),
+                "day": item.get("day"),
+                "type": item.get("type"),
+            })
+            _set_content_task(
+                task_id,
+                items_done=len(results),
+                progress=int((completed_steps / total_steps) * 100),
+                result={"status": "success", "data": results[-1], "items": results},
+            )
+
+        _set_content_task(
+            task_id,
+            status="completed",
+            progress=100,
+            current_agent=None,
+            current_task="Content generation complete",
+            result={"status": "success", "data": results[-1] if results else None, "items": results},
+        )
+        _save_backend_generation_log(db, CONTENT_GEN_TASKS.get(task_id, task))
+    except Exception as exc:
+        logger.error(f"Content generation task {task_id} failed: {exc}", exc_info=True)
+        _set_content_task(
+            task_id,
+            status="error",
+            error=str(exc),
+            current_agent=None,
+            current_task="Content generation failed",
+            result={"status": "error", "error": str(exc)},
+        )
+        _save_backend_generation_log(db, CONTENT_GEN_TASKS.get(task_id, task))
+    finally:
+        db.close()
+
+
+def _start_generation_thread(task_id: str) -> None:
+    thread = threading.Thread(target=_run_generation_task, args=(task_id,), daemon=True)
+    thread.start()
+
+
+@content_generation_router.post("/campaigns/{campaign_id}/generate-piece")
+async def generate_piece_endpoint(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Start one backend-owned copy + image generation task for a single content item."""
+    campaign = _verify_campaign_access(campaign_id, current_user, db)
+    item = _normalize_generation_item(request_data, 0)
+    task_id = _create_generation_task(
+        campaign_id=campaign_id,
+        user_id=current_user.id,
+        scope="piece",
+        items=[item],
+        week=item.get("week"),
+        day=item.get("day"),
+        author_personality_id=request_data.get("author_personality_id") or request_data.get("authorPersonalityId"),
+        brand_personality_id=request_data.get("brand_personality_id") or request_data.get("brandPersonalityId"),
+        platform_settings=request_data.get("platformSettings") or request_data.get("platform_settings") or {},
+        image_settings=request_data.get("image_settings") or request_data.get("imageSettings") or getattr(campaign, "image_settings_json", None),
+    )
+    if isinstance(CONTENT_GEN_TASKS[task_id].get("image_settings"), str):
+        try:
+            CONTENT_GEN_TASKS[task_id]["image_settings"] = json.loads(CONTENT_GEN_TASKS[task_id]["image_settings"])
+        except Exception:
+            CONTENT_GEN_TASKS[task_id]["image_settings"] = None
+    _start_generation_thread(task_id)
+    return {"status": "pending", "task_id": task_id, "message": "Generate piece started."}
+
+
+@content_generation_router.post("/campaigns/{campaign_id}/generate-batch")
+async def generate_batch_endpoint(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Start one backend-owned ordered generation task for a batch of content items."""
+    campaign = _verify_campaign_access(campaign_id, current_user, db)
+    raw_items = request_data.get("items") or []
+    if not raw_items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No items provided.")
+    items = [_normalize_generation_item(item, idx) for idx, item in enumerate(raw_items)]
+    task_id = _create_generation_task(
+        campaign_id=campaign_id,
+        user_id=current_user.id,
+        scope=request_data.get("scope") or "batch",
+        items=items,
+        author_personality_id=request_data.get("author_personality_id") or request_data.get("authorPersonalityId"),
+        brand_personality_id=request_data.get("brand_personality_id") or request_data.get("brandPersonalityId"),
+        platform_settings=request_data.get("platformSettings") or request_data.get("platform_settings") or {},
+        image_settings=request_data.get("image_settings") or request_data.get("imageSettings") or getattr(campaign, "image_settings_json", None),
+    )
+    if isinstance(CONTENT_GEN_TASKS[task_id].get("image_settings"), str):
+        try:
+            CONTENT_GEN_TASKS[task_id]["image_settings"] = json.loads(CONTENT_GEN_TASKS[task_id]["image_settings"])
+        except Exception:
+            CONTENT_GEN_TASKS[task_id]["image_settings"] = None
+    _start_generation_thread(task_id)
+    return {"status": "pending", "task_id": task_id, "message": "Generate batch started."}
+
+
+@content_generation_router.post("/campaigns/{campaign_id}/generate-day")
+async def generate_day_endpoint(
+    campaign_id: str,
+    request_data: Dict[str, Any],
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Start one backend-owned day task: cornerstone copy/image, then secondary copy/images."""
+    campaign = _verify_campaign_access(campaign_id, current_user, db)
+    raw_items = request_data.get("items") or []
+    if not raw_items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No items provided.")
+    week = int(request_data.get("week") or 1)
+    day = request_data.get("day") or "Monday"
+    items = []
+    for idx, raw in enumerate(raw_items):
+        normalized = _normalize_generation_item({**raw, "week": raw.get("week", week), "day": raw.get("day", day)}, idx)
+        items.append(normalized)
+    task_id = _create_generation_task(
+        campaign_id=campaign_id,
+        user_id=current_user.id,
+        scope="day",
+        items=items,
+        week=week,
+        day=day,
+        author_personality_id=request_data.get("author_personality_id") or request_data.get("authorPersonalityId"),
+        brand_personality_id=request_data.get("brand_personality_id") or request_data.get("brandPersonalityId"),
+        platform_settings=request_data.get("platformSettings") or request_data.get("platform_settings") or {},
+        image_settings=request_data.get("image_settings") or request_data.get("imageSettings") or getattr(campaign, "image_settings_json", None),
+    )
+    if isinstance(CONTENT_GEN_TASKS[task_id].get("image_settings"), str):
+        try:
+            CONTENT_GEN_TASKS[task_id]["image_settings"] = json.loads(CONTENT_GEN_TASKS[task_id]["image_settings"])
+        except Exception:
+            CONTENT_GEN_TASKS[task_id]["image_settings"] = None
+    _start_generation_thread(task_id)
+    return {"status": "pending", "task_id": task_id, "message": "Generate day started."}
+
+
+@content_generation_router.get("/campaigns/{campaign_id}/generate-content/status/{task_id}")
+def get_content_generation_status_endpoint(
+    campaign_id: str,
+    task_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return backend task state for content generation polling."""
+    _verify_campaign_access(campaign_id, current_user, db)
+    task = CONTENT_GEN_TASKS.get(task_id)
+    if not task or task.get("campaign_id") != campaign_id:
+        return {
+            "status": "pending",
+            "progress": 0,
+            "current_task": "Waiting for task",
+            "current_agent": None,
+            "agent_statuses": [],
+            "items_done": 0,
+            "items_total": 0,
+            "result": None,
+        }
+
+    if task.get("status") in {"pending", "in_progress"}:
+        try:
+            started = datetime.fromisoformat(task.get("started_at"))
+            if (datetime.utcnow() - started).total_seconds() > MAX_CONTENT_GEN_DURATION_SEC:
+                _set_content_task(
+                    task_id,
+                    status="error",
+                    error=f"Task exceeded maximum duration ({MAX_CONTENT_GEN_DURATION_SEC // 60} min)",
+                    current_task="Content generation timed out",
+                )
+                task = CONTENT_GEN_TASKS.get(task_id, task)
+        except Exception:
+            pass
+
+    return {
+        "status": task.get("status", "pending"),
+        "progress": task.get("progress", 0),
+        "current_agent": task.get("current_agent"),
+        "current_task": task.get("current_task"),
+        "agent_statuses": task.get("agent_statuses", []),
+        "error": task.get("error"),
+        "result": task.get("result"),
+        "items_done": task.get("items_done", 0),
+        "items_total": task.get("items_total", 0),
+        "scope": task.get("scope"),
+        "week": task.get("week"),
+        "day": task.get("day"),
+        "steps": task.get("steps", []),
+    }
+
+
+@content_generation_router.get("/campaigns/{campaign_id}/generate-content/running-tasks")
+def get_running_content_generation_tasks_endpoint(
+    campaign_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List non-terminal content generation tasks for restoring the task panel after navigation."""
+    _verify_campaign_access(campaign_id, current_user, db)
+    task_ids = CONTENT_GEN_TASK_INDEX.get(campaign_id) or []
+    if not isinstance(task_ids, list):
+        task_ids = [task_ids]
+    tasks = []
+    for task_id in task_ids:
+        task = CONTENT_GEN_TASKS.get(task_id)
+        if not task or task.get("campaign_id") != campaign_id:
+            continue
+        if task.get("status") in {"completed", "error"}:
+            continue
+        tasks.append({
+            "task_id": task_id,
+            "scope": task.get("scope"),
+            "week": task.get("week"),
+            "day": task.get("day"),
+            "progress": task.get("progress", 0),
+            "status": task.get("status", "pending"),
+            "items_done": task.get("items_done", 0),
+            "items_total": task.get("items_total", 0),
+            "current_task": task.get("current_task"),
+            "steps": task.get("steps", []),
+        })
+    return {"status": "success", "tasks": tasks}
+
 
 @content_generation_router.post("/analyze/test")
 def test_analyze_endpoint():
