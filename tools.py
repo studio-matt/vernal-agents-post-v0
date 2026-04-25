@@ -543,16 +543,25 @@ HEADERS = {
 
 def fetch_airtable_records():
     """Fetch records from Airtable."""
+    if not AIRTABLE_API_TOKEN or not BASE_ID or not TABLE_NAME:
+        logger.info("Airtable prompt matching is not configured; using image prompt without style match.")
+        return []
     response = requests.get(AIRTABLE_URL, headers=HEADERS)
     if response.status_code == 200:
         return response.json().get("records", [])
+    logger.warning(f"Airtable prompt fetch failed with status {response.status_code}; using image prompt without style match.")
     return []
 
 def find_matching_prompt(user_prompt, records):
     """Find the best matching DALL·E prompt from Airtable based on the query."""
+    if not user_prompt or not records:
+        return None
     for record in records:
         fields = record.get("fields", {})
-        keywords = fields.get("dalle keyword", "").split(", ")  # Comma-separated keywords
+        keywords = fields.get("dalle keyword", "")
+        if not keywords:
+            continue
+        keywords = str(keywords).split(", ")  # Comma-separated keywords
         
         # Check if any keyword is in the user prompt
         if any(keyword.lower() in user_prompt.lower() for keyword in keywords):
@@ -660,7 +669,9 @@ def generate_image(query, content, api_key=None):
             size="1024x1024",
             n=1
         )
-        
+
+        if not getattr(response, "data", None) or not response.data[0] or not getattr(response.data[0], "url", None):
+            raise Exception("OpenAI image response did not include an image URL.")
         dall_e_url = response.data[0].url
         logger.info(f"🖼️ Generated DALL·E image: {dall_e_url[:100]}...")
         

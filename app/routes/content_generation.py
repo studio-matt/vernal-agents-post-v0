@@ -78,6 +78,36 @@ def _set_content_task(task_id: str, **updates: Any) -> None:
     task["updated_at"] = _now_iso()
 
 
+def _task_progress_from_steps(task: Dict[str, Any]) -> int:
+    steps = task.get("steps") or []
+    if not steps:
+        return int(task.get("progress") or 0)
+    total = max(1, len(steps))
+    progress = 10
+    for idx, step in enumerate(steps):
+        status_value = step.get("status")
+        phase = step.get("phase")
+        base = int((idx / total) * 100)
+        span = max(1, int(100 / total))
+        if status_value == "completed":
+            progress = max(progress, min(99, base + span))
+        elif status_value == "error":
+            progress = max(progress, min(99, base + max(1, span // 2)))
+        elif status_value == "running":
+            if phase == "copy":
+                progress = max(progress, min(45, base + max(10, span // 4)))
+            elif phase == "image":
+                progress = max(progress, min(90, base + 5))
+            else:
+                progress = max(progress, min(90, base + max(5, span // 2)))
+        elif status_value == "pending":
+            progress = max(progress, min(95, base))
+            break
+    if task.get("status") == "completed":
+        return 100
+    return max(1, min(99, progress))
+
+
 def _set_step_status(task_id: str, step_id: str, status_value: str, **updates: Any) -> None:
     task = CONTENT_GEN_TASKS.get(task_id)
     if not task:
@@ -101,6 +131,7 @@ def _set_step_status(task_id: str, step_id: str, status_value: str, **updates: A
         }
         for step in task.get("steps", [])
     ]
+    task["progress"] = _task_progress_from_steps(task)
     task["updated_at"] = _now_iso()
 
 
@@ -511,11 +542,9 @@ def _run_generation_task(task_id: str) -> None:
         if not user or not campaign:
             raise ValueError("Campaign or user was not found for generation task.")
 
-        _set_content_task(task_id, status="in_progress", current_task="Starting content generation", progress=1)
+        _set_content_task(task_id, status="in_progress", current_task="Starting content generation", progress=10)
         generated_cornerstones: Dict[Tuple[int, str], str] = {}
         results: List[Dict[str, Any]] = []
-        total_steps = max(1, len(task.get("steps", [])))
-        completed_steps = 0
 
         for idx, item in enumerate(task.get("items", [])):
             copy_step_id = f"{idx}-copy"
@@ -550,11 +579,9 @@ def _run_generation_task(task_id: str) -> None:
             if item.get("type") == "cornerstone":
                 generated_cornerstones[day_key] = copy_data["content"]
 
-            completed_steps += 1
             _set_step_status(task_id, copy_step_id, "completed", database_id=database_id)
             _set_content_task(
                 task_id,
-                progress=int((completed_steps / total_steps) * 100),
                 result={"status": "success", "data": {**copy_data, "id": database_id, "database_id": database_id, "content_item_id": item.get("content_item_id")}},
             )
 
@@ -566,17 +593,42 @@ def _run_generation_task(task_id: str) -> None:
                     current_agent="Image Generation",
                     current_task=f"Generating image {idx + 1} of {len(task.get('items', []))}",
                 )
-                image_url = _generate_image_for_copy(db, user, copy_data["content"], task.get("image_settings"))
-                database_id = _upsert_generated_content(
-                    db,
-                    campaign_id=task["campaign_id"],
-                    user_id=task["user_id"],
-                    item={**item, "content_item_id": database_id},
-                    copy_data=copy_data,
-                    image_url=image_url,
-                )
-                completed_steps += 1
-                _set_step_status(task_id, image_step_id, "completed", database_id=database_id, image_url=image_url)
+                try:
+                    image_url = _generate_image_for_copy(db, user, copy_data["content"], task.get("image_settings"))
+                    database_id = _upsert_generated_content(
+                        db,
+                        campaign_id=task["campaign_id"],
+                        user_id=task["user_id"],
+                        item={**item, "content_item_id": database_id},
+                        copy_data=copy_data,
+                        image_url=image_url,
+                    )
+                    _set_step_status(task_id, image_step_id, "completed", database_id=database_id, image_url=image_url)
+                except Exception as image_exc:
+                    image_error = str(image_exc)
+                    _set_step_status(task_id, image_step_id, "error", database_id=database_id, error=image_error)
+                    results.append({
+                        **copy_data,
+                        "id": database_id,
+                        "database_id": database_id,
+                        "content_item_id": item.get("content_item_id"),
+                        "image_url": None,
+                        "platform": item.get("platform"),
+                        "week": item.get("week"),
+                        "day": item.get("day"),
+                        "type": item.get("type"),
+                    })
+                    _set_content_task(
+                        task_id,
+                        status="error",
+                        error=image_error,
+                        current_agent=None,
+                        current_task="Image generation failed",
+                        items_done=len(results),
+                        result={"status": "error", "error": image_error, "data": results[-1], "items": results},
+                    )
+                    _save_backend_generation_log(db, CONTENT_GEN_TASKS.get(task_id, task))
+                    return
 
             results.append({
                 **copy_data,
@@ -592,7 +644,6 @@ def _run_generation_task(task_id: str) -> None:
             _set_content_task(
                 task_id,
                 items_done=len(results),
-                progress=int((completed_steps / total_steps) * 100),
                 result={"status": "success", "data": results[-1], "items": results},
             )
 
