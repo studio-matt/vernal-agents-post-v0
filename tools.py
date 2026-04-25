@@ -670,24 +670,35 @@ def generate_image(query, content, api_key=None):
             n=1
         )
 
-        if not getattr(response, "data", None) or not response.data[0] or not getattr(response.data[0], "url", None):
-            raise Exception("OpenAI image response did not include an image URL.")
-        dall_e_url = response.data[0].url
-        logger.info(f"🖼️ Generated DALL·E image: {dall_e_url[:100]}...")
-        
-        # CRITICAL: Download the image immediately (whether it's DALL-E URL or Azure blob URL)
-        # Azure blob URLs expire, so we MUST download and store permanently
+        if not getattr(response, "data", None) or not response.data[0]:
+            raise Exception("OpenAI image response did not include image data.")
+
+        image_item = response.data[0]
+        dall_e_url = getattr(image_item, "url", None)
+        b64_json = getattr(image_item, "b64_json", None)
         image_data = None
-        try:
-            img_response = requests.get(dall_e_url, timeout=60)  # Increased timeout for large images
-            img_response.raise_for_status()
-            image_data = img_response.content
-            logger.info(f"📥 Downloaded image from source ({len(image_data)} bytes)")
-        except Exception as download_error:
-            logger.error(f"❌ CRITICAL: Failed to download image from source: {download_error}")
-            logger.error(f"❌ Image URL was: {dall_e_url[:200]}...")
-            # DO NOT return temporary URL - raise error instead
-            raise Exception(f"Failed to download image: {str(download_error)}. Image must be downloaded immediately to prevent expiration.")
+
+        if dall_e_url:
+            logger.info(f"🖼️ Generated DALL·E image: {dall_e_url[:100]}...")
+            try:
+                img_response = requests.get(dall_e_url, timeout=60)  # Increased timeout for large images
+                img_response.raise_for_status()
+                image_data = img_response.content
+                logger.info(f"📥 Downloaded image from source ({len(image_data)} bytes)")
+            except Exception as download_error:
+                logger.error(f"❌ CRITICAL: Failed to download image from source: {download_error}")
+                logger.error(f"❌ Image URL was: {dall_e_url[:200]}...")
+                # DO NOT return temporary URL - raise error instead
+                raise Exception(f"Failed to download image: {str(download_error)}. Image must be downloaded immediately to prevent expiration.")
+        elif b64_json:
+            import base64
+            try:
+                image_data = base64.b64decode(b64_json)
+                logger.info(f"📥 Decoded base64 image response ({len(image_data)} bytes)")
+            except Exception as decode_error:
+                raise Exception(f"Failed to decode OpenAI image response: {str(decode_error)}")
+        else:
+            raise Exception("OpenAI image response did not include an image URL or base64 image data.")
         
         if not image_data:
             raise Exception("Downloaded image data is empty. Cannot proceed with permanent storage.")
